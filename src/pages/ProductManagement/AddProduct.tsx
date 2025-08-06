@@ -19,7 +19,9 @@ import {
   SearchOutlined,
   EyeOutlined,
   DeleteOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
+import AddFunction from './AddFunction';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -31,8 +33,7 @@ interface ProductFunction {
   name: string;
   identifier: string;
   functionType: '属性（静态）' | '属性（动态）' | '服务' | '事件';
-  dataType: 'int' | 'float' | 'double' | 'text' | 'date' | 'bool' | 'enum' | 'struct' | 'array';
-  readWriteMode: '读写' | '只读';
+  valueConfig: string; // 值配置
 }
 
 // 产品类型与协议映射
@@ -61,6 +62,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
   
   // 功能列表状态
   const [functions, setFunctions] = useState<ProductFunction[]>([]);
+  const [addFunctionVisible, setAddFunctionVisible] = useState(false);
   
   // 产品类型选项
   const productTypes = ['机器人产品', '生产产品', '电梯产品', '自动门产品', '虚拟产品'];
@@ -109,8 +111,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
           <p><strong>功能名称:</strong> {record.name}</p>
           <p><strong>标识符:</strong> {record.identifier}</p>
           <p><strong>功能类型:</strong> {record.functionType}</p>
-          <p><strong>数据类型:</strong> {record.dataType}</p>
-          <p><strong>读写方式:</strong> {record.readWriteMode}</p>
+          <p><strong>值配置:</strong> {record.valueConfig}</p>
         </div>
       ),
       width: 500,
@@ -120,6 +121,29 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
   // 刷新功能列表
   const handleRefreshFunctions = () => {
     message.success('功能列表已刷新');
+  };
+
+  // 添加功能
+  const handleAddFunction = () => {
+    setAddFunctionVisible(true);
+  };
+
+  // 关闭添加功能抽屉
+  const handleCloseAddFunction = () => {
+    setAddFunctionVisible(false);
+  };
+
+  // 保存新功能
+  const handleSaveFunction = (functionData: any) => {
+    const newFunction: ProductFunction = {
+      id: Date.now().toString(),
+      name: functionData.name,
+      identifier: functionData.identifier,
+      functionType: functionData.functionType,
+      valueConfig: functionData.valueConfig?.map((item: any) => `${item.value}:${item.description}`).join(';') || '',
+    };
+    setFunctions([...functions, newFunction]);
+    setAddFunctionVisible(false);
   };
 
   // 主流程下一步
@@ -208,16 +232,10 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
       },
     },
     {
-      title: '数据类型',
-      dataIndex: 'dataType',
-      key: 'dataType',
-      width: 100,
-    },
-    {
-      title: '读写方式',
-      dataIndex: 'readWriteMode',
-      key: 'readWriteMode',
-      width: 100,
+      title: '值配置',
+      dataIndex: 'valueConfig',
+      key: 'valueConfig',
+      width: 150,
     },
     {
       title: '操作',
@@ -401,6 +419,13 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
               >
                 刷新
               </Button>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={handleAddFunction}
+              >
+                添加功能
+              </Button>
             </Space>
           </div>
           
@@ -473,6 +498,14 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
           </Button>
         )}
       </div>
+
+      {/* 添加功能抽屉 */}
+      <AddFunction
+        visible={addFunctionVisible}
+        onClose={handleCloseAddFunction}
+        onSave={handleSaveFunction}
+        productProtocol={form.getFieldValue('protocol') || ''}
+      />
     </div>
   );
 };
