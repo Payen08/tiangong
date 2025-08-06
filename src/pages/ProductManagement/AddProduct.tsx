@@ -86,8 +86,11 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
   };
 
   // 过滤功能列表
-  const filteredFunctions = functions.filter((func) =>
-    func.name?.toLowerCase().includes(searchText?.toLowerCase() || '')
+  const filteredFunctions = functions.filter((func) => {
+    const funcName = func.name || '';
+    const search = searchText || '';
+    return funcName.toLowerCase().includes(search.toLowerCase());
+  }
   );
 
   // 删除功能
@@ -123,10 +126,17 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
     message.success('功能列表已刷新');
   };
 
-  // 添加功能
+  // 添加功能按钮点击
   const handleAddFunction = () => {
+    console.log('点击添加功能按钮');
     setAddFunctionVisible(true);
   };
+
+  // 监控addFunctionVisible状态变化
+  useEffect(() => {
+    console.log('addFunctionVisible状态变化:', addFunctionVisible);
+    console.log('handleSaveFunction函数类型:', typeof handleSaveFunction);
+  }, [addFunctionVisible]);
 
   // 关闭添加功能抽屉
   const handleCloseAddFunction = () => {
@@ -135,6 +145,10 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
 
   // 保存新功能
   const handleSaveFunction = (functionData: any) => {
+    console.log('=== 开始保存功能 ===');
+    console.log('接收到的功能数据:', functionData);
+    console.log('当前functions状态:', functions);
+    
     const newFunction: ProductFunction = {
       id: Date.now().toString(),
       name: functionData.name,
@@ -142,8 +156,18 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
       functionType: functionData.functionType,
       valueConfig: functionData.valueConfig?.map((item: any) => `${item.value}:${item.description}`).join(';') || '',
     };
-    setFunctions([...functions, newFunction]);
+    console.log('新功能对象:', newFunction);
+    
+    setFunctions(prevFunctions => {
+      console.log('setFunctions被调用，prevFunctions:', prevFunctions);
+      const updatedFunctions = [...prevFunctions, newFunction];
+      console.log('更新后的功能列表:', updatedFunctions);
+      return updatedFunctions;
+    });
+    
+    console.log('=== 功能保存完成 ===');
     setAddFunctionVisible(false);
+    message.success('功能添加成功！');
   };
 
   // 主流程下一步
@@ -386,17 +410,21 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
   );
 
   // 渲染功能定义步骤
-  const renderFunctionDefinition = () => (
-    <Row justify="center">
-      <Col xs={24} sm={23} md={20} lg={18} xl={16}>
-        <div style={{ 
-          fontSize: '16px', 
-          fontWeight: 500, 
-          color: '#262626', 
-          marginBottom: '16px' 
-        }}>
-          功能定义
-        </div>
+  const renderFunctionDefinition = () => {
+    console.log('渲染功能定义，当前functions:', functions);
+    console.log('filteredFunctions:', filteredFunctions);
+    
+    return (
+      <Row justify="center">
+        <Col xs={24} sm={23} md={20} lg={18} xl={16}>
+          <div style={{ 
+            fontSize: '16px', 
+            fontWeight: 500, 
+            color: '#262626', 
+            marginBottom: '16px' 
+          }}>
+            功能定义
+          </div>
         <Card style={{ height: '600px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ 
             display: 'flex', 
@@ -446,7 +474,8 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
         </Card>
       </Col>
     </Row>
-  );
+    );
+  };
 
   return (
     <div className="space-y-4" style={{ paddingTop: '32px', paddingBottom: '80px' }}>

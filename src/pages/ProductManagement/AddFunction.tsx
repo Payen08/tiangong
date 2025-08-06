@@ -267,14 +267,43 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const handleSave = async () => {
     setLoading(true);
     try {
-      const values = await form.validateFields();
+      // 获取表单的所有字段值，包括未渲染的字段
+      const allValues = form.getFieldsValue();
+      console.log('表单所有字段值:', allValues); // 添加调试日志
+      
+      // 验证必填字段
+      if (!allValues.name) {
+        message.error('请输入功能名称');
+        setLoading(false);
+        return;
+      }
+      if (!allValues.identifier) {
+        message.error('请输入标识符');
+        setLoading(false);
+        return;
+      }
+      if (!allValues.functionType) {
+        message.error('请选择功能类型');
+        setLoading(false);
+        return;
+      }
+      if (!allValues.readWriteMode) {
+        message.error('请选择读写方式');
+        setLoading(false);
+        return;
+      }
+      if (!allValues.dataType) {
+        message.error('请选择数据类型');
+        setLoading(false);
+        return;
+      }
       
       const functionData: FunctionConfig = {
-        name: values.name,
-        identifier: values.identifier,
-        functionType: values.functionType,
-        readWriteMode: values.readWriteMode,
-        dataType: values.dataType,
+        name: allValues.name,
+        identifier: allValues.identifier,
+        functionType: allValues.functionType,
+        readWriteMode: allValues.readWriteMode,
+        dataType: allValues.dataType,
         valueConfig: valueConfigItems.filter(item => item.value || item.description),
         // 配置映射数据
         isComposite: isComposite,
@@ -286,9 +315,15 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         registerType: !isComposite && productProtocol === 'modbus-tcp' ? registerType : undefined,
       };
       
+      console.log('准备保存功能数据:', functionData); // 添加调试日志
       onSave(functionData);
-      message.success('功能保存成功');
-      handleClose();
+      console.log('onSave回调已调用'); // 添加调试日志
+      
+      // 延迟关闭抽屉，确保父组件有时间处理数据
+      setTimeout(() => {
+        message.success('功能保存成功');
+        handleClose();
+      }, 100);
     } catch (error) {
       console.error('保存失败:', error);
       message.error('保存失败，请检查表单');
