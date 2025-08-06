@@ -349,47 +349,58 @@ const ProductManagement: React.FC = () => {
   return (
     <div className="space-y-4">
       <Card>
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center space-x-4">
-            <Input
-              placeholder="请输入产品名称搜索"
-              prefix={<SearchOutlined />}
-              value={searchText}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
-              style={{ width: 300 }}
-              allowClear
-            />
-            <Select
-              placeholder="全部"
-              value={selectedType}
-              onChange={setSelectedType}
-              allowClear
-              style={{ width: 150 }}
-            >
-              {productTypes.map((type) => (
-                <Option key={type} value={type}>
-                  {type}
-                </Option>
-              ))}
-            </Select>
-          </div>
-          <Space>
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={handleRefresh}
-              loading={loading}
-            >
-              刷新
-            </Button>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleAdd}
-            >
-              新增产品
-            </Button>
-          </Space>
-        </div>
+        <Row gutter={[16, 16]} justify="space-between" align="middle" style={{ marginBottom: 16 }}>
+          <Col xs={24} sm={24} md={16} lg={16} xl={16}>
+            <Row gutter={[8, 8]}>
+              <Col xs={24} sm={12} md={10} lg={8} xl={8}>
+                <Input
+                  placeholder="请输入产品名称搜索"
+                  prefix={<SearchOutlined />}
+                  value={searchText}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
+                  allowClear
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={6} xl={6}>
+                <Select
+                  placeholder="全部"
+                  value={selectedType}
+                  onChange={setSelectedType}
+                  allowClear
+                  style={{ width: '100%' }}
+                >
+                  {productTypes.map((type) => (
+                    <Option key={type} value={type}>
+                      {type}
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+            </Row>
+          </Col>
+          <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+            <Row gutter={8} justify="end">
+              <Col>
+                <Button
+                  icon={<ReloadOutlined />}
+                  onClick={handleRefresh}
+                  loading={loading}
+                >
+                  刷新
+                </Button>
+              </Col>
+              <Col>
+                <Button
+                  type="primary"
+                  icon={<PlusOutlined />}
+                  onClick={handleAdd}
+                >
+                  新增产品
+                </Button>
+              </Col>
+            </Row>
+          </Col>
+        </Row>
         <Table
           columns={columns}
           dataSource={filteredProducts}
@@ -424,7 +435,7 @@ const ProductManagement: React.FC = () => {
           }}
         >
           <Row gutter={16}>
-            <Col span={12}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
                 label="产品名称"
                 name="productName"
@@ -436,7 +447,7 @@ const ProductManagement: React.FC = () => {
                 <Input placeholder="请输入产品名称" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
                 label="产品Key"
                 name="productKey"
@@ -450,7 +461,7 @@ const ProductManagement: React.FC = () => {
             </Col>
           </Row>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
                 label="产品类型"
                 name="productType"
@@ -465,7 +476,7 @@ const ProductManagement: React.FC = () => {
                 </Select>
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
                 label="通讯协议"
                 name="protocol"

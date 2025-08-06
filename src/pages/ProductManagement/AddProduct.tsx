@@ -299,7 +299,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
             onFinish={handleNext}
           >
             <Row gutter={16}>
-              <Col span={12}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                 <Form.Item
                   label="产品名称"
                   name="productName"
@@ -308,7 +308,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
                   <Input placeholder="请输入产品名称" />
                 </Form.Item>
               </Col>
-              <Col span={12}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                 <Form.Item
                   label="产品类型"
                   name="productType"
@@ -332,7 +332,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
             
             {selectedProductType !== '虚拟产品' && (
               <Row gutter={16}>
-                <Col span={12}>
+                <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                   <Form.Item
                     label="通讯协议"
                     name="protocol"
@@ -348,7 +348,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
                     </Select>
                   </Form.Item>
                 </Col>
-                <Col span={12}>
+                <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                   <Form.Item
                     label="上报周期（秒）"
                     name="reportPeriod"

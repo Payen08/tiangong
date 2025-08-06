@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Drawer,
   Steps,
@@ -44,6 +44,10 @@ interface FunctionConfig {
   isComposite: boolean; // 是否组合
   protocol: string; // 通信协议
   registerAddress?: string; // 寄存器地址（modbus-tcp协议时使用）
+  functionCode?: string; // 功能码（modbus-tcp协议时使用）
+  modbusDataType?: string; // Modbus数据类型（modbus-tcp协议时使用）
+  byteOrder?: 'big-endian' | 'little-endian' | ''; // 字节序（modbus-tcp协议时使用）
+  registerType?: 'coil' | 'discrete-input' | 'input-register' | 'holding-register'; // 寄存器类型（modbus-tcp协议时使用）
 }
 
 interface AddFunctionProps {
@@ -63,7 +67,90 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   // 配置映射相关状态
   const [isComposite, setIsComposite] = useState(false);
   const [registerAddress, setRegisterAddress] = useState('');
+  const [functionCode, setFunctionCode] = useState(''); // 去掉默认值
+  const [modbusDataType, setModbusDataType] = useState<string>('uint16');
+  const [byteOrder, setByteOrder] = useState<'big-endian' | 'little-endian' | ''>(''); // 去掉默认值
+  const [registerType, setRegisterType] = useState<'coil' | 'discrete-input' | 'input-register' | 'holding-register'>('holding-register');
   const [functionName, setFunctionName] = useState(''); // 用于存储第一步的功能名称
+
+  // 初始化时确保默认值的联动
+  useEffect(() => {
+    // 确保初始的寄存器类型和功能码匹配
+    const availableFunctionCodes = getFunctionCodeOptions(registerType);
+    if (!availableFunctionCodes.some(option => option.value === functionCode)) {
+      const defaultFunctionCode = availableFunctionCodes[0]?.value || '03';
+      setFunctionCode(defaultFunctionCode);
+    }
+  }, []); // 只在组件挂载时执行一次
+
+  // 根据寄存器类型获取可用的功能码选项
+  const getFunctionCodeOptions = (registerType: 'coil' | 'discrete-input' | 'input-register' | 'holding-register') => {
+    switch (registerType) {
+      case 'coil':
+        return [
+          { value: '01', label: '01 - 读线圈' },
+          { value: '05', label: '05 - 写单个线圈' },
+          { value: '0F', label: '0F - 写多个线圈' },
+        ];
+      case 'discrete-input':
+        return [
+          { value: '02', label: '02 - 读离散量输入' },
+        ];
+      case 'input-register':
+        return [
+          { value: '04', label: '04 - 读输入寄存器' },
+        ];
+      case 'holding-register':
+        return [
+          { value: '03', label: '03 - 读保持寄存器' },
+          { value: '06', label: '06 - 写单个寄存器' },
+          { value: '10', label: '10 - 写多个寄存器' },
+        ];
+      default:
+        return [
+          { value: '03', label: '03 - 读保持寄存器' },
+        ];
+    }
+  };
+
+  // 获取Modbus数据类型选项
+  const getModbusDataTypeOptions = () => {
+    return [
+      { value: 'bit', label: 'Bit（位）' },
+      { value: 'uint16', label: 'UInt16（无符号16位整数）' },
+      { value: 'int16', label: 'Int16（有符号16位整数）' },
+      { value: 'uint32', label: 'UInt32（无符号32位整数）' },
+      { value: 'int32', label: 'Int32（有符号32位整数）' },
+      { value: 'float32', label: 'Float32（32位浮点数）' },
+      { value: 'uint64', label: 'UInt64（无符号64位整数）' },
+      { value: 'int64', label: 'Int64（有符号64位整数）' },
+      { value: 'float64', label: 'Float64（64位浮点数）' },
+      { value: 'string', label: 'String（字符串）' },
+      { value: 'bytes', label: 'Bytes（字节数组）' },
+    ];
+  };
+
+  // 根据寄存器类型自动设置功能码
+  const handleRegisterTypeChange = (value: 'coil' | 'discrete-input' | 'input-register' | 'holding-register') => {
+    setRegisterType(value);
+    // 根据寄存器类型自动设置对应的默认功能码（选择第一个可用的功能码）
+    const availableOptions = getFunctionCodeOptions(value);
+    if (availableOptions.length > 0) {
+      setFunctionCode(availableOptions[0].value);
+    }
+    // 根据寄存器类型自动设置默认数据类型
+    if (value === 'coil' || value === 'discrete-input') {
+      setModbusDataType('bit');
+      // 线圈和离散量输入不需要字节序，清空字节序设置
+      setByteOrder('big-endian'); // 设置默认值，虽然不显示
+    } else {
+      setModbusDataType('uint16');
+      // 确保字节序有默认值
+      if (!byteOrder) {
+        setByteOrder('big-endian');
+      }
+    }
+  };
 
   // 步骤配置
   const steps = [
@@ -169,6 +256,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         isComposite: isComposite,
         protocol: productProtocol,
         registerAddress: !isComposite && productProtocol === 'modbus-tcp' ? registerAddress : undefined,
+        functionCode: !isComposite && productProtocol === 'modbus-tcp' && functionCode ? functionCode : undefined,
+        modbusDataType: !isComposite && productProtocol === 'modbus-tcp' ? modbusDataType : undefined,
+        byteOrder: !isComposite && productProtocol === 'modbus-tcp' && byteOrder ? byteOrder : undefined,
+        registerType: !isComposite && productProtocol === 'modbus-tcp' ? registerType : undefined,
       };
       
       onSave(functionData);
@@ -188,6 +279,14 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     setCurrentStep(0);
     setDataType('text');
     setValueConfigItems([]);
+    // 重置配置映射相关状态
+    setIsComposite(false);
+    setRegisterAddress('');
+    setFunctionCode('03');
+    setModbusDataType('uint16');
+    setByteOrder('big-endian');
+    setRegisterType('holding-register');
+    setFunctionName('');
     onClose();
   };
 
@@ -200,10 +299,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           <div style={{ marginTop: 8 }}>
             {valueConfigItems.map((item, index) => (
               <Row key={item.id} gutter={16} style={{ marginBottom: 8 }}>
-                <Col span={6}>
+                <Col xs={8} sm={6} md={6} lg={6} xl={6}>
                   <Input value={item.value} disabled />
                 </Col>
-                <Col span={18}>
+                <Col xs={16} sm={18} md={18} lg={18} xl={18}>
                   <Input
                     placeholder="请输入值描述"
                     value={item.description}
@@ -234,21 +333,21 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           <div>
             {valueConfigItems.map((item, index) => (
               <Row key={item.id} gutter={16} style={{ marginBottom: 8 }}>
-                <Col span={5}>
+                <Col xs={8} sm={6} md={5} lg={5} xl={5}>
                   <Input
                     placeholder="枚举值"
                     value={item.value}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateValueConfigItem(item.id, 'value', e.target.value)}
                   />
                 </Col>
-                <Col span={17}>
+                <Col xs={12} sm={15} md={17} lg={17} xl={17}>
                   <Input
                     placeholder="请输入值描述"
                     value={item.description}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateValueConfigItem(item.id, 'description', e.target.value)}
                   />
                 </Col>
-                <Col span={2}>
+                <Col xs={4} sm={3} md={2} lg={2} xl={2}>
                   {valueConfigItems.length > 1 && (
                     <Button
                       type="text"
@@ -299,7 +398,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       }}
     >
       <Row gutter={16}>
-        <Col span={12}>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
           <Form.Item
             label="功能名称"
             name="name"
@@ -308,7 +407,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             <Input placeholder="请输入功能名称" />
           </Form.Item>
         </Col>
-        <Col span={12}>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
           <Form.Item
             label="标识符"
             name="identifier"
@@ -323,7 +422,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       </Row>
 
       <Row gutter={16}>
-        <Col span={12}>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
           <Form.Item
             label="功能类型"
             name="functionType"
@@ -337,7 +436,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             </Select>
           </Form.Item>
         </Col>
-        <Col span={12}>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
           <Form.Item
             label="读写方式"
             name="readWriteMode"
@@ -352,7 +451,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       </Row>
 
       <Row gutter={16}>
-        <Col span={12}>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
           <Form.Item
             label="数据类型"
             name="dataType"
@@ -379,6 +478,89 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     </Form>
   );
 
+  // 渲染只读值配置（用于配置映射页面）
+  const renderReadOnlyValueConfig = () => {
+    if (dataType === 'bool') {
+      return (
+        <Form.Item label="值配置">
+          <div>
+            {valueConfigItems.map((item, index) => (
+              <Row key={item.id} gutter={16} style={{ marginBottom: 8 }}>
+                <Col span={8}>
+                  <Input value={item.value} disabled style={{ backgroundColor: '#f5f5f5' }} />
+                </Col>
+                <Col span={16}>
+                  <Input
+                    value={item.description}
+                    disabled
+                    style={{ backgroundColor: '#f5f5f5' }}
+                  />
+                </Col>
+              </Row>
+            ))}
+          </div>
+        </Form.Item>
+      );
+    }
+
+    if (dataType === 'enum') {
+      return (
+        <Form.Item label="值配置">
+          <div>
+            {valueConfigItems.map((item, index) => (
+              <Row key={item.id} gutter={16} style={{ marginBottom: 8 }}>
+                <Col span={8}>
+                  <Input
+                    value={item.value}
+                    disabled
+                    style={{ backgroundColor: '#f5f5f5' }}
+                  />
+                </Col>
+                <Col span={16}>
+                  <Input
+                    value={item.description}
+                    disabled
+                    style={{ backgroundColor: '#f5f5f5' }}
+                  />
+                </Col>
+              </Row>
+            ))}
+          </div>
+        </Form.Item>
+      );
+    }
+
+    // 其他数据类型的值配置
+    if (['int', 'float', 'double', 'text', 'date', 'struct', 'array'].includes(dataType)) {
+      const getDefaultValue = () => {
+        const formValues = form.getFieldsValue();
+        return formValues.defaultValue || '';
+      };
+
+      return (
+        <Form.Item label="值配置">
+          <Input 
+            value={getDefaultValue()}
+            disabled
+            style={{ backgroundColor: '#f5f5f5' }}
+            placeholder="无默认值配置"
+          />
+        </Form.Item>
+      );
+    }
+
+    return (
+      <Form.Item label="值配置">
+        <Input 
+          value=""
+          disabled
+          style={{ backgroundColor: '#f5f5f5' }}
+          placeholder="无值配置"
+        />
+      </Form.Item>
+    );
+  };
+
   // 渲染配置映射步骤
   const renderConfigMapping = () => (
     <Form
@@ -386,11 +568,15 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       initialValues={{
         isComposite: false,
         protocol: productProtocol,
-        registerAddress: ''
+        registerAddress: '',
+        registerType: 'holding-register',
+        functionCode: '', // 去掉默认值
+        modbusDataType: 'uint16',
+        byteOrder: '' // 去掉默认值
       }}
     >
       <Row gutter={16}>
-        <Col span={12}>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
           <Form.Item
             label="是否组合"
             name="isComposite"
@@ -406,7 +592,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             </Select>
           </Form.Item>
         </Col>
-        <Col span={12}>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
           <Form.Item
             label="通信协议"
             name="protocol"
@@ -421,11 +607,11 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         </Col>
       </Row>
       
-      {!isComposite && productProtocol === 'modbus-tcp' && (
+      {!isComposite && productProtocol === 'modbus_tcp' && (
         <>
           <Divider orientation="left" style={{ margin: '16px 0' }}>地址映射</Divider>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
                 label="映射功能名称"
                 name="mappingFunctionName"
@@ -438,20 +624,114 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
                 label="寄存器地址"
                 name="registerAddress"
                 rules={[{ required: true, message: '请输入寄存器地址' }]}
               >
                 <Input 
-                  placeholder="请输入寄存器地址"
+                  placeholder="请输入寄存器地址（如：0x0000）"
                   value={registerAddress}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRegisterAddress(e.target.value)}
                 />
               </Form.Item>
             </Col>
           </Row>
+          
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+              {renderReadOnlyValueConfig()}
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="寄存器类型"
+                name="registerType"
+                rules={[{ required: true, message: '请选择寄存器类型' }]}
+              >
+                <Select 
+                  value={registerType}
+                  onChange={handleRegisterTypeChange}
+                  placeholder="请选择寄存器类型"
+                >
+                  <Option value="coil">线圈（Coil）</Option>
+                  <Option value="discrete-input">离散量输入（Discrete Input）</Option>
+                  <Option value="input-register">输入寄存器（Input Register）</Option>
+                  <Option value="holding-register">保持寄存器（Holding Register）</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="功能码"
+                name="functionCode"
+                rules={[{ required: true, message: '请选择功能码' }]}
+              >
+                <Select 
+                  value={functionCode}
+                  onChange={(value: string) => setFunctionCode(value)}
+                  placeholder="请选择功能码"
+                >
+                  {getFunctionCodeOptions(registerType).map(option => (
+                    <Option key={option.value} value={option.value}>
+                      {option.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={registerType === 'coil' || registerType === 'discrete-input' ? 24 : 12} lg={registerType === 'coil' || registerType === 'discrete-input' ? 24 : 12} xl={registerType === 'coil' || registerType === 'discrete-input' ? 24 : 12}>
+              <Form.Item
+                label="数据类型"
+                name="modbusDataType"
+                rules={[{ required: true, message: '请选择数据类型' }]}
+              >
+                <Select 
+                  value={modbusDataType}
+                  onChange={(value: string) => setModbusDataType(value)}
+                  placeholder="请选择数据类型"
+                  disabled={registerType === 'coil' || registerType === 'discrete-input'}
+                >
+                  {registerType === 'coil' || registerType === 'discrete-input' ? (
+                    <Option value="bit">Bit（位）</Option>
+                  ) : (
+                    getModbusDataTypeOptions().filter(option => option.value !== 'bit').map(option => (
+                      <Option key={option.value} value={option.value}>
+                        {option.label}
+                      </Option>
+                    ))
+                  )}
+                </Select>
+              </Form.Item>
+            </Col>
+            {registerType !== 'coil' && registerType !== 'discrete-input' && (
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="字节序"
+                  name="byteOrder"
+                  rules={[{ required: true, message: '请选择字节序' }]}
+                >
+                  <Select 
+                    value={byteOrder}
+                    onChange={(value: 'big-endian' | 'little-endian') => setByteOrder(value)}
+                    placeholder="请选择字节序"
+                  >
+                    <Option value="big-endian">大端序（Big Endian）</Option>
+                    <Option value="little-endian">小端序（Little Endian）</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            )}
+          </Row>
+          
+          {/* 数据处理相关字段 */}
+
         </>
       )}
       
