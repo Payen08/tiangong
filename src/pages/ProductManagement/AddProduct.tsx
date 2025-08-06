@@ -87,7 +87,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
 
   // 过滤功能列表
   const filteredFunctions = functions.filter((func) =>
-    func.name.toLowerCase().includes(searchText.toLowerCase())
+    func.name?.toLowerCase().includes(searchText?.toLowerCase() || '')
   );
 
   // 删除功能

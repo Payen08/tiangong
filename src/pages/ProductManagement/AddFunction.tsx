@@ -83,6 +83,30 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     }
   }, []); // 只在组件挂载时执行一次
 
+  // 当抽屉打开时重置表单
+  useEffect(() => {
+    if (visible) {
+      // 重置表单并设置初始值
+      form.resetFields();
+      form.setFieldsValue({
+        functionType: '属性（静态）',
+        readWriteMode: '读写',
+        dataType: 'text',
+      });
+      // 重置所有状态
+      setCurrentStep(0);
+      setDataType('text');
+      setValueConfigItems([]);
+      setIsComposite(false);
+      setRegisterAddress('');
+      setFunctionCode('03');
+      setModbusDataType('uint16');
+      setByteOrder('big-endian');
+      setRegisterType('holding-register');
+      setFunctionName('');
+    }
+  }, [visible, form]);
+
   // 根据寄存器类型获取可用的功能码选项
   const getFunctionCodeOptions = (registerType: 'coil' | 'discrete-input' | 'input-register' | 'holding-register') => {
     switch (registerType) {
@@ -275,18 +299,6 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   // 关闭抽屉
   const handleClose = () => {
-    form.resetFields();
-    setCurrentStep(0);
-    setDataType('text');
-    setValueConfigItems([]);
-    // 重置配置映射相关状态
-    setIsComposite(false);
-    setRegisterAddress('');
-    setFunctionCode('03');
-    setModbusDataType('uint16');
-    setByteOrder('big-endian');
-    setRegisterType('holding-register');
-    setFunctionName('');
     onClose();
   };
 
