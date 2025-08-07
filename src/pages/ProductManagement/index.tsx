@@ -193,25 +193,109 @@ const ProductManagement: React.FC = () => {
     }
   };
 
-  const columns: ColumnsType<Product> = [
+  // 检测屏幕尺寸
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  React.useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // 移动端列配置
+  const mobileColumns: ColumnsType<Product> = [
+    {
+      title: '产品信息',
+      key: 'productInfo',
+      render: (_: any, record: Product) => (
+        <div style={{ padding: '8px 0' }}>
+          <div style={{ marginBottom: '4px' }}>
+            <span 
+              style={{ 
+                color: '#1890ff', 
+                cursor: 'pointer',
+                fontWeight: 500,
+                fontSize: '14px'
+              }}
+              onClick={() => {
+                console.log('跳转到产品详情页面:', record.id);
+              }}
+            >
+              {record.productName}
+            </span>
+          </div>
+          <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+            <span>Key: </span>
+            <span 
+              style={{ color: '#1890ff', cursor: 'pointer' }}
+              onClick={() => {
+                navigator.clipboard.writeText(record.productKey);
+                message.success('产品Key已复制到剪贴板');
+              }}
+            >
+              {record.productKey}
+            </span>
+          </div>
+          <div style={{ fontSize: '12px', color: '#666' }}>
+            <span>{record.productType} | {record.protocol} | 设备数: {record.deviceCount}</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 80,
+      align: 'center',
+      render: (_: any, record: Product) => (
+        <Dropdown
+          menu={{
+            items: [
+              {
+                key: 'detail',
+                label: '详情',
+                icon: <EyeOutlined />,
+                onClick: () => console.log('查看详情:', record.id),
+              },
+              {
+                key: 'edit',
+                label: '编辑',
+                icon: <EditOutlined />,
+                onClick: () => console.log('编辑产品:', record.id),
+              },
+              {
+                key: 'delete',
+                label: '删除',
+                icon: <DeleteOutlined />,
+                onClick: () => console.log('删除产品:', record.id),
+              },
+            ],
+          }}
+          trigger={['click']}
+        >
+          <Button type="text" icon={<MoreOutlined />} />
+        </Dropdown>
+      ),
+    },
+  ];
+
+  // 桌面端列配置
+  const desktopColumns: ColumnsType<Product> = [
     {
       title: '产品名称',
       dataIndex: 'productName',
       key: 'productName',
       width: 150,
-      minWidth: 120,
       align: 'left',
-      fixed: 'left',
       ellipsis: true,
       render: (text: string, record: Product) => (
         <Tooltip title={text}>
           <span 
             style={{ color: '#1890ff', cursor: 'pointer' }}
             onClick={() => {
-              // 跳转到产品详情页面
               console.log('跳转到产品详情页面:', record.id);
-              // 这里可以使用 React Router 进行页面跳转
-              // navigate(`/product-detail/${record.id}`);
             }}
           >
             {text}
@@ -224,10 +308,8 @@ const ProductManagement: React.FC = () => {
       dataIndex: 'productKey',
       key: 'productKey',
       width: 140,
-      minWidth: 120,
       align: 'left',
       ellipsis: true,
-      responsive: ['md'],
       render: (text: string) => (
         <Space size={4}>
           <Tooltip title={text}>
@@ -271,10 +353,9 @@ const ProductManagement: React.FC = () => {
       width: 100,
       align: 'left',
       ellipsis: true,
-      responsive: ['lg'],
       render: (type: string) => (
         <Tooltip title={type}>
-          <span style={{ color: '#000000' }}>{type}</span>
+          <span>{type}</span>
         </Tooltip>
       ),
     },
@@ -285,10 +366,9 @@ const ProductManagement: React.FC = () => {
       width: 80,
       align: 'left',
       ellipsis: true,
-      responsive: ['lg'],
       render: (protocol: string) => (
         <Tooltip title={protocol}>
-          <span style={{ color: '#000000' }}>{protocol}</span>
+          <span>{protocol}</span>
         </Tooltip>
       ),
     },
@@ -300,7 +380,7 @@ const ProductManagement: React.FC = () => {
       align: 'center',
       sorter: (a: Product, b: Product) => a.deviceCount - b.deviceCount,
       render: (count: number) => (
-        <span style={{ fontWeight: 500, color: '#1890ff' }}>
+        <span style={{ fontWeight: 500, color: count > 0 ? '#52c41a' : '#999' }}>
           {count}
         </span>
       ),
@@ -312,7 +392,6 @@ const ProductManagement: React.FC = () => {
       width: 140,
       align: 'left',
       ellipsis: true,
-      responsive: ['xl'],
       sorter: (a: Product, b: Product) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
       render: (time: string) => (
         <Tooltip title={time}>
@@ -327,7 +406,6 @@ const ProductManagement: React.FC = () => {
       width: 80,
       align: 'left',
       ellipsis: true,
-      responsive: ['xl'],
       render: (user: string) => (
         <Tooltip title={user}>
           <span>{user}</span>
@@ -338,9 +416,7 @@ const ProductManagement: React.FC = () => {
       title: '操作',
       key: 'action',
       width: 120,
-      minWidth: 100,
       align: 'center',
-      fixed: 'right',
       render: (_: any, record: Product) => {
         const moreMenuItems = [
           {
@@ -364,7 +440,7 @@ const ProductManagement: React.FC = () => {
               <Button
                 type="link"
                 icon={<EyeOutlined />}
-                onClick={() => handleView(record)}
+                onClick={() => console.log('查看详情:', record.id)}
                 size="small"
                 style={{ padding: '0 4px' }}
               >
@@ -392,101 +468,76 @@ const ProductManagement: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-4" style={{ padding: '0 8px' }}>
-      <Card style={{ margin: '0 -8px' }}>
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          {/* 搜索区域 */}
-          <Col xs={24} sm={24} md={24} lg={16} xl={16}>
-            <Row gutter={[8, 8]}>
-              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-                <Input
-                  placeholder="请输入产品名称搜索"
-                  prefix={<SearchOutlined />}
-                  value={searchText}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
-                  allowClear
-                />
-              </Col>
-              <Col xs={24} sm={12} md={8} lg={6} xl={6}>
-                <Select
-                  placeholder="全部"
-                  value={selectedType}
-                  onChange={setSelectedType}
-                  allowClear
-                  style={{ width: '100%' }}
-                >
-                  {productTypes.map((type) => (
-                    <Option key={type} value={type}>
-                      {type}
-                    </Option>
-                  ))}
-                </Select>
-              </Col>
-              {/* 在中等屏幕以下显示按钮 */}
-              <Col xs={24} sm={24} md={8} lg={0} xl={0}>
-                <Row gutter={8} justify="start">
-                  <Col>
-                    <Button
-                      icon={<ReloadOutlined />}
-                      onClick={handleRefresh}
-                      loading={loading}
-                    >
-                      刷新
-                    </Button>
-                  </Col>
-                  <Col>
-                    <Button
-                      type="primary"
-                      icon={<PlusOutlined />}
-                      onClick={handleAdd}
-                    >
-                      新增产品
-                    </Button>
-                  </Col>
-                </Row>
-              </Col>
-            </Row>
+    <div style={{ background: 'transparent' }}>
+      <Card style={{ marginBottom: 16 }}>
+        {/* 搜索和筛选区域 */}
+        <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
+          <Col xs={24} sm={24} md={10} lg={8} xl={8}>
+            <Input
+              placeholder="请输入产品名称搜索"
+              prefix={<SearchOutlined />}
+              value={searchText}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
+              allowClear
+              size={isMobile ? 'large' : 'middle'}
+            />
           </Col>
-          {/* 按钮区域 - 在大屏幕上显示 */}
-          <Col xs={0} sm={0} md={0} lg={8} xl={8}>
-            <Row gutter={8} justify="end">
-              <Col>
-                <Button
-                  icon={<ReloadOutlined />}
-                  onClick={handleRefresh}
-                  loading={loading}
-                >
-                  刷新
-                </Button>
-              </Col>
-              <Col>
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={handleAdd}
-                >
-                  新增产品
-                </Button>
-              </Col>
-            </Row>
+          <Col xs={12} sm={12} md={5} lg={4} xl={4}>
+            <Select
+              placeholder="全部类型"
+              value={selectedType}
+              onChange={setSelectedType}
+              allowClear
+              style={{ width: '100%' }}
+              size={isMobile ? 'large' : 'middle'}
+            >
+              {productTypes.map((type) => (
+                <Option key={type} value={type}>
+                  {type}
+                </Option>
+              ))}
+            </Select>
+          </Col>
+          <Col xs={6} sm={6} md={3} lg={4} xl={4}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={handleRefresh}
+              loading={loading}
+              size={isMobile ? 'large' : 'middle'}
+              style={{ width: '100%' }}
+            >
+              {isMobile ? '' : '刷新'}
+            </Button>
+          </Col>
+          <Col xs={6} sm={6} md={6} lg={8} xl={8}>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+              size={isMobile ? 'large' : 'middle'}
+              style={{ width: '100%' }}
+            >
+              {isMobile ? '新增' : '新增产品'}
+            </Button>
           </Col>
         </Row>
         <Table
-          columns={columns}
+          columns={isMobile ? mobileColumns : desktopColumns}
           dataSource={filteredProducts}
           rowKey="id"
           pagination={{
             total: filteredProducts.length,
-            pageSize: 10,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total: number, range: [number, number]) =>
+            pageSize: isMobile ? 5 : 10,
+            showSizeChanger: !isMobile,
+            showQuickJumper: !isMobile,
+            showTotal: isMobile ? undefined : (total: number, range: [number, number]) =>
               `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
-            responsive: true,
-            size: 'small',
+            simple: isMobile,
+            size: isMobile ? 'small' : 'default',
+            showLessItems: true,
           }}
-          scroll={{ x: 'max-content', y: 'calc(100vh - 350px)' }}
-          size="middle"
+          scroll={isMobile ? { x: 'max-content' } : { x: 1000 }}
+          size={isMobile ? 'small' : 'middle'}
         />
       </Card>
 
