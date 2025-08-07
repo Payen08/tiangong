@@ -58,9 +58,10 @@ const protocolMap: Record<string, string[]> = {
 interface AddProductProps {
   onClose?: () => void;
   onProductCreated?: (productData: any) => void;
+  editingProduct?: any;
 }
 
-const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated }) => {
+const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, editingProduct }) => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -86,6 +87,33 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated }) =>
       form.resetFields();
     };
   }, []);
+
+  // 处理编辑模式初始化
+  useEffect(() => {
+    if (editingProduct) {
+      form.setFieldsValue({
+        productName: editingProduct.productName,
+        productKey: editingProduct.productKey,
+        productType: editingProduct.productType,
+        protocol: editingProduct.protocol,
+      });
+      setSelectedProductType(editingProduct.productType);
+      setBasicInfoData(editingProduct);
+      // 初始化功能列表
+      if (editingProduct.functions && Array.isArray(editingProduct.functions)) {
+        setFunctions(editingProduct.functions);
+        console.log('编辑模式：初始化功能列表', editingProduct.functions);
+      } else {
+        setFunctions([]);
+      }
+    } else {
+      form.resetFields();
+      setSelectedProductType('机器人产品');
+      setBasicInfoData(null);
+      setCurrentStep(0);
+      setFunctions([]);
+    }
+  }, [editingProduct, form]);
   
   // 处理产品类型变化
   const handleProductTypeChange = (value: string) => {
@@ -272,7 +300,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated }) =>
     setCurrentStep(currentStep - 1);
   };
 
-  // 完成创建
+  // 完成创建或编辑
   const handleFinish = async () => {
     setLoading(true);
     try {
@@ -282,16 +310,22 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated }) =>
       const productData = {
         ...basicInfoData,
         functions: functions,
-        createdAt: new Date().toISOString(),
+        ...(editingProduct ? {
+          id: editingProduct.id,
+          updateTime: new Date().toLocaleString('zh-CN'),
+          updatedBy: '当前用户'
+        } : {
+          createdAt: new Date().toISOString()
+        })
       };
       
-      console.log('创建产品:', productData);
+      console.log(editingProduct ? '编辑产品:' : '创建产品:', productData);
       
       // 调用父组件的回调函数来更新产品列表
       if (onProductCreated) {
         onProductCreated(productData);
       } else {
-        message.success('产品创建成功！');
+        message.success(editingProduct ? '产品编辑成功！' : '产品创建成功！');
         // 返回产品列表
         if (onClose) {
           onClose();
@@ -300,8 +334,8 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated }) =>
         }
       }
     } catch (error) {
-      console.error('创建失败:', error);
-      message.error('创建失败，请重试');
+      console.error(editingProduct ? '编辑失败:' : '创建失败:', error);
+      message.error(editingProduct ? '编辑失败，请重试' : '创建失败，请重试');
     } finally {
       setLoading(false);
     }

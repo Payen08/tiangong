@@ -30,6 +30,23 @@ import type { ColumnsType } from 'antd/es/table';
 
 const { Option } = Select;
 
+interface ProductFunction {
+  id: string;
+  name: string;
+  identifier: string;
+  functionType: '属性（静态）' | '属性（动态）' | '服务' | '事件';
+  readWriteMode?: '读写' | '只读';
+  dataType?: string;
+  valueConfig: string;
+  isComposite?: boolean;
+  protocol?: string;
+  registerAddress?: string;
+  functionCode?: string;
+  modbusDataType?: string;
+  byteOrder?: 'big-endian' | 'little-endian' | '';
+  registerType?: 'coil' | 'discrete-input' | 'input-register' | 'holding-register';
+}
+
 interface Product {
   id: string;
   productName: string;
@@ -39,6 +56,7 @@ interface Product {
   deviceCount: number;
   updateTime: string;
   updatedBy: string;
+  functions?: ProductFunction[];
 }
 
 const ProductManagement: React.FC = () => {
@@ -49,6 +67,7 @@ const ProductManagement: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [form] = Form.useForm();
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [isEditDrawerVisible, setIsEditDrawerVisible] = useState(false);
 
 
   // 模拟数据
@@ -62,6 +81,40 @@ const ProductManagement: React.FC = () => {
       deviceCount: 156,
       updateTime: '2024-01-15 14:30:25',
       updatedBy: '张三',
+      functions: [
+        {
+          id: '1',
+          name: '温度',
+          identifier: 'temperature',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'float',
+          valueConfig: '',
+          isComposite: false,
+          protocol: 'Mqtt',
+          registerAddress: '0x0001',
+          functionCode: '03',
+          modbusDataType: 'float32',
+          byteOrder: 'big-endian',
+          registerType: 'input-register',
+        },
+        {
+          id: '2',
+          name: '湿度',
+          identifier: 'humidity',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'float',
+          valueConfig: '',
+          isComposite: false,
+          protocol: 'Mqtt',
+          registerAddress: '0x0002',
+          functionCode: '03',
+          modbusDataType: 'float32',
+          byteOrder: 'big-endian',
+          registerType: 'input-register',
+        },
+      ],
     },
     {
       id: '2',
@@ -72,6 +125,24 @@ const ProductManagement: React.FC = () => {
       deviceCount: 89,
       updateTime: '2024-01-14 09:15:10',
       updatedBy: '李四',
+      functions: [
+        {
+          id: '3',
+          name: '门锁状态',
+          identifier: 'lock_status',
+          functionType: '属性（静态）',
+          readWriteMode: '读写',
+          dataType: 'enum',
+          valueConfig: '0:关闭;1:开启',
+          isComposite: false,
+          protocol: 'http',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+      ],
     },
     {
       id: '3',
@@ -82,6 +153,40 @@ const ProductManagement: React.FC = () => {
       deviceCount: 234,
       updateTime: '2024-01-13 16:45:33',
       updatedBy: '王五',
+      functions: [
+        {
+          id: '4',
+          name: 'PM2.5',
+          identifier: 'pm25',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'int',
+          valueConfig: '',
+          isComposite: false,
+          protocol: 'modbus_tcp',
+          registerAddress: '0x0010',
+          functionCode: '04',
+          modbusDataType: 'uint16',
+          byteOrder: 'big-endian',
+          registerType: 'input-register',
+        },
+        {
+          id: '5',
+          name: '报警事件',
+          identifier: 'alarm_event',
+          functionType: '事件',
+          readWriteMode: '只读',
+          dataType: 'text',
+          valueConfig: '',
+          isComposite: false,
+          protocol: 'modbus_tcp',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+      ],
     },
   ]);
 
@@ -105,35 +210,67 @@ const ProductManagement: React.FC = () => {
     setIsDrawerVisible(false);
   };
 
-  // 处理产品创建成功
-  const handleProductCreated = (newProduct: any) => {
-    // 生成新产品数据
-    const product: Product = {
-      id: Date.now().toString(),
-      productName: newProduct.productName,
-      productKey: newProduct.productKey || `${newProduct.productName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`,
-      productType: newProduct.productType,
-      protocol: newProduct.protocol,
-      deviceCount: 0, // 新产品设备数为0
-      updateTime: new Date().toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false
-      }).replace(/\//g, '-'),
-      updatedBy: '管理员', // 这里可以从用户状态获取
-    };
-    
-    // 添加到产品列表
-    setProducts(prevProducts => [product, ...prevProducts]);
-    
-    // 关闭抽屉
-    setIsDrawerVisible(false);
-    
-    message.success('产品创建成功！');
+  const handleEditDrawerClose = () => {
+    setIsEditDrawerVisible(false);
+    setEditingProduct(null);
+  };
+
+  // 处理产品创建或编辑成功
+  const handleProductCreated = (productData: any) => {
+    if (productData.id && editingProduct) {
+      // 编辑模式：更新现有产品
+      const updatedProduct: Product = {
+        id: productData.id,
+        productName: productData.productName,
+        productKey: productData.productKey,
+        productType: productData.productType,
+        protocol: productData.protocol,
+        deviceCount: editingProduct.deviceCount, // 保持原有设备数
+        updateTime: productData.updateTime,
+        updatedBy: productData.updatedBy,
+        functions: productData.functions || [], // 包含功能数据
+      };
+      
+      // 更新产品列表
+      setProducts(prevProducts => 
+        prevProducts.map(p => p.id === productData.id ? updatedProduct : p)
+      );
+      
+      // 关闭编辑抽屉
+      setIsEditDrawerVisible(false);
+      setEditingProduct(null);
+      
+      message.success('产品编辑成功！');
+    } else {
+      // 新增模式：添加新产品
+      const product: Product = {
+        id: Date.now().toString(),
+        productName: productData.productName,
+        productKey: productData.productKey || `${productData.productName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`,
+        productType: productData.productType,
+        protocol: productData.protocol,
+        deviceCount: 0, // 新产品设备数为0
+        updateTime: new Date().toLocaleString('zh-CN', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        }).replace(/\//g, '-'),
+        updatedBy: '管理员', // 这里可以从用户状态获取
+        functions: productData.functions || [], // 包含功能数据
+      };
+      
+      // 添加到产品列表
+      setProducts(prevProducts => [product, ...prevProducts]);
+      
+      // 关闭新增抽屉
+      setIsDrawerVisible(false);
+      
+      message.success('产品创建成功！');
+    }
   };
 
 
@@ -149,8 +286,7 @@ const ProductManagement: React.FC = () => {
 
   const handleEdit = (record: Product) => {
     setEditingProduct(record);
-    form.setFieldsValue(record);
-    setIsModalVisible(true);
+    setIsEditDrawerVisible(true);
   };
 
   const handleDelete = (record: Product) => {
@@ -226,10 +362,13 @@ const ProductManagement: React.FC = () => {
 
   // 检测屏幕尺寸
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1600);
   
   React.useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
+      const width = window.innerWidth;
+      setIsMobile(width < 768);
+      setIsLargeScreen(width >= 1600);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -240,6 +379,7 @@ const ProductManagement: React.FC = () => {
     {
       title: '产品信息',
       key: 'productInfo',
+      fixed: 'left',
       render: (_: any, record: Product) => (
         <div style={{ padding: '8px 0' }}>
           <div style={{ marginBottom: '4px' }}>
@@ -279,16 +419,17 @@ const ProductManagement: React.FC = () => {
       title: '操作',
       key: 'action',
       width: 80,
-      align: 'center',
+      align: 'right',
+      fixed: 'right',
       render: (_: any, record: Product) => (
         <Dropdown
           menu={{
             items: [
               {
-                key: 'detail',
-                label: '详情',
-                icon: <EyeOutlined />,
-                onClick: () => console.log('查看详情:', record.id),
+                key: 'edit',
+                label: '编辑',
+                icon: <EditOutlined />,
+                onClick: () => handleEdit(record),
               },
               {
                 key: 'edit',
@@ -318,9 +459,10 @@ const ProductManagement: React.FC = () => {
       title: '产品名称',
       dataIndex: 'productName',
       key: 'productName',
-      width: 150,
+      width: isLargeScreen ? 200 : 150,
       align: 'left',
       ellipsis: true,
+      fixed: 'left',
       render: (text: string, record: Product) => (
         <Tooltip title={text}>
           <span 
@@ -338,7 +480,7 @@ const ProductManagement: React.FC = () => {
       title: '产品Key',
       dataIndex: 'productKey',
       key: 'productKey',
-      width: 140,
+      width: isLargeScreen ? 180 : 140,
       align: 'left',
       ellipsis: true,
       render: (text: string) => (
@@ -381,7 +523,7 @@ const ProductManagement: React.FC = () => {
       title: '类型',
       dataIndex: 'productType',
       key: 'productType',
-      width: 100,
+      width: isLargeScreen ? 120 : 100,
       align: 'left',
       ellipsis: true,
       render: (type: string) => (
@@ -394,7 +536,7 @@ const ProductManagement: React.FC = () => {
       title: '协议',
       dataIndex: 'protocol',
       key: 'protocol',
-      width: 80,
+      width: isLargeScreen ? 100 : 80,
       align: 'left',
       ellipsis: true,
       render: (protocol: string) => (
@@ -407,7 +549,7 @@ const ProductManagement: React.FC = () => {
       title: '设备数',
       dataIndex: 'deviceCount',
       key: 'deviceCount',
-      width: 80,
+      width: isLargeScreen ? 100 : 80,
       align: 'center',
       sorter: (a: Product, b: Product) => a.deviceCount - b.deviceCount,
       render: (count: number) => (
@@ -420,7 +562,7 @@ const ProductManagement: React.FC = () => {
       title: '更新时间',
       dataIndex: 'updateTime',
       key: 'updateTime',
-      width: 140,
+      width: isLargeScreen ? 180 : 140,
       align: 'left',
       ellipsis: true,
       sorter: (a: Product, b: Product) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
@@ -434,7 +576,7 @@ const ProductManagement: React.FC = () => {
       title: '更新人',
       dataIndex: 'updatedBy',
       key: 'updatedBy',
-      width: 80,
+      width: isLargeScreen ? 100 : 80,
       align: 'left',
       ellipsis: true,
       render: (user: string) => (
@@ -446,8 +588,9 @@ const ProductManagement: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 120,
-      align: 'center',
+      width: isLargeScreen ? 150 : 120,
+      align: 'right',
+      fixed: 'right',
       render: (_: any, record: Product) => {
         const moreMenuItems = [
           {
@@ -467,15 +610,15 @@ const ProductManagement: React.FC = () => {
 
         return (
           <Space size={4}>
-            <Tooltip title="查看详情">
+            <Tooltip title="编辑产品">
               <Button
                 type="link"
-                icon={<EyeOutlined />}
-                onClick={() => console.log('查看详情:', record.id)}
+                icon={<EditOutlined />}
+                onClick={() => handleEdit(record)}
                 size="small"
                 style={{ padding: '0 4px' }}
               >
-                详情
+                编辑
               </Button>
             </Tooltip>
             <Dropdown
@@ -502,8 +645,8 @@ const ProductManagement: React.FC = () => {
     <div style={{ background: 'transparent' }}>
       <Card style={{ marginBottom: 16 }}>
         {/* 搜索和筛选区域 */}
-        <Row gutter={[8, 8]} style={{ marginBottom: 16 }}>
-          <Col xs={24} sm={24} md={10} lg={8} xl={8}>
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          <Col xs={24} sm={24} md={10} lg={8} xl={isLargeScreen ? 10 : 8} xxl={12}>
             <Input
               placeholder="请输入产品名称搜索"
               prefix={<SearchOutlined />}
@@ -513,7 +656,7 @@ const ProductManagement: React.FC = () => {
               size={isMobile ? 'large' : 'middle'}
             />
           </Col>
-          <Col xs={12} sm={12} md={5} lg={4} xl={4}>
+          <Col xs={12} sm={12} md={5} lg={4} xl={isLargeScreen ? 4 : 4} xxl={4}>
             <Select
               placeholder="全部类型"
               value={selectedType}
@@ -529,7 +672,7 @@ const ProductManagement: React.FC = () => {
               ))}
             </Select>
           </Col>
-          <Col xs={6} sm={6} md={3} lg={4} xl={4}>
+          <Col xs={6} sm={6} md={3} lg={4} xl={isLargeScreen ? 3 : 4} xxl={3}>
             <Button
               icon={<ReloadOutlined />}
               onClick={handleRefresh}
@@ -540,7 +683,7 @@ const ProductManagement: React.FC = () => {
               {isMobile ? '' : '刷新'}
             </Button>
           </Col>
-          <Col xs={6} sm={6} md={6} lg={8} xl={8}>
+          <Col xs={6} sm={6} md={6} lg={8} xl={isLargeScreen ? 7 : 8} xxl={5}>
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -558,16 +701,17 @@ const ProductManagement: React.FC = () => {
           rowKey="id"
           pagination={{
             total: filteredProducts.length,
-            pageSize: isMobile ? 5 : 10,
+            pageSize: isMobile ? 5 : isLargeScreen ? 15 : 10,
             showSizeChanger: !isMobile,
             showQuickJumper: !isMobile,
             showTotal: isMobile ? undefined : (total: number, range: [number, number]) =>
               `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
             simple: isMobile,
             size: isMobile ? 'small' : 'default',
-            showLessItems: true,
+            showLessItems: !isLargeScreen,
+            pageSizeOptions: isLargeScreen ? ['10', '15', '20', '50'] : ['10', '20', '50'],
           }}
-          scroll={isMobile ? { x: 'max-content' } : { x: 1000 }}
+          scroll={isMobile ? { x: 'max-content' } : isLargeScreen ? { x: 1200 } : { x: 1000 }}
           size={isMobile ? 'small' : 'middle'}
         />
       </Card>
@@ -579,7 +723,7 @@ const ProductManagement: React.FC = () => {
         onOk={handleModalOk}
         onCancel={() => setIsModalVisible(false)}
         confirmLoading={loading}
-        width={600}
+        width={isLargeScreen ? 800 : isMobile ? '90vw' : 600}
       >
         <Form
           form={form}
@@ -666,6 +810,26 @@ const ProductManagement: React.FC = () => {
           <AddProduct 
             onClose={handleDrawerClose} 
             onProductCreated={handleProductCreated}
+          />
+        </Drawer>
+
+        {/* 编辑产品抽屉 */}
+        <Drawer
+          title="编辑产品"
+          placement="right"
+          width="100vw"
+          onClose={handleEditDrawerClose}
+          open={isEditDrawerVisible}
+          styles={{
+            body: {
+              padding: 0,
+            },
+          }}
+        >
+          <AddProduct 
+            onClose={handleEditDrawerClose} 
+            onProductCreated={handleProductCreated}
+            editingProduct={editingProduct}
           />
         </Drawer>
         
