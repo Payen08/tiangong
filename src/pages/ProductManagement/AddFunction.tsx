@@ -63,16 +63,8 @@ interface FunctionConfig {
   registerType?: 'coil' | 'discrete-input' | 'input-register' | 'holding-register'; // 寄存器类型（modbus-tcp协议时使用）
   // 组合模式相关字段
   compositeType?: 'multi-register' | 'bit-field' | 'data-structure' | 'custom'; // 组合类型
-  startRegisterAddress?: string; // 起始寄存器地址
-  registerCount?: number; // 寄存器数量
-  compositeRegisterType?: 'coil' | 'discrete-input' | 'input-register' | 'holding-register'; // 组合寄存器类型
-  compositeFunctionCode?: string; // 组合功能码
-  compositeDataType?: string; // 组合数据类型
-  compositeByteOrder?: 'big-endian' | 'little-endian'; // 组合字节序
-  parseRule?: string; // 数据解析规则
-  scaleFactor?: number; // 数据缩放因子
-  offset?: number; // 数据偏移量
-  compositeDescription?: string; // 组合说明
+
+
 }
 
 interface AddFunctionProps {
@@ -101,16 +93,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   
   // 组合模式相关状态
   const [compositeType, setCompositeType] = useState<'multi-register' | 'bit-field' | 'data-structure' | 'custom'>('multi-register');
-  const [startRegisterAddress, setStartRegisterAddress] = useState<string>('');
-  const [registerCount, setRegisterCount] = useState<number>(1);
-  const [compositeRegisterType, setCompositeRegisterType] = useState<'coil' | 'discrete-input' | 'input-register' | 'holding-register'>('holding-register');
-  const [compositeFunctionCode, setCompositeFunctionCode] = useState<string>('');
-  const [compositeDataType, setCompositeDataType] = useState<string>('');
-  const [compositeByteOrder, setCompositeByteOrder] = useState<'big-endian' | 'little-endian'>('big-endian');
-  const [parseRule, setParseRule] = useState<string>('');
-  const [scaleFactor, setScaleFactor] = useState<number>(1);
-  const [offset, setOffset] = useState<number>(0);
-  const [compositeDescription, setCompositeDescription] = useState<string>('');
+
+
   const [functionName, setFunctionName] = useState(''); // 用于存储第一步的功能名称
 
   // 添加寄存器映射项（用于多寄存器组合）
@@ -157,6 +141,21 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           ...item,
           registerMappings: (item.registerMappings || []).map(mapping => {
             if (mapping.id === mappingId) {
+              // 如果更新的是寄存器类型，需要处理级联逻辑
+              if (field === 'registerType') {
+                const updatedMapping = { ...mapping, [field]: value };
+                // 清空功能码，让用户重新选择
+                updatedMapping.functionCode = '';
+                // 根据寄存器类型设置数据类型和字节序
+                if (value === 'coil' || value === 'discrete-input') {
+                  updatedMapping.dataType = 'bit';
+                  updatedMapping.byteOrder = undefined; // 线圈和离散量输入不需要字节序
+                } else {
+                  updatedMapping.dataType = 'uint16';
+                  updatedMapping.byteOrder = undefined; // 清空字节序，让用户重新选择
+                }
+                return updatedMapping;
+              }
               return { ...mapping, [field]: value };
             }
             return mapping;
@@ -206,16 +205,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         
         // 设置组合模式相关状态
         setCompositeType(editingFunction.compositeType || 'multi-register');
-        setStartRegisterAddress(editingFunction.startRegisterAddress || '');
-        setRegisterCount(editingFunction.registerCount || 1);
-        setCompositeRegisterType(editingFunction.compositeRegisterType || 'holding-register');
-        setCompositeFunctionCode(editingFunction.compositeFunctionCode || '');
-        setCompositeDataType(editingFunction.compositeDataType || '');
-        setCompositeByteOrder(editingFunction.compositeByteOrder || 'big-endian');
-        setParseRule(editingFunction.parseRule || '');
-        setScaleFactor(editingFunction.scaleFactor || 1);
-        setOffset(editingFunction.offset || 0);
-        setCompositeDescription(editingFunction.compositeDescription || '');
+
+
         
         // 同步表单字段值，确保受控组件正确显示
         setTimeout(() => {
@@ -254,16 +245,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         
         // 重置组合模式相关状态
         setCompositeType('multi-register');
-        setStartRegisterAddress('');
-        setRegisterCount(1);
-        setCompositeRegisterType('holding-register');
-        setCompositeFunctionCode('');
-        setCompositeDataType('');
-        setCompositeByteOrder('big-endian');
-        setParseRule('');
-        setScaleFactor(1);
-        setOffset(0);
-        setCompositeDescription('');
+
+
       }
     }
   }, [visible, form, isEdit, editingFunction]);
@@ -570,36 +553,9 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             setLoading(false);
             return;
           }
-          if (!startRegisterAddress || !startRegisterAddress.trim()) {
-            message.error('请输入起始寄存器地址');
-            setLoading(false);
-            return;
-          }
-          if (!registerCount) {
-            message.error('请输入寄存器数量');
-            setLoading(false);
-            return;
-          }
-          if (!compositeRegisterType) {
-            message.error('请选择寄存器类型');
-            setLoading(false);
-            return;
-          }
-          if (!compositeFunctionCode) {
-            message.error('请选择功能码');
-            setLoading(false);
-            return;
-          }
-          if (!compositeDataType) {
-            message.error('请选择数据类型');
-            setLoading(false);
-            return;
-          }
-          if (!compositeByteOrder) {
-            message.error('请选择字节序');
-            setLoading(false);
-            return;
-          }
+
+
+
           
           // 多寄存器组合模式下的寄存器映射验证
           if (compositeType === 'multi-register' && (dataType === 'bool' || dataType === 'enum')) {
@@ -607,12 +563,22 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
               if (!item.registerMappings || item.registerMappings.length === 0) {
                 return true; // 没有寄存器映射
               }
-              return item.registerMappings.some(mapping => 
-                !mapping.registerAddress || 
-                !mapping.registerType || 
-                !mapping.functionCode || 
-                !mapping.dataType
-              );
+              return item.registerMappings.some(mapping => {
+                // 基本字段验证
+                if (!mapping.registerAddress || 
+                    !mapping.registerType || 
+                    !mapping.functionCode || 
+                    !mapping.dataType) {
+                  return true;
+                }
+                // 对于非线圈和非离散量输入类型，字节序是必填的
+                if (mapping.registerType !== 'coil' && 
+                    mapping.registerType !== 'discrete-input' && 
+                    !mapping.byteOrder) {
+                  return true;
+                }
+                return false;
+              });
             });
             
             if (hasInvalidMappings) {
@@ -654,16 +620,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           isComposite ? {
             // 组合模式字段
             compositeType,
-            startRegisterAddress,
-            registerCount,
-            compositeRegisterType,
-            compositeFunctionCode,
-            compositeDataType,
-            compositeByteOrder,
-            parseRule,
-            scaleFactor,
-            offset,
-            compositeDescription
+
+
           } : {
             // 非组合模式字段
             registerAddress,
@@ -972,9 +930,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                              onChange={(value: string) => updateRegisterMapping(item.id, mapping.id, 'functionCode', value)}
                              size="small"
                              style={{ width: '100%' }}
-                             placeholder="请选择功能码"
+                             placeholder={mapping.registerType ? "请选择功能码" : "请先选择寄存器类型"}
+                             disabled={!mapping.registerType}
                            >
-                            {getFunctionCodeOptions(mapping.registerType as 'coil' | 'discrete-input' | 'input-register' | 'holding-register').map(option => (
+                            {mapping.registerType && getFunctionCodeOptions(mapping.registerType as 'coil' | 'discrete-input' | 'input-register' | 'holding-register').map(option => (
                               <Option key={option.value} value={option.value}>
                                 {option.label}
                               </Option>
@@ -988,27 +947,36 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                              onChange={(value: string) => updateRegisterMapping(item.id, mapping.id, 'dataType', value)}
                              size="small"
                              style={{ width: '100%' }}
+                             disabled={mapping.registerType === 'coil' || mapping.registerType === 'discrete-input'}
                            >
-                            <Option value="uint16">UInt16</Option>
-                            <Option value="int16">Int16</Option>
-                            <Option value="uint32">UInt32</Option>
-                            <Option value="int32">Int32</Option>
-                            <Option value="float32">Float32</Option>
-                            <Option value="bit">Bit</Option>
+                            {mapping.registerType === 'coil' || mapping.registerType === 'discrete-input' ? (
+                              <Option value="bit">Bit</Option>
+                            ) : (
+                              <>
+                                <Option value="uint16">UInt16</Option>
+                                <Option value="int16">Int16</Option>
+                                <Option value="uint32">UInt32</Option>
+                                <Option value="int32">Int32</Option>
+                                <Option value="float32">Float32</Option>
+                              </>
+                            )}
                           </Select>
                         </Col>
-                        <Col span={4}>
-                          <Text type="secondary" style={{ fontSize: 12 }}>字节序</Text>
-                          <Select
-                             value={mapping.byteOrder}
-                             onChange={(value: string) => updateRegisterMapping(item.id, mapping.id, 'byteOrder', value)}
-                             size="small"
-                             style={{ width: '100%' }}
-                           >
-                            <Option value="big-endian">大端序</Option>
-                            <Option value="little-endian">小端序</Option>
-                          </Select>
-                        </Col>
+                        {mapping.registerType !== 'coil' && mapping.registerType !== 'discrete-input' && (
+                          <Col span={4}>
+                            <Text type="secondary" style={{ fontSize: 12 }}>字节序</Text>
+                            <Select
+                               value={mapping.byteOrder}
+                               onChange={(value: string) => updateRegisterMapping(item.id, mapping.id, 'byteOrder', value)}
+                               size="small"
+                               style={{ width: '100%' }}
+                               placeholder="请选择字节序"
+                             >
+                              <Option value="big-endian">大端序</Option>
+                              <Option value="little-endian">小端序</Option>
+                            </Select>
+                          </Col>
+                        )}
                         <Col span={1}>
                           <Button
                             type="text"
@@ -1247,9 +1215,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 <Select 
                   value={functionCode}
                   onChange={(value: string) => setFunctionCode(value)}
-                  placeholder="请选择功能码"
+                  placeholder={registerType ? "请选择功能码" : "请先选择寄存器类型"}
+                  disabled={!registerType}
                 >
-                  {getFunctionCodeOptions(registerType).map(option => (
+                  {registerType && getFunctionCodeOptions(registerType).map(option => (
                     <Option key={option.value} value={option.value}>
                       {option.label}
                     </Option>
@@ -1348,153 +1317,11 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             </Col>
           </Row>
           
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="起始寄存器地址"
-                name="startRegisterAddress"
-                rules={[{ required: true, message: '请输入起始寄存器地址' }]}
-              >
-                <Input placeholder="请输入起始寄存器地址（如：0x0000）" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="寄存器数量"
-                name="registerCount"
-                rules={[{ required: true, message: '请输入寄存器数量' }]}
-              >
-                <InputNumber 
-                  placeholder="请输入寄存器数量"
-                  min={1}
-                  max={100}
-                  style={{ width: '100%' }}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
+
           
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="寄存器类型"
-                name="compositeRegisterType"
-                rules={[{ required: true, message: '请选择寄存器类型' }]}
-              >
-                <Select placeholder="请选择寄存器类型">
-                  <Option value="holding-register">保持寄存器（Holding Register）</Option>
-                  <Option value="input-register">输入寄存器（Input Register）</Option>
-                  <Option value="coil">线圈（Coil）</Option>
-                  <Option value="discrete-input">离散量输入（Discrete Input）</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="功能码"
-                name="compositeFunctionCode"
-                rules={[{ required: true, message: '请选择功能码' }]}
-              >
-                <Select placeholder="请选择功能码">
-                  <Option value="03">03 - 读保持寄存器</Option>
-                  <Option value="04">04 - 读输入寄存器</Option>
-                  <Option value="01">01 - 读线圈</Option>
-                  <Option value="02">02 - 读离散量输入</Option>
-                  <Option value="06">06 - 写单个寄存器</Option>
-                  <Option value="10">10 - 写多个寄存器</Option>
-                  <Option value="05">05 - 写单个线圈</Option>
-                  <Option value="0F">0F - 写多个线圈</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
+
           
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="数据类型"
-                name="compositeDataType"
-                rules={[{ required: true, message: '请选择数据类型' }]}
-              >
-                <Select placeholder="请选择数据类型">
-                  <Option value="uint16">UInt16（无符号16位整数）</Option>
-                  <Option value="int16">Int16（有符号16位整数）</Option>
-                  <Option value="uint32">UInt32（无符号32位整数）</Option>
-                  <Option value="int32">Int32（有符号32位整数）</Option>
-                  <Option value="float32">Float32（32位浮点数）</Option>
-                  <Option value="float64">Float64（64位浮点数）</Option>
-                  <Option value="string">String（字符串）</Option>
-                  <Option value="bit">Bit（位）</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="字节序"
-                name="compositeByteOrder"
-                rules={[{ required: true, message: '请选择字节序' }]}
-              >
-                <Select placeholder="请选择字节序">
-                  <Option value="big-endian">大端序（Big Endian）</Option>
-                  <Option value="little-endian">小端序（Little Endian）</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={24} lg={24} xl={24}>
-              <Form.Item
-                label="数据解析规则"
-                name="parseRule"
-              >
-                <Input.TextArea 
-                  placeholder="请输入数据解析规则，例如：将多个寄存器组合成一个浮点数，或者位域解析规则等"
-                  rows={3}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="数据缩放因子"
-                name="scaleFactor"
-              >
-                <InputNumber 
-                  placeholder="请输入缩放因子（如：0.1）"
-                  step={0.1}
-                  style={{ width: '100%' }}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="数据偏移量"
-                name="offset"
-              >
-                <InputNumber 
-                  placeholder="请输入偏移量"
-                  style={{ width: '100%' }}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={24} lg={24} xl={24}>
-              <Form.Item
-                label="组合说明"
-                name="compositeDescription"
-              >
-                <Input.TextArea 
-                  placeholder="请输入组合模式的详细说明，包括数据组合方式、用途等"
-                  rows={2}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
+
         </>
       )}
     </Form>
