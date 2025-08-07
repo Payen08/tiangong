@@ -81,7 +81,9 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [dataType, setDataType] = useState<string>('text');
-  const [valueConfigItems, setValueConfigItems] = useState<ValueConfigItem[]>([]);
+  const [valueConfigItems, setValueConfigItems] = useState<ValueConfigItem[]>([
+    { id: '1', value: '', description: '默认值配置' }
+  ]);
   
   // 配置映射相关状态
   const [isComposite, setIsComposite] = useState<boolean>(false);
@@ -96,6 +98,13 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
 
   const [functionName, setFunctionName] = useState(''); // 用于存储第一步的功能名称
+
+  // 组件初始化时确保valueConfigItems正确设置
+  useEffect(() => {
+    if (!isEdit && dataType === 'text' && valueConfigItems.length === 0) {
+      setValueConfigItems([{ id: '1', value: '', description: '默认值配置' }]);
+    }
+  }, [dataType, isEdit, valueConfigItems.length]);
 
   // 添加寄存器映射项（用于多寄存器组合）
   const addRegisterMapping = (valueConfigItemId: string) => {
@@ -368,25 +377,26 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         { id: '1', value: '', description: '' },
       ]);
     } else {
-      setValueConfigItems([]);
+      // 为其他数据类型初始化一个默认的值配置项，用于支持多寄存器映射
+      setValueConfigItems([
+        { id: '1', value: '', description: '默认值配置' },
+      ]);
     }
   };
 
-  // 添加值配置项（仅枚举类型）
+  // 添加值配置项（支持所有数据类型）
   const addValueConfigItem = () => {
-    if (dataType === 'enum') {
-      const newItem: ValueConfigItem = {
-        id: Date.now().toString(),
-        value: '',
-        description: '',
-      };
-      setValueConfigItems([...valueConfigItems, newItem]);
-    }
+    const newItem: ValueConfigItem = {
+      id: Date.now().toString(),
+      value: '',
+      description: '',
+    };
+    setValueConfigItems([...valueConfigItems, newItem]);
   };
 
-  // 删除值配置项（仅枚举类型）
+  // 删除值配置项（支持所有数据类型）
   const removeValueConfigItem = (id: string) => {
-    if (dataType === 'enum' && valueConfigItems.length > 1) {
+    if (valueConfigItems.length > 1) {
       setValueConfigItems(valueConfigItems.filter(item => item.id !== id));
     }
   };
@@ -557,8 +567,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
 
           
-          // 多寄存器组合模式下的寄存器映射验证
-          if (compositeType === 'multi-register' && (dataType === 'bool' || dataType === 'enum')) {
+          // 多寄存器组合模式下的寄存器映射验证（支持所有数据类型）
+          if (compositeType === 'multi-register') {
             const hasInvalidMappings = valueConfigItems.some(item => {
               if (!item.registerMappings || item.registerMappings.length === 0) {
                 return true; // 没有寄存器映射
@@ -594,8 +604,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       const processedValueConfig = valueConfigItems
         .filter(item => item.value || item.description)
         .map(item => {
-          // 多寄存器组合模式下，确保包含寄存器映射数据
-          if (isComposite && compositeType === 'multi-register' && (dataType === 'bool' || dataType === 'enum')) {
+          // 多寄存器组合模式下，确保包含寄存器映射数据（支持所有数据类型）
+          if (isComposite && compositeType === 'multi-register') {
             return {
               ...item,
               registerMappings: item.registerMappings || []
@@ -730,21 +740,32 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       );
     }
 
-    // 其他数据类型的值配置
+    // 其他数据类型的值配置（固定显示，不支持添加/删除）
     if (['int', 'float', 'double', 'text', 'date', 'struct', 'array'].includes(dataType)) {
       return (
-        <Form.Item
-          label="值配置"
-          name="defaultValue"
-        >
-          {dataType === 'int' && <InputNumber placeholder="请输入默认整数值" style={{ width: '100%' }} />}
-          {dataType === 'float' && <InputNumber placeholder="请输入默认浮点数值" step={0.1} style={{ width: '100%' }} />}
-          {dataType === 'double' && <InputNumber placeholder="请输入默认双精度值" step={0.01} style={{ width: '100%' }} />}
-          {dataType === 'text' && <Input placeholder="请输入默认文本值" />}
-          {dataType === 'date' && <Input placeholder="请输入默认日期格式" />}
-          {dataType === 'struct' && <Input.TextArea placeholder="请输入结构体配置" rows={3} />}
-          {dataType === 'array' && <Input.TextArea placeholder="请输入数组配置" rows={3} />}
-        </Form.Item>
+        <div>
+          <Text strong style={{ marginBottom: 8, display: 'block' }}>值配置</Text>
+          <div>
+            {valueConfigItems.map((item, index) => (
+              <Row key={item.id} gutter={16} style={{ marginBottom: 8 }}>
+                <Col xs={8} sm={6} md={5} lg={5} xl={5}>
+                  <Input
+                    placeholder={`${dataType === 'int' ? '整数值' : dataType === 'float' ? '浮点数值' : dataType === 'double' ? '双精度值' : dataType === 'text' ? '文本值' : dataType === 'date' ? '日期值' : dataType === 'struct' ? '结构体值' : '数组值'}`}
+                    value={item.value}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateValueConfigItem(item.id, 'value', e.target.value)}
+                  />
+                </Col>
+                <Col xs={16} sm={18} md={19} lg={19} xl={19}>
+                  <Input
+                    placeholder="请输入值描述"
+                    value={item.description}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateValueConfigItem(item.id, 'description', e.target.value)}
+                  />
+                </Col>
+              </Row>
+            ))}
+          </div>
+        </div>
       );
     }
 
@@ -860,8 +881,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   // 渲染只读值配置（用于配置映射页面）
   const renderReadOnlyValueConfig = () => {
-    // 多寄存器组合模式下的值配置
-    if (isComposite && compositeType === 'multi-register' && (dataType === 'bool' || dataType === 'enum')) {
+    // 多寄存器组合模式下的值配置（支持所有数据类型）
+    if (isComposite && compositeType === 'multi-register') {
       return (
         <Form.Item label="值配置与寄存器映射">
           <div>
@@ -1055,35 +1076,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       );
     }
 
-    // 其他数据类型的值配置
-    if (['int', 'float', 'double', 'text', 'date', 'struct', 'array'].includes(dataType)) {
-      const getDefaultValue = () => {
-        const formValues = form.getFieldsValue();
-        return formValues.defaultValue || '';
-      };
-
-      return (
-        <Form.Item label="值配置">
-          <Input 
-            value={getDefaultValue()}
-            disabled
-            style={{ backgroundColor: '#f5f5f5' }}
-            placeholder="无默认值配置"
-          />
-        </Form.Item>
-      );
-    }
-
-    return (
-      <Form.Item label="值配置">
-        <Input 
-          value=""
-          disabled
-          style={{ backgroundColor: '#f5f5f5' }}
-          placeholder="无值配置"
-        />
-      </Form.Item>
-    );
+    return null;
   };
 
   // 渲染配置映射步骤
