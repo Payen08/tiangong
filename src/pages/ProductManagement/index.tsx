@@ -198,37 +198,57 @@ const ProductManagement: React.FC = () => {
       title: '产品名称',
       dataIndex: 'productName',
       key: 'productName',
-      width: 180,
+      width: 150,
+      minWidth: 120,
       align: 'left',
       fixed: 'left',
+      ellipsis: true,
       render: (text: string, record: Product) => (
-        <span 
-          style={{ color: '#1890ff', cursor: 'pointer' }}
-          onClick={() => {
-            // 跳转到产品详情页面
-            console.log('跳转到产品详情页面:', record.id);
-            // 这里可以使用 React Router 进行页面跳转
-            // navigate(`/product-detail/${record.id}`);
-          }}
-        >
-          {text}
-        </span>
+        <Tooltip title={text}>
+          <span 
+            style={{ color: '#1890ff', cursor: 'pointer' }}
+            onClick={() => {
+              // 跳转到产品详情页面
+              console.log('跳转到产品详情页面:', record.id);
+              // 这里可以使用 React Router 进行页面跳转
+              // navigate(`/product-detail/${record.id}`);
+            }}
+          >
+            {text}
+          </span>
+        </Tooltip>
       ),
     },
     {
       title: '产品Key',
       dataIndex: 'productKey',
       key: 'productKey',
-      width: 160,
+      width: 140,
+      minWidth: 120,
       align: 'left',
+      ellipsis: true,
+      responsive: ['md'],
       render: (text: string) => (
         <Space size={4}>
-          <span style={{ color: '#1890ff', cursor: 'pointer' }} onClick={() => {
-            navigator.clipboard.writeText(text);
-            message.success('产品Key已复制到剪贴板');
-          }}>
-            {text}
-          </span>
+          <Tooltip title={text}>
+            <span 
+              style={{ 
+                color: '#1890ff', 
+                cursor: 'pointer',
+                maxWidth: '100px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                display: 'inline-block'
+              }} 
+              onClick={() => {
+                navigator.clipboard.writeText(text);
+                message.success('产品Key已复制到剪贴板');
+              }}
+            >
+              {text}
+            </span>
+          </Tooltip>
           <Tooltip title="复制产品Key">
             <Button
               type="text"
@@ -245,31 +265,39 @@ const ProductManagement: React.FC = () => {
       ),
     },
     {
-      title: '产品类型',
+      title: '类型',
       dataIndex: 'productType',
       key: 'productType',
-      width: 120,
+      width: 100,
       align: 'left',
+      ellipsis: true,
+      responsive: ['lg'],
       render: (type: string) => (
-        <span style={{ color: '#000000' }}>{type}</span>
+        <Tooltip title={type}>
+          <span style={{ color: '#000000' }}>{type}</span>
+        </Tooltip>
       ),
     },
     {
-      title: '通讯协议',
+      title: '协议',
       dataIndex: 'protocol',
       key: 'protocol',
-      width: 120,
+      width: 80,
       align: 'left',
+      ellipsis: true,
+      responsive: ['lg'],
       render: (protocol: string) => (
-        <span style={{ color: '#000000' }}>{protocol}</span>
+        <Tooltip title={protocol}>
+          <span style={{ color: '#000000' }}>{protocol}</span>
+        </Tooltip>
       ),
     },
     {
-      title: '关联设备数',
+      title: '设备数',
       dataIndex: 'deviceCount',
       key: 'deviceCount',
-      width: 120,
-      align: 'left',
+      width: 80,
+      align: 'center',
       sorter: (a: Product, b: Product) => a.deviceCount - b.deviceCount,
       render: (count: number) => (
         <span style={{ fontWeight: 500, color: '#1890ff' }}>
@@ -281,22 +309,37 @@ const ProductManagement: React.FC = () => {
       title: '更新时间',
       dataIndex: 'updateTime',
       key: 'updateTime',
-      width: 160,
+      width: 140,
       align: 'left',
+      ellipsis: true,
+      responsive: ['xl'],
       sorter: (a: Product, b: Product) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
+      render: (time: string) => (
+        <Tooltip title={time}>
+          <span>{time}</span>
+        </Tooltip>
+      ),
     },
     {
       title: '更新人',
       dataIndex: 'updatedBy',
       key: 'updatedBy',
-      width: 100,
+      width: 80,
       align: 'left',
+      ellipsis: true,
+      responsive: ['xl'],
+      render: (user: string) => (
+        <Tooltip title={user}>
+          <span>{user}</span>
+        </Tooltip>
+      ),
     },
     {
       title: '操作',
       key: 'action',
-      width: 200,
-      align: 'right',
+      width: 120,
+      minWidth: 100,
+      align: 'center',
       fixed: 'right',
       render: (_: any, record: Product) => {
         const moreMenuItems = [
@@ -316,13 +359,14 @@ const ProductManagement: React.FC = () => {
         ];
 
         return (
-          <Space size={8}>
+          <Space size={4}>
             <Tooltip title="查看详情">
               <Button
                 type="link"
                 icon={<EyeOutlined />}
                 onClick={() => handleView(record)}
                 size="small"
+                style={{ padding: '0 4px' }}
               >
                 详情
               </Button>
@@ -336,6 +380,7 @@ const ProductManagement: React.FC = () => {
                 type="link"
                 icon={<MoreOutlined />}
                 size="small"
+                style={{ padding: '0 4px' }}
               >
                 更多
               </Button>
@@ -347,12 +392,13 @@ const ProductManagement: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <Row gutter={[16, 16]} justify="space-between" align="middle" style={{ marginBottom: 16 }}>
-          <Col xs={24} sm={24} md={16} lg={16} xl={16}>
+    <div className="space-y-4" style={{ padding: '0 8px' }}>
+      <Card style={{ margin: '0 -8px' }}>
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          {/* 搜索区域 */}
+          <Col xs={24} sm={24} md={24} lg={16} xl={16}>
             <Row gutter={[8, 8]}>
-              <Col xs={24} sm={12} md={10} lg={8} xl={8}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Input
                   placeholder="请输入产品名称搜索"
                   prefix={<SearchOutlined />}
@@ -376,9 +422,33 @@ const ProductManagement: React.FC = () => {
                   ))}
                 </Select>
               </Col>
+              {/* 在中等屏幕以下显示按钮 */}
+              <Col xs={24} sm={24} md={8} lg={0} xl={0}>
+                <Row gutter={8} justify="start">
+                  <Col>
+                    <Button
+                      icon={<ReloadOutlined />}
+                      onClick={handleRefresh}
+                      loading={loading}
+                    >
+                      刷新
+                    </Button>
+                  </Col>
+                  <Col>
+                    <Button
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      onClick={handleAdd}
+                    >
+                      新增产品
+                    </Button>
+                  </Col>
+                </Row>
+              </Col>
             </Row>
           </Col>
-          <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+          {/* 按钮区域 - 在大屏幕上显示 */}
+          <Col xs={0} sm={0} md={0} lg={8} xl={8}>
             <Row gutter={8} justify="end">
               <Col>
                 <Button
@@ -412,8 +482,11 @@ const ProductManagement: React.FC = () => {
             showQuickJumper: true,
             showTotal: (total: number, range: [number, number]) =>
               `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+            responsive: true,
+            size: 'small',
           }}
-          scroll={{ x: 1200 }}
+          scroll={{ x: 'max-content', y: 'calc(100vh - 350px)' }}
+          size="middle"
         />
       </Card>
 
