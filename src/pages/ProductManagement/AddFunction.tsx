@@ -1617,7 +1617,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             </Row>
             
             <Row gutter={[16, 16]}>
-              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                 <Form.Item
                   label="服务质量等级"
                   name="mqttQos"
@@ -1633,7 +1633,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                   </Select>
                 </Form.Item>
               </Col>
-              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                 <Form.Item
                   label="消息格式"
                   name="mqttPayloadFormat"
@@ -1649,17 +1649,22 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                   </Select>
                 </Form.Item>
               </Col>
-              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+            </Row>
+            
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
                 <Form.Item
                   label="保留消息"
                   name="mqttRetain"
                 >
-                  <Switch 
-                    checked={mqttRetain}
-                    onChange={(checked: boolean) => setMqttRetain(checked)}
-                    checkedChildren="是"
-                    unCheckedChildren="否"
-                  />
+                  <Select 
+                    value={mqttRetain}
+                    onChange={(value: boolean) => setMqttRetain(value)}
+                    placeholder="请选择是否保留消息"
+                  >
+                    <Option value={true}>是</Option>
+                    <Option value={false}>否</Option>
+                  </Select>
                 </Form.Item>
               </Col>
             </Row>
