@@ -292,7 +292,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setValueConfigItems(editingFunction.valueConfig || []);
         
         // 针对http和mqtt协议的特殊处理
-        if (productProtocol === 'http' || productProtocol === 'mqtt') {
+        if (productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt') {
           setIsComposite(false); // 强制设置为非组合
         } else {
           setIsComposite(editingFunction.isComposite || false);
@@ -334,7 +334,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             functionCode: editingFunction.functionCode || '',
             modbusDataType: editingFunction.modbusDataType || 'uint16',
             byteOrder: editingFunction.byteOrder || '',
-            isComposite: (productProtocol === 'http' || productProtocol === 'mqtt') ? false : (editingFunction.isComposite || false),
+            isComposite: (productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt') ? false : (editingFunction.isComposite || false),
           });
         }, 0);
       } else {
@@ -777,7 +777,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           httpDataPath: httpDataPath || undefined,
           httpRequestBody: httpRequestBody || undefined,
         } : {}),
-        ...(productProtocol === 'mqtt' ? {
+        ...(productProtocol === 'mqtt' || productProtocol === 'Mqtt' ? {
           // MQTT协议字段
           mqttTopic,
           mqttQos,
@@ -1281,7 +1281,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 onChange={(value: boolean) => setIsComposite(value)}
                 placeholder="请选择是否组合"
                 style={{ width: '100%' }}
-                disabled={productProtocol === 'http' || productProtocol === 'mqtt'}
+                disabled={productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt'}
               >
                 <Option value={false}>非组合</Option>
                 <Option value={true}>组合</Option>
@@ -1584,7 +1584,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           </>
         )}
         
-        {!isComposite && productProtocol === 'mqtt' && (
+        {!isComposite && (productProtocol === 'mqtt' || productProtocol === 'Mqtt') && (
           <>
             <Divider orientation="left" style={{ margin: '16px 0' }}>MQTT消息映射</Divider>
             <Row gutter={[16, 16]}>
