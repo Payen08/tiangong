@@ -30,6 +30,19 @@ interface ValueConfigItem {
   id: string;
   value: string;
   description: string;
+  // 多寄存器组合相关字段
+  registerMappings?: RegisterMapping[]; // 寄存器地址映射（多寄存器组合时使用）
+}
+
+// 寄存器映射接口（用于多寄存器组合）
+interface RegisterMapping {
+  id: string;
+  registerAddress: string; // 寄存器地址
+  registerType: 'coil' | 'discrete-input' | 'input-register' | 'holding-register'; // 寄存器类型
+  functionCode?: string; // 功能码
+  dataType: string; // 数据类型
+  byteOrder?: 'big-endian' | 'little-endian'; // 字节序
+  description?: string; // 描述
 }
 
 // 功能配置接口
@@ -48,6 +61,18 @@ interface FunctionConfig {
   modbusDataType?: string; // Modbus数据类型（modbus-tcp协议时使用）
   byteOrder?: 'big-endian' | 'little-endian' | ''; // 字节序（modbus-tcp协议时使用）
   registerType?: 'coil' | 'discrete-input' | 'input-register' | 'holding-register'; // 寄存器类型（modbus-tcp协议时使用）
+  // 组合模式相关字段
+  compositeType?: 'multi-register' | 'bit-field' | 'data-structure' | 'custom'; // 组合类型
+  startRegisterAddress?: string; // 起始寄存器地址
+  registerCount?: number; // 寄存器数量
+  compositeRegisterType?: 'coil' | 'discrete-input' | 'input-register' | 'holding-register'; // 组合寄存器类型
+  compositeFunctionCode?: string; // 组合功能码
+  compositeDataType?: string; // 组合数据类型
+  compositeByteOrder?: 'big-endian' | 'little-endian'; // 组合字节序
+  parseRule?: string; // 数据解析规则
+  scaleFactor?: number; // 数据缩放因子
+  offset?: number; // 数据偏移量
+  compositeDescription?: string; // 组合说明
 }
 
 interface AddFunctionProps {
@@ -67,13 +92,80 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const [valueConfigItems, setValueConfigItems] = useState<ValueConfigItem[]>([]);
   
   // 配置映射相关状态
-  const [isComposite, setIsComposite] = useState(false);
-  const [registerAddress, setRegisterAddress] = useState('');
-  const [functionCode, setFunctionCode] = useState(''); // 去掉默认值
-  const [modbusDataType, setModbusDataType] = useState<string>('uint16');
-  const [byteOrder, setByteOrder] = useState<'big-endian' | 'little-endian' | ''>(''); // 去掉默认值
+  const [isComposite, setIsComposite] = useState<boolean>(false);
+  const [registerAddress, setRegisterAddress] = useState<string>('');
+  const [functionCode, setFunctionCode] = useState<string>('');
+  const [modbusDataType, setModbusDataType] = useState<string>('');
+  const [byteOrder, setByteOrder] = useState<'big-endian' | 'little-endian' | ''>('');
   const [registerType, setRegisterType] = useState<'coil' | 'discrete-input' | 'input-register' | 'holding-register'>('holding-register');
+  
+  // 组合模式相关状态
+  const [compositeType, setCompositeType] = useState<'multi-register' | 'bit-field' | 'data-structure' | 'custom'>('multi-register');
+  const [startRegisterAddress, setStartRegisterAddress] = useState<string>('');
+  const [registerCount, setRegisterCount] = useState<number>(1);
+  const [compositeRegisterType, setCompositeRegisterType] = useState<'coil' | 'discrete-input' | 'input-register' | 'holding-register'>('holding-register');
+  const [compositeFunctionCode, setCompositeFunctionCode] = useState<string>('');
+  const [compositeDataType, setCompositeDataType] = useState<string>('');
+  const [compositeByteOrder, setCompositeByteOrder] = useState<'big-endian' | 'little-endian'>('big-endian');
+  const [parseRule, setParseRule] = useState<string>('');
+  const [scaleFactor, setScaleFactor] = useState<number>(1);
+  const [offset, setOffset] = useState<number>(0);
+  const [compositeDescription, setCompositeDescription] = useState<string>('');
   const [functionName, setFunctionName] = useState(''); // 用于存储第一步的功能名称
+
+  // 添加寄存器映射项（用于多寄存器组合）
+  const addRegisterMapping = (valueConfigItemId: string) => {
+    const newMapping: RegisterMapping = {
+      id: Date.now().toString(),
+      registerAddress: '',
+      registerType: 'holding-register',
+      functionCode: '',
+      dataType: 'uint16',
+      byteOrder: 'big-endian',
+      description: ''
+    };
+    
+    setValueConfigItems(prev => prev.map(item => {
+      if (item.id === valueConfigItemId) {
+        return {
+          ...item,
+          registerMappings: [...(item.registerMappings || []), newMapping]
+        };
+      }
+      return item;
+    }));
+  };
+
+  // 删除寄存器映射项
+  const removeRegisterMapping = (valueConfigItemId: string, mappingId: string) => {
+    setValueConfigItems(prev => prev.map(item => {
+      if (item.id === valueConfigItemId) {
+        return {
+          ...item,
+          registerMappings: (item.registerMappings || []).filter(mapping => mapping.id !== mappingId)
+        };
+      }
+      return item;
+    }));
+  };
+
+  // 更新寄存器映射项
+  const updateRegisterMapping = (valueConfigItemId: string, mappingId: string, field: keyof RegisterMapping, value: any) => {
+    setValueConfigItems(prev => prev.map(item => {
+      if (item.id === valueConfigItemId) {
+        return {
+          ...item,
+          registerMappings: (item.registerMappings || []).map(mapping => {
+            if (mapping.id === mappingId) {
+              return { ...mapping, [field]: value };
+            }
+            return mapping;
+          })
+        };
+      }
+      return item;
+    }));
+  };
 
   // 初始化时确保默认值的联动
   useEffect(() => {
@@ -112,6 +204,19 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setRegisterType(editingFunction.registerType || 'holding-register');
         setFunctionName(editingFunction.name);
         
+        // 设置组合模式相关状态
+        setCompositeType(editingFunction.compositeType || 'multi-register');
+        setStartRegisterAddress(editingFunction.startRegisterAddress || '');
+        setRegisterCount(editingFunction.registerCount || 1);
+        setCompositeRegisterType(editingFunction.compositeRegisterType || 'holding-register');
+        setCompositeFunctionCode(editingFunction.compositeFunctionCode || '');
+        setCompositeDataType(editingFunction.compositeDataType || '');
+        setCompositeByteOrder(editingFunction.compositeByteOrder || 'big-endian');
+        setParseRule(editingFunction.parseRule || '');
+        setScaleFactor(editingFunction.scaleFactor || 1);
+        setOffset(editingFunction.offset || 0);
+        setCompositeDescription(editingFunction.compositeDescription || '');
+        
         // 同步表单字段值，确保受控组件正确显示
         setTimeout(() => {
           form.setFieldsValue({
@@ -146,6 +251,19 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setByteOrder(''); // 清空字节序，显示placeholder
         setRegisterType('holding-register');
         setFunctionName('');
+        
+        // 重置组合模式相关状态
+        setCompositeType('multi-register');
+        setStartRegisterAddress('');
+        setRegisterCount(1);
+        setCompositeRegisterType('holding-register');
+        setCompositeFunctionCode('');
+        setCompositeDataType('');
+        setCompositeByteOrder('big-endian');
+        setParseRule('');
+        setScaleFactor(1);
+        setOffset(0);
+        setCompositeDescription('');
       }
     }
   }, [visible, form, isEdit, editingFunction]);
@@ -425,41 +543,136 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         return;
       }
       
-      // 验证第二步的必填字段（非组合模式下的modbus_tcp协议）
-      if (!isComposite && productProtocol === 'modbus_tcp') {
-        if (!registerAddress || !registerAddress.trim()) {
-          message.error('请输入寄存器地址');
-          setLoading(false);
-          return;
-        }
-        if (!functionCode) {
-          message.error('请选择功能码');
-          setLoading(false);
-          return;
-        }
-        // 对于非线圈和非离散量输入类型，字节序是必填的
-        if (registerType !== 'coil' && registerType !== 'discrete-input' && !byteOrder) {
-          message.error('请选择字节序');
-          setLoading(false);
-          return;
+      // 验证第二步的必填字段
+      if (productProtocol === 'modbus_tcp') {
+        if (!isComposite) {
+          // 非组合模式验证
+          if (!registerAddress || !registerAddress.trim()) {
+            message.error('请输入寄存器地址');
+            setLoading(false);
+            return;
+          }
+          if (!functionCode) {
+            message.error('请选择功能码');
+            setLoading(false);
+            return;
+          }
+          // 对于非线圈和非离散量输入类型，字节序是必填的
+          if (registerType !== 'coil' && registerType !== 'discrete-input' && !byteOrder) {
+            message.error('请选择字节序');
+            setLoading(false);
+            return;
+          }
+        } else {
+          // 组合模式验证
+          if (!compositeType) {
+            message.error('请选择组合类型');
+            setLoading(false);
+            return;
+          }
+          if (!startRegisterAddress || !startRegisterAddress.trim()) {
+            message.error('请输入起始寄存器地址');
+            setLoading(false);
+            return;
+          }
+          if (!registerCount) {
+            message.error('请输入寄存器数量');
+            setLoading(false);
+            return;
+          }
+          if (!compositeRegisterType) {
+            message.error('请选择寄存器类型');
+            setLoading(false);
+            return;
+          }
+          if (!compositeFunctionCode) {
+            message.error('请选择功能码');
+            setLoading(false);
+            return;
+          }
+          if (!compositeDataType) {
+            message.error('请选择数据类型');
+            setLoading(false);
+            return;
+          }
+          if (!compositeByteOrder) {
+            message.error('请选择字节序');
+            setLoading(false);
+            return;
+          }
+          
+          // 多寄存器组合模式下的寄存器映射验证
+          if (compositeType === 'multi-register' && (dataType === 'bool' || dataType === 'enum')) {
+            const hasInvalidMappings = valueConfigItems.some(item => {
+              if (!item.registerMappings || item.registerMappings.length === 0) {
+                return true; // 没有寄存器映射
+              }
+              return item.registerMappings.some(mapping => 
+                !mapping.registerAddress || 
+                !mapping.registerType || 
+                !mapping.functionCode || 
+                !mapping.dataType
+              );
+            });
+            
+            if (hasInvalidMappings) {
+              message.error('多寄存器组合模式下，每个值配置项都必须配置完整的寄存器映射');
+              setLoading(false);
+              return;
+            }
+          }
         }
       }
       
+      // 处理值配置数据，确保多寄存器组合模式下包含寄存器映射
+      const processedValueConfig = valueConfigItems
+        .filter(item => item.value || item.description)
+        .map(item => {
+          // 多寄存器组合模式下，确保包含寄存器映射数据
+          if (isComposite && compositeType === 'multi-register' && (dataType === 'bool' || dataType === 'enum')) {
+            return {
+              ...item,
+              registerMappings: item.registerMappings || []
+            };
+          }
+          // 非多寄存器组合模式，移除registerMappings字段
+          const { registerMappings, ...itemWithoutMappings } = item;
+          return itemWithoutMappings;
+        });
+
       const functionData: FunctionConfig = {
         name: finalName,
         identifier: allValues.identifier,
         functionType: allValues.functionType,
         readWriteMode: allValues.readWriteMode,
         dataType: allValues.dataType,
-        valueConfig: valueConfigItems.filter(item => item.value || item.description),
+        valueConfig: processedValueConfig,
         // 配置映射数据
         isComposite: isComposite,
         protocol: productProtocol,
-        registerAddress: !isComposite && productProtocol === 'modbus_tcp' ? registerAddress : undefined,
-        functionCode: !isComposite && productProtocol === 'modbus_tcp' && functionCode ? functionCode : undefined,
-        modbusDataType: !isComposite && productProtocol === 'modbus_tcp' ? modbusDataType : undefined,
-        byteOrder: !isComposite && productProtocol === 'modbus_tcp' && byteOrder ? byteOrder : undefined,
-        registerType: !isComposite && productProtocol === 'modbus_tcp' ? registerType : undefined,
+        ...(productProtocol === 'modbus_tcp' ? (
+          isComposite ? {
+            // 组合模式字段
+            compositeType,
+            startRegisterAddress,
+            registerCount,
+            compositeRegisterType,
+            compositeFunctionCode,
+            compositeDataType,
+            compositeByteOrder,
+            parseRule,
+            scaleFactor,
+            offset,
+            compositeDescription
+          } : {
+            // 非组合模式字段
+            registerAddress,
+            functionCode: functionCode || undefined,
+            modbusDataType,
+            byteOrder: byteOrder || undefined,
+            registerType
+          }
+        ) : {})
       };
       
       console.log('准备保存功能数据:', functionData); // 添加调试日志
@@ -689,6 +902,141 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   // 渲染只读值配置（用于配置映射页面）
   const renderReadOnlyValueConfig = () => {
+    // 多寄存器组合模式下的值配置
+    if (isComposite && compositeType === 'multi-register' && (dataType === 'bool' || dataType === 'enum')) {
+      return (
+        <Form.Item label="值配置与寄存器映射">
+          <div>
+            {valueConfigItems.map((item, index) => (
+              <div key={item.id} style={{ marginBottom: 16, border: '1px solid #d9d9d9', borderRadius: 6, padding: 12 }}>
+                {/* 值配置基本信息 */}
+                <Row gutter={16} style={{ marginBottom: 8 }}>
+                  <Col span={6}>
+                    <Text strong>值：</Text>
+                    <Input value={item.value} disabled style={{ backgroundColor: '#f5f5f5', marginTop: 4 }} />
+                  </Col>
+                  <Col span={18}>
+                    <Text strong>描述：</Text>
+                    <Input value={item.description} disabled style={{ backgroundColor: '#f5f5f5', marginTop: 4 }} />
+                  </Col>
+                </Row>
+                
+                {/* 寄存器映射配置 */}
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                    <Text strong style={{ marginRight: 16 }}>寄存器映射：</Text>
+                    <Button
+                      type="dashed"
+                      icon={<PlusOutlined />}
+                      onClick={() => addRegisterMapping(item.id)}
+                      size="small"
+                    >
+                      添加寄存器
+                    </Button>
+                  </div>
+                  
+                  {(item.registerMappings || []).map((mapping, mappingIndex) => (
+                    <div key={mapping.id} style={{ marginBottom: 8, padding: 8, backgroundColor: '#fafafa', borderRadius: 4 }}>
+                      <Row gutter={8}>
+                        <Col span={5}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>寄存器地址</Text>
+                          <Input
+                             placeholder="如：0x0001"
+                             value={mapping.registerAddress}
+                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateRegisterMapping(item.id, mapping.id, 'registerAddress', e.target.value)}
+                             size="small"
+                           />
+                        </Col>
+                        <Col span={4}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>寄存器类型</Text>
+                          <Select
+                             value={mapping.registerType}
+                             onChange={(value: string) => {
+                               updateRegisterMapping(item.id, mapping.id, 'registerType', value);
+                               // 清空功能码，让用户重新选择
+                               updateRegisterMapping(item.id, mapping.id, 'functionCode', '');
+                             }}
+                             size="small"
+                             style={{ width: '100%' }}
+                           >
+                            <Option value="holding-register">保持寄存器</Option>
+                            <Option value="input-register">输入寄存器</Option>
+                            <Option value="coil">线圈</Option>
+                            <Option value="discrete-input">离散量输入</Option>
+                          </Select>
+                        </Col>
+                        <Col span={5}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>功能码</Text>
+                          <Select
+                             value={mapping.functionCode}
+                             onChange={(value: string) => updateRegisterMapping(item.id, mapping.id, 'functionCode', value)}
+                             size="small"
+                             style={{ width: '100%' }}
+                             placeholder="请选择功能码"
+                           >
+                            {getFunctionCodeOptions(mapping.registerType as 'coil' | 'discrete-input' | 'input-register' | 'holding-register').map(option => (
+                              <Option key={option.value} value={option.value}>
+                                {option.label}
+                              </Option>
+                            ))}
+                          </Select>
+                        </Col>
+                        <Col span={4}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>数据类型</Text>
+                          <Select
+                             value={mapping.dataType}
+                             onChange={(value: string) => updateRegisterMapping(item.id, mapping.id, 'dataType', value)}
+                             size="small"
+                             style={{ width: '100%' }}
+                           >
+                            <Option value="uint16">UInt16</Option>
+                            <Option value="int16">Int16</Option>
+                            <Option value="uint32">UInt32</Option>
+                            <Option value="int32">Int32</Option>
+                            <Option value="float32">Float32</Option>
+                            <Option value="bit">Bit</Option>
+                          </Select>
+                        </Col>
+                        <Col span={4}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>字节序</Text>
+                          <Select
+                             value={mapping.byteOrder}
+                             onChange={(value: string) => updateRegisterMapping(item.id, mapping.id, 'byteOrder', value)}
+                             size="small"
+                             style={{ width: '100%' }}
+                           >
+                            <Option value="big-endian">大端序</Option>
+                            <Option value="little-endian">小端序</Option>
+                          </Select>
+                        </Col>
+                        <Col span={1}>
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => removeRegisterMapping(item.id, mapping.id)}
+                            size="small"
+                            style={{ marginTop: 16 }}
+                          />
+                        </Col>
+                      </Row>
+                    </div>
+                  ))}
+                  
+                  {(!item.registerMappings || item.registerMappings.length === 0) && (
+                    <div style={{ textAlign: 'center', color: '#999', padding: 16, backgroundColor: '#fafafa', borderRadius: 4 }}>
+                      暂无寄存器映射，点击上方按钮添加
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Form.Item>
+      );
+    }
+
+    // 非多寄存器组合模式下的值配置（原有逻辑）
     if (dataType === 'bool') {
       return (
         <Form.Item label="值配置">
@@ -962,18 +1310,192 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       )}
       
       {isComposite && (
-        <Row gutter={16}>
-          <Col span={24}>
-            <div style={{ 
-              padding: '20px', 
-              background: '#f5f5f5', 
-              borderRadius: '6px',
-              textAlign: 'center'
-            }}>
-              <Text type="secondary">组合模式配置功能开发中...</Text>
-            </div>
-          </Col>
-        </Row>
+        <>
+          <Divider orientation="left" style={{ margin: '16px 0' }}>组合模式配置</Divider>
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="映射功能名称"
+                name="mappingFunctionName"
+              >
+                <Input 
+                  disabled
+                  placeholder="功能名称"
+                  style={{ backgroundColor: '#f5f5f5' }}
+                  value={functionName}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="组合类型"
+                name="compositeType"
+                rules={[{ required: true, message: '请选择组合类型' }]}
+              >
+                <Select placeholder="请选择组合类型">
+                  <Option value="multi-register">多寄存器组合</Option>
+                  <Option value="bit-field">位域组合</Option>
+                  <Option value="data-structure">数据结构组合</Option>
+                  <Option value="custom">自定义组合</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+              {renderReadOnlyValueConfig()}
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="起始寄存器地址"
+                name="startRegisterAddress"
+                rules={[{ required: true, message: '请输入起始寄存器地址' }]}
+              >
+                <Input placeholder="请输入起始寄存器地址（如：0x0000）" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="寄存器数量"
+                name="registerCount"
+                rules={[{ required: true, message: '请输入寄存器数量' }]}
+              >
+                <InputNumber 
+                  placeholder="请输入寄存器数量"
+                  min={1}
+                  max={100}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="寄存器类型"
+                name="compositeRegisterType"
+                rules={[{ required: true, message: '请选择寄存器类型' }]}
+              >
+                <Select placeholder="请选择寄存器类型">
+                  <Option value="holding-register">保持寄存器（Holding Register）</Option>
+                  <Option value="input-register">输入寄存器（Input Register）</Option>
+                  <Option value="coil">线圈（Coil）</Option>
+                  <Option value="discrete-input">离散量输入（Discrete Input）</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="功能码"
+                name="compositeFunctionCode"
+                rules={[{ required: true, message: '请选择功能码' }]}
+              >
+                <Select placeholder="请选择功能码">
+                  <Option value="03">03 - 读保持寄存器</Option>
+                  <Option value="04">04 - 读输入寄存器</Option>
+                  <Option value="01">01 - 读线圈</Option>
+                  <Option value="02">02 - 读离散量输入</Option>
+                  <Option value="06">06 - 写单个寄存器</Option>
+                  <Option value="10">10 - 写多个寄存器</Option>
+                  <Option value="05">05 - 写单个线圈</Option>
+                  <Option value="0F">0F - 写多个线圈</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="数据类型"
+                name="compositeDataType"
+                rules={[{ required: true, message: '请选择数据类型' }]}
+              >
+                <Select placeholder="请选择数据类型">
+                  <Option value="uint16">UInt16（无符号16位整数）</Option>
+                  <Option value="int16">Int16（有符号16位整数）</Option>
+                  <Option value="uint32">UInt32（无符号32位整数）</Option>
+                  <Option value="int32">Int32（有符号32位整数）</Option>
+                  <Option value="float32">Float32（32位浮点数）</Option>
+                  <Option value="float64">Float64（64位浮点数）</Option>
+                  <Option value="string">String（字符串）</Option>
+                  <Option value="bit">Bit（位）</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="字节序"
+                name="compositeByteOrder"
+                rules={[{ required: true, message: '请选择字节序' }]}
+              >
+                <Select placeholder="请选择字节序">
+                  <Option value="big-endian">大端序（Big Endian）</Option>
+                  <Option value="little-endian">小端序（Little Endian）</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+              <Form.Item
+                label="数据解析规则"
+                name="parseRule"
+              >
+                <Input.TextArea 
+                  placeholder="请输入数据解析规则，例如：将多个寄存器组合成一个浮点数，或者位域解析规则等"
+                  rows={3}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="数据缩放因子"
+                name="scaleFactor"
+              >
+                <InputNumber 
+                  placeholder="请输入缩放因子（如：0.1）"
+                  step={0.1}
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="数据偏移量"
+                name="offset"
+              >
+                <InputNumber 
+                  placeholder="请输入偏移量"
+                  style={{ width: '100%' }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+              <Form.Item
+                label="组合说明"
+                name="compositeDescription"
+              >
+                <Input.TextArea 
+                  placeholder="请输入组合模式的详细说明，包括数据组合方式、用途等"
+                  rows={2}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+        </>
       )}
     </Form>
   );
