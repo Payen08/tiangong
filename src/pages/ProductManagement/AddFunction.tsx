@@ -275,7 +275,14 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setCurrentStep(0);
         setDataType(editingFunction.dataType);
         setValueConfigItems(editingFunction.valueConfig || []);
-        setIsComposite(editingFunction.isComposite || false);
+        
+        // 针对http和mqtt协议的特殊处理
+        if (productProtocol === 'http' || productProtocol === 'mqtt') {
+          setIsComposite(false); // 强制设置为非组合
+        } else {
+          setIsComposite(editingFunction.isComposite || false);
+        }
+        
         setRegisterAddress(editingFunction.registerAddress || '');
         setFunctionCode(editingFunction.functionCode || '');
         setModbusDataType(editingFunction.modbusDataType || 'uint16');
@@ -296,7 +303,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             functionCode: editingFunction.functionCode || '',
             modbusDataType: editingFunction.modbusDataType || 'uint16',
             byteOrder: editingFunction.byteOrder || '',
-            isComposite: editingFunction.isComposite || false,
+            isComposite: (productProtocol === 'http' || productProtocol === 'mqtt') ? false : (editingFunction.isComposite || false),
           });
         }, 0);
       } else {
@@ -315,7 +322,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setCurrentStep(0);
         setDataType('text');
         setValueConfigItems([]);
+        
+        // 针对http和mqtt协议的特殊处理：默认为非组合
         setIsComposite(false);
+        
         setRegisterAddress('');
         setFunctionCode(''); // 清空功能码，显示placeholder
         setModbusDataType('uint16');
@@ -1194,22 +1204,6 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         <Row gutter={16}>
           <Col xs={24} sm={24} md={12} lg={12} xl={12}>
             <Form.Item
-              label="是否组合"
-              name="isComposite"
-            >
-              <Select 
-                value={isComposite} 
-                onChange={(value: boolean) => setIsComposite(value)}
-                placeholder="请选择是否组合"
-                style={{ width: '100%' }}
-              >
-                <Option value={false}>非组合</Option>
-                <Option value={true}>组合</Option>
-              </Select>
-            </Form.Item>
-          </Col>
-          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-            <Form.Item
               label="通信协议"
               name="protocol"
             >
@@ -1219,6 +1213,23 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 placeholder="通信协议"
                 style={{ backgroundColor: '#f5f5f5' }}
               />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="是否组合"
+              name="isComposite"
+            >
+              <Select 
+                value={isComposite} 
+                onChange={(value: boolean) => setIsComposite(value)}
+                placeholder="请选择是否组合"
+                style={{ width: '100%' }}
+                disabled={productProtocol === 'http' || productProtocol === 'mqtt'}
+              >
+                <Option value={false}>非组合</Option>
+                <Option value={true}>组合</Option>
+              </Select>
             </Form.Item>
           </Col>
         </Row>
