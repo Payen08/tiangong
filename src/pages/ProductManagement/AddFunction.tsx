@@ -56,15 +56,21 @@ interface FunctionConfig {
   // 配置映射相关字段
   isComposite: boolean; // 是否组合
   protocol: string; // 通信协议
+  // Modbus协议相关字段
   registerAddress?: string; // 寄存器地址（modbus-tcp协议时使用）
   functionCode?: string; // 功能码（modbus-tcp协议时使用）
   modbusDataType?: string; // Modbus数据类型（modbus-tcp协议时使用）
   byteOrder?: 'big-endian' | 'little-endian' | ''; // 字节序（modbus-tcp协议时使用）
   registerType?: 'coil' | 'discrete-input' | 'input-register' | 'holding-register'; // 寄存器类型（modbus-tcp协议时使用）
+  // HTTP协议相关字段
+  httpMethod?: 'GET' | 'POST' | 'PUT' | 'DELETE'; // HTTP请求方法（http协议时使用）
+  httpUrl?: string; // HTTP请求URL（http协议时使用）
+  httpHeaders?: Record<string, string>; // HTTP请求头（http协议时使用）
+  httpParams?: Record<string, string>; // HTTP请求参数（http协议时使用）
+  httpDataPath?: string; // HTTP响应数据路径（http协议时使用）
+  httpRequestBody?: string; // HTTP请求体（http协议时使用）
   // 组合模式相关字段
   compositeType?: 'multi-register' | 'bit-field' | 'data-structure' | 'custom'; // 组合类型
-
-
 }
 
 interface AddFunctionProps {
@@ -87,11 +93,21 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   
   // 配置映射相关状态
   const [isComposite, setIsComposite] = useState<boolean>(false);
+  
+  // Modbus协议相关状态
   const [registerAddress, setRegisterAddress] = useState<string>('');
   const [functionCode, setFunctionCode] = useState<string>('');
   const [modbusDataType, setModbusDataType] = useState<string>('');
   const [byteOrder, setByteOrder] = useState<'big-endian' | 'little-endian' | ''>('');
   const [registerType, setRegisterType] = useState<'coil' | 'discrete-input' | 'input-register' | 'holding-register'>('holding-register');
+  
+  // HTTP协议相关状态
+  const [httpMethod, setHttpMethod] = useState<'GET' | 'POST' | 'PUT' | 'DELETE'>('GET');
+  const [httpUrl, setHttpUrl] = useState<string>('');
+  const [httpHeaders, setHttpHeaders] = useState<Record<string, string>>({});
+  const [httpParams, setHttpParams] = useState<Record<string, string>>({});
+  const [httpDataPath, setHttpDataPath] = useState<string>('');
+  const [httpRequestBody, setHttpRequestBody] = useState<string>('');
   
   // 组合模式相关状态
   const [compositeType, setCompositeType] = useState<'multi-register' | 'bit-field' | 'data-structure' | 'custom'>('multi-register');
@@ -173,6 +189,61 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       }
       return item;
     }));
+  };
+
+  // HTTP协议相关辅助函数
+  // 添加HTTP请求头
+  const addHttpHeader = () => {
+    const newKey = `header_${Date.now()}`;
+    setHttpHeaders(prev => ({ ...prev, [newKey]: '' }));
+  };
+
+  // 删除HTTP请求头
+  const removeHttpHeader = (key: string) => {
+    setHttpHeaders(prev => {
+      const newHeaders = { ...prev };
+      delete newHeaders[key];
+      return newHeaders;
+    });
+  };
+
+  // 更新HTTP请求头
+  const updateHttpHeader = (oldKey: string, newKey: string, value: string) => {
+    setHttpHeaders(prev => {
+      const newHeaders = { ...prev };
+      if (oldKey !== newKey) {
+        delete newHeaders[oldKey];
+      }
+      newHeaders[newKey] = value;
+      return newHeaders;
+    });
+  };
+
+  // 添加HTTP请求参数
+  const addHttpParam = () => {
+    const newKey = `param_${Date.now()}`;
+    setHttpParams(prev => ({ ...prev, [newKey]: '' }));
+  };
+
+  // 删除HTTP请求参数
+  const removeHttpParam = (key: string) => {
+    setHttpParams(prev => {
+      const newParams = { ...prev };
+      delete newParams[key];
+      return newParams;
+    });
+  };
+
+  // 更新HTTP请求参数
+  const updateHttpParam = (oldKey: string, newKey: string, value: string) => {
+    setHttpParams(prev => {
+      const newParams = { ...prev };
+      if (oldKey !== newKey) {
+        delete newParams[oldKey];
+      }
+      newParams[newKey] = value;
+      return newParams;
+    });
   };
 
   // 初始化时确保默认值的联动
@@ -626,21 +697,29 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         // 配置映射数据
         isComposite: isComposite,
         protocol: productProtocol,
+        // 根据协议类型添加相应的配置字段
         ...(productProtocol === 'modbus_tcp' ? (
           isComposite ? {
-            // 组合模式字段
+            // Modbus组合模式字段
             compositeType,
-
-
           } : {
-            // 非组合模式字段
+            // Modbus非组合模式字段
             registerAddress,
             functionCode: functionCode || undefined,
             modbusDataType,
             byteOrder: byteOrder || undefined,
             registerType
           }
-        ) : {})
+        ) : {}),
+        ...(productProtocol === 'http' ? {
+          // HTTP协议字段
+          httpMethod,
+          httpUrl,
+          httpHeaders: Object.keys(httpHeaders).length > 0 ? httpHeaders : undefined,
+          httpParams: Object.keys(httpParams).length > 0 ? httpParams : undefined,
+          httpDataPath: httpDataPath || undefined,
+          httpRequestBody: httpRequestBody || undefined,
+        } : {})
       };
       
       console.log('准备保存功能数据:', functionData); // 添加调试日志
@@ -852,7 +931,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       </Row>
 
       <Row gutter={16}>
-        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+        <Col xs={24} sm={24} md={24} lg={24} xl={24}>
           <Form.Item
             label="数据类型"
             name="dataType"
@@ -1080,245 +1159,407 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   };
 
   // 渲染配置映射步骤
-  const renderConfigMapping = () => (
-    <Form
-      form={form}
-      layout="vertical"
-      initialValues={{
-        isComposite: false,
-        protocol: productProtocol,
-        registerAddress: '',
-        registerType: 'holding-register',
-        functionCode: undefined, // 设置为undefined以显示placeholder
-        modbusDataType: 'uint16',
-        byteOrder: undefined // 设置为undefined以显示placeholder
-      }}
-    >
-      {/* 隐藏字段保存第一步的数据 */}
-      <Form.Item name="name" style={{ display: 'none' }}>
-        <Input />
-      </Form.Item>
-      <Form.Item name="identifier" style={{ display: 'none' }}>
-        <Input />
-      </Form.Item>
-      <Form.Item name="functionType" style={{ display: 'none' }}>
-        <Input />
-      </Form.Item>
-      <Form.Item name="readWriteMode" style={{ display: 'none' }}>
-        <Input />
-      </Form.Item>
-      <Form.Item name="dataType" style={{ display: 'none' }}>
-        <Input />
-      </Form.Item>
-      <Row gutter={16}>
-        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-          <Form.Item
-            label="是否组合"
-            name="isComposite"
-          >
-            <Select 
-              value={isComposite} 
-              onChange={(value: boolean) => setIsComposite(value)}
-              placeholder="请选择是否组合"
-              style={{ width: '100%' }}
+  const renderConfigMapping = () => {
+    return (
+      <Form
+        form={form}
+        layout="vertical"
+        initialValues={{
+          isComposite: false,
+          protocol: productProtocol,
+          registerAddress: '',
+          registerType: 'holding-register',
+          functionCode: undefined,
+          modbusDataType: 'uint16',
+          byteOrder: undefined
+        }}
+      >
+        {/* 隐藏字段保存第一步的数据 */}
+        <Form.Item name="name" style={{ display: 'none' }}>
+          <Input />
+        </Form.Item>
+        <Form.Item name="identifier" style={{ display: 'none' }}>
+          <Input />
+        </Form.Item>
+        <Form.Item name="functionType" style={{ display: 'none' }}>
+          <Input />
+        </Form.Item>
+        <Form.Item name="readWriteMode" style={{ display: 'none' }}>
+          <Input />
+        </Form.Item>
+        <Form.Item name="dataType" style={{ display: 'none' }}>
+          <Input />
+        </Form.Item>
+        
+        <Row gutter={16}>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="是否组合"
+              name="isComposite"
             >
-              <Option value={false}>非组合</Option>
-              <Option value={true}>组合</Option>
-            </Select>
-          </Form.Item>
-        </Col>
-        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-          <Form.Item
-            label="通信协议"
-            name="protocol"
-          >
-            <Input 
-              value={productProtocol} 
-              disabled 
-              placeholder="通信协议"
-              style={{ backgroundColor: '#f5f5f5' }}
-            />
-          </Form.Item>
-        </Col>
-      </Row>
-      
-      {!isComposite && productProtocol === 'modbus_tcp' && (
-        <>
-          <Divider orientation="left" style={{ margin: '16px 0' }}>地址映射</Divider>
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="映射功能名称"
-                name="mappingFunctionName"
+              <Select 
+                value={isComposite} 
+                onChange={(value: boolean) => setIsComposite(value)}
+                placeholder="请选择是否组合"
+                style={{ width: '100%' }}
               >
-                <Input 
-                  disabled
-                  placeholder="功能名称"
-                  style={{ backgroundColor: '#f5f5f5' }}
-                  value={functionName}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="寄存器地址"
-                name="registerAddress"
-                rules={[{ required: true, message: '请输入寄存器地址' }]}
-              >
-                <Input 
-                  placeholder="请输入寄存器地址（如：0x0000）"
-                  value={registerAddress}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRegisterAddress(e.target.value)}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={24} lg={24} xl={24}>
-              {renderReadOnlyValueConfig()}
-            </Col>
-          </Row>
-          
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="寄存器类型"
-                name="registerType"
-                rules={[{ required: true, message: '请选择寄存器类型' }]}
-              >
-                <Select 
-                  value={registerType}
-                  onChange={handleRegisterTypeChange}
-                  placeholder="请选择寄存器类型"
-                >
-                  <Option value="coil">线圈（Coil）</Option>
-                  <Option value="discrete-input">离散量输入（Discrete Input）</Option>
-                  <Option value="input-register">输入寄存器（Input Register）</Option>
-                  <Option value="holding-register">保持寄存器（Holding Register）</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="功能码"
-                name="functionCode"
-                rules={[{ required: true, message: '请选择功能码' }]}
-              >
-                <Select 
-                  value={functionCode}
-                  onChange={(value: string) => setFunctionCode(value)}
-                  placeholder={registerType ? "请选择功能码" : "请先选择寄存器类型"}
-                  disabled={!registerType}
-                >
-                  {registerType && getFunctionCodeOptions(registerType).map(option => (
-                    <Option key={option.value} value={option.value}>
-                      {option.label}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={registerType === 'coil' || registerType === 'discrete-input' ? 24 : 12} lg={registerType === 'coil' || registerType === 'discrete-input' ? 24 : 12} xl={registerType === 'coil' || registerType === 'discrete-input' ? 24 : 12}>
-              <Form.Item
-                label="数据类型"
-                name="modbusDataType"
-                rules={[{ required: true, message: '请选择数据类型' }]}
-              >
-                <Select 
-                  value={modbusDataType}
-                  onChange={(value: string) => setModbusDataType(value)}
-                  placeholder="请选择数据类型"
-                  disabled={registerType === 'coil' || registerType === 'discrete-input'}
-                >
-                  {registerType === 'coil' || registerType === 'discrete-input' ? (
-                    <Option value="bit">Bit（位）</Option>
-                  ) : (
-                    getModbusDataTypeOptions().filter(option => option.value !== 'bit').map(option => (
-                      <Option key={option.value} value={option.value}>
-                        {option.label}
-                      </Option>
-                    ))
-                  )}
-                </Select>
-              </Form.Item>
-            </Col>
-            {registerType !== 'coil' && registerType !== 'discrete-input' && (
+                <Option value={false}>非组合</Option>
+                <Option value={true}>组合</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="通信协议"
+              name="protocol"
+            >
+              <Input 
+                value={productProtocol} 
+                disabled 
+                placeholder="通信协议"
+                style={{ backgroundColor: '#f5f5f5' }}
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        {!isComposite && productProtocol === 'modbus_tcp' && (
+          <>
+            <Divider orientation="left" style={{ margin: '16px 0' }}>Modbus地址映射</Divider>
+            <Row gutter={16}>
               <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                 <Form.Item
-                  label="字节序"
-                  name="byteOrder"
-                  rules={[{ required: true, message: '请选择字节序' }]}
+                  label="映射功能名称"
+                  name="mappingFunctionName"
+                >
+                  <Input 
+                    disabled
+                    placeholder="功能名称"
+                    style={{ backgroundColor: '#f5f5f5' }}
+                    value={functionName}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="寄存器地址"
+                  name="registerAddress"
+                  rules={[{ required: true, message: '请输入寄存器地址' }]}
+                >
+                  <Input 
+                    placeholder="请输入寄存器地址（如：0x0000）"
+                    value={registerAddress}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRegisterAddress(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="寄存器类型"
+                  name="registerType"
+                  rules={[{ required: true, message: '请选择寄存器类型' }]}
                 >
                   <Select 
-                    value={byteOrder}
-                    onChange={(value: 'big-endian' | 'little-endian') => setByteOrder(value)}
-                    placeholder="请选择字节序"
+                    value={registerType}
+                    onChange={handleRegisterTypeChange}
+                    placeholder="请选择寄存器类型"
                   >
-                    <Option value="big-endian">大端序（Big Endian）</Option>
-                    <Option value="little-endian">小端序（Little Endian）</Option>
+                    <Option value="coil">线圈（Coil）</Option>
+                    <Option value="discrete-input">离散量输入（Discrete Input）</Option>
+                    <Option value="input-register">输入寄存器（Input Register）</Option>
+                    <Option value="holding-register">保持寄存器（Holding Register）</Option>
                   </Select>
                 </Form.Item>
               </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="功能码"
+                  name="functionCode"
+                  rules={[{ required: true, message: '请选择功能码' }]}
+                >
+                  <Select 
+                    value={functionCode}
+                    onChange={(value: string) => setFunctionCode(value)}
+                    placeholder={registerType ? "请选择功能码" : "请先选择寄存器类型"}
+                    disabled={!registerType}
+                  >
+                    {registerType && getFunctionCodeOptions(registerType).map(option => (
+                      <Option key={option.value} value={option.value}>
+                        {option.label}
+                      </Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={registerType === 'coil' || registerType === 'discrete-input' ? 24 : 12} lg={registerType === 'coil' || registerType === 'discrete-input' ? 24 : 12} xl={registerType === 'coil' || registerType === 'discrete-input' ? 24 : 12}>
+                <Form.Item
+                  label="数据类型"
+                  name="modbusDataType"
+                  rules={[{ required: true, message: '请选择数据类型' }]}
+                >
+                  <Select 
+                    value={modbusDataType}
+                    onChange={(value: string) => setModbusDataType(value)}
+                    placeholder="请选择数据类型"
+                    disabled={registerType === 'coil' || registerType === 'discrete-input'}
+                  >
+                    {registerType === 'coil' || registerType === 'discrete-input' ? (
+                      <Option value="bit">Bit（位）</Option>
+                    ) : (
+                      getModbusDataTypeOptions().filter(option => option.value !== 'bit').map(option => (
+                        <Option key={option.value} value={option.value}>
+                          {option.label}
+                        </Option>
+                      ))
+                    )}
+                  </Select>
+                </Form.Item>
+              </Col>
+              {registerType !== 'coil' && registerType !== 'discrete-input' && (
+                <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                  <Form.Item
+                    label="字节序"
+                    name="byteOrder"
+                    rules={[{ required: true, message: '请选择字节序' }]}
+                  >
+                    <Select 
+                      value={byteOrder}
+                      onChange={(value: 'big-endian' | 'little-endian') => setByteOrder(value)}
+                      placeholder="请选择字节序"
+                    >
+                      <Option value="big-endian">大端序（Big Endian）</Option>
+                      <Option value="little-endian">小端序（Little Endian）</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+              )}
+            </Row>
+            
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                {renderReadOnlyValueConfig()}
+              </Col>
+            </Row>
+          </>
+        )}
+
+        {!isComposite && productProtocol === 'http' && (
+          <>
+            <Divider orientation="left" style={{ margin: '16px 0' }}>HTTP接口映射</Divider>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="映射功能名称"
+                  name="mappingFunctionName"
+                >
+                  <Input 
+                    disabled
+                    placeholder="功能名称"
+                    style={{ backgroundColor: '#f5f5f5' }}
+                    value={functionName}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="请求方法"
+                  name="httpMethod"
+                  rules={[{ required: true, message: '请选择HTTP请求方法' }]}
+                >
+                  <Select 
+                    value={httpMethod}
+                    onChange={(value: 'GET' | 'POST' | 'PUT' | 'DELETE') => setHttpMethod(value)}
+                    placeholder="请选择HTTP请求方法"
+                  >
+                    <Option value="GET">GET</Option>
+                    <Option value="POST">POST</Option>
+                    <Option value="PUT">PUT</Option>
+                    <Option value="DELETE">DELETE</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                <Form.Item
+                  label="请求URL"
+                  name="httpUrl"
+                  rules={[{ required: true, message: '请输入HTTP请求URL' }]}
+                >
+                  <Input 
+                    placeholder="请输入完整的HTTP请求URL（如：http://api.example.com/data）"
+                    value={httpUrl}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHttpUrl(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                <Form.Item
+                  label="响应数据路径"
+                  name="httpDataPath"
+                >
+                  <Input 
+                    placeholder="JSON路径（如：data.temperature）"
+                    value={httpDataPath}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHttpDataPath(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            {(httpMethod === 'POST' || httpMethod === 'PUT') && (
+              <Row>
+                <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                  <Form.Item
+                    label="请求体"
+                    name="httpRequestBody"
+                  >
+                    <Input.TextArea 
+                      placeholder="请输入请求体"
+                      value={httpRequestBody}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setHttpRequestBody(e.target.value)}
+                      rows={4}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
             )}
-          </Row>
-          
-          {/* 数据处理相关字段 */}
-
-        </>
-      )}
-      
-      {isComposite && (
-        <>
-          <Divider orientation="left" style={{ margin: '16px 0' }}>组合模式配置</Divider>
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="映射功能名称"
-                name="mappingFunctionName"
-              >
-                <Input 
-                  disabled
-                  placeholder="功能名称"
-                  style={{ backgroundColor: '#f5f5f5' }}
-                  value={functionName}
-                />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="组合类型"
-                name="compositeType"
-                rules={[{ required: true, message: '请选择组合类型' }]}
-              >
-                <Select placeholder="请选择组合类型">
-                  <Option value="multi-register">多寄存器组合</Option>
-                  <Option value="bit-field">位域组合</Option>
-                  <Option value="data-structure">数据结构组合</Option>
-                  <Option value="custom">自定义组合</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={24} lg={24} xl={24}>
-              {renderReadOnlyValueConfig()}
-            </Col>
-          </Row>
-          
-
-          
-
-          
-
-        </>
-      )}
-    </Form>
-  );
+            
+            {/* HTTP请求头配置 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <span>请求头配置</span>
+                <Button 
+                  type="dashed" 
+                  size="small" 
+                  icon={<PlusOutlined />} 
+                  onClick={addHttpHeader}
+                >
+                  添加请求头
+                </Button>
+              </div>
+              {Object.entries(httpHeaders).map(([key, value]) => (
+                <div key={key} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <Input
+                    placeholder="请求头名称"
+                    value={key.startsWith('header_') ? '' : key}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateHttpHeader(key, e.target.value, value)}
+                    style={{ flex: 1 }}
+                  />
+                  <Input
+                    placeholder="请求头值"
+                    value={value}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateHttpHeader(key, key, e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <Button
+                    type="text"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => removeHttpHeader(key)}
+                  />
+                </div>
+              ))}
+            </div>
+            
+            {/* HTTP请求参数配置 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <span>请求参数配置</span>
+                <Button 
+                  type="dashed" 
+                  size="small" 
+                  icon={<PlusOutlined />} 
+                  onClick={addHttpParam}
+                >
+                  添加参数
+                </Button>
+              </div>
+              {Object.entries(httpParams).map(([key, value]) => (
+                <div key={key} style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <Input
+                    placeholder="参数名称"
+                    value={key.startsWith('param_') ? '' : key}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateHttpParam(key, e.target.value, value)}
+                    style={{ flex: 1 }}
+                  />
+                  <Input
+                    placeholder="参数值"
+                    value={value}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateHttpParam(key, key, e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <Button
+                    type="text"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => removeHttpParam(key)}
+                  />
+                </div>
+              ))}
+            </div>
+            
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                {renderReadOnlyValueConfig()}
+              </Col>
+            </Row>
+          </>
+        )}
+        
+        {isComposite && (
+          <>
+            <Divider orientation="left" style={{ margin: '16px 0' }}>组合模式配置</Divider>
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="映射功能名称"
+                  name="mappingFunctionName"
+                >
+                  <Input 
+                    disabled
+                    placeholder="功能名称"
+                    style={{ backgroundColor: '#f5f5f5' }}
+                    value={functionName}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="组合类型"
+                  name="compositeType"
+                  rules={[{ required: true, message: '请选择组合类型' }]}
+                >
+                  <Select placeholder="请选择组合类型">
+                    <Option value="multi-register">多寄存器组合</Option>
+                    <Option value="bit-field">位域组合</Option>
+                    <Option value="data-structure">数据结构组合</Option>
+                    <Option value="custom">自定义组合</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                {renderReadOnlyValueConfig()}
+              </Col>
+            </Row>
+          </>
+        )}
+      </Form>
+    );
+  };
 
   return (
     <Drawer
