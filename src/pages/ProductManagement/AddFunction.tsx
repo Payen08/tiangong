@@ -55,9 +55,11 @@ interface AddFunctionProps {
   onClose: () => void;
   onSave: (functionData: FunctionConfig) => void;
   productProtocol?: string; // 产品的通信协议
+  editingFunction?: FunctionConfig; // 编辑的功能数据
+  isEdit?: boolean; // 是否为编辑模式
 }
 
-const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, productProtocol = 'modbus-tcp' }) => {
+const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, productProtocol = 'modbus_tcp', editingFunction, isEdit = false }) => {
   const [form] = Form.useForm();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -83,29 +85,81 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     }
   }, []); // 只在组件挂载时执行一次
 
-  // 当抽屉打开时重置表单
+  // 当抽屉打开时重置表单或填充编辑数据
   useEffect(() => {
     if (visible) {
-      // 重置表单并设置初始值
-      form.resetFields();
-      form.setFieldsValue({
-        functionType: '属性（静态）',
-        readWriteMode: '读写',
-        dataType: 'text',
-      });
-      // 重置所有状态
-      setCurrentStep(0);
-      setDataType('text');
-      setValueConfigItems([]);
-      setIsComposite(false);
-      setRegisterAddress('');
-      setFunctionCode('03');
-      setModbusDataType('uint16');
-      setByteOrder('big-endian');
-      setRegisterType('holding-register');
-      setFunctionName('');
+      if (isEdit && editingFunction) {
+        // 编辑模式：填充现有数据
+        form.setFieldsValue({
+          name: editingFunction.name,
+          identifier: editingFunction.identifier,
+          functionType: editingFunction.functionType,
+          readWriteMode: editingFunction.readWriteMode,
+          dataType: editingFunction.dataType,
+          functionCode: editingFunction.functionCode,
+          byteOrder: editingFunction.byteOrder,
+          mappingFunctionName: editingFunction.name,
+        });
+        // 设置状态
+        setCurrentStep(0);
+        setDataType(editingFunction.dataType);
+        setValueConfigItems(editingFunction.valueConfig || []);
+        setIsComposite(editingFunction.isComposite || false);
+        setRegisterAddress(editingFunction.registerAddress || '');
+        setFunctionCode(editingFunction.functionCode || '');
+        setModbusDataType(editingFunction.modbusDataType || 'uint16');
+        setByteOrder(editingFunction.byteOrder || '');
+        setRegisterType(editingFunction.registerType || 'holding-register');
+        setFunctionName(editingFunction.name);
+        
+        // 同步表单字段值，确保受控组件正确显示
+        setTimeout(() => {
+          form.setFieldsValue({
+            registerAddress: editingFunction.registerAddress || '',
+            registerType: editingFunction.registerType || 'holding-register',
+            functionCode: editingFunction.functionCode || '',
+            modbusDataType: editingFunction.modbusDataType || 'uint16',
+            byteOrder: editingFunction.byteOrder || '',
+            isComposite: editingFunction.isComposite || false,
+          });
+        }, 0);
+      } else {
+        // 新增模式：重置表单并设置初始值
+        form.resetFields();
+        form.setFieldsValue({
+          name: '',
+          identifier: '',
+          functionType: '属性（静态）',
+          readWriteMode: '读写',
+          dataType: 'text',
+          functionCode: undefined, // 设置为undefined以显示placeholder
+          byteOrder: undefined, // 设置为undefined以显示placeholder
+        });
+        // 重置所有状态
+        setCurrentStep(0);
+        setDataType('text');
+        setValueConfigItems([]);
+        setIsComposite(false);
+        setRegisterAddress('');
+        setFunctionCode(''); // 清空功能码，显示placeholder
+        setModbusDataType('uint16');
+        setByteOrder(''); // 清空字节序，显示placeholder
+        setRegisterType('holding-register');
+        setFunctionName('');
+      }
     }
-  }, [visible, form]);
+  }, [visible, form, isEdit, editingFunction]);
+
+  // 监听步骤变化，确保映射功能名称字段正确显示
+  useEffect(() => {
+    if (currentStep === 1 && functionName) {
+      // 当进入第二步且有功能名称时，设置映射功能名称
+      form.setFieldsValue({
+        mappingFunctionName: functionName
+      });
+      console.log('设置映射功能名称:', functionName);
+    }
+  }, [currentStep, functionName, form]);
 
   // 根据寄存器类型获取可用的功能码选项
   const getFunctionCodeOptions = (registerType: 'coil' | 'discrete-input' | 'input-register' | 'holding-register') => {
@@ -157,22 +211,21 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   // 根据寄存器类型自动设置功能码
   const handleRegisterTypeChange = (value: 'coil' | 'discrete-input' | 'input-register' | 'holding-register') => {
     setRegisterType(value);
-    // 根据寄存器类型自动设置对应的默认功能码（选择第一个可用的功能码）
-    const availableOptions = getFunctionCodeOptions(value);
-    if (availableOptions.length > 0) {
-      setFunctionCode(availableOptions[0].value);
-    }
+    // 清空功能码，让用户手动选择，显示placeholder
+    setFunctionCode('');
+    form.setFieldsValue({ functionCode: undefined });
+    
     // 根据寄存器类型自动设置默认数据类型
     if (value === 'coil' || value === 'discrete-input') {
       setModbusDataType('bit');
       // 线圈和离散量输入不需要字节序，清空字节序设置
-      setByteOrder('big-endian'); // 设置默认值，虽然不显示
+      setByteOrder(''); // 清空字节序，显示placeholder
+      form.setFieldsValue({ byteOrder: undefined });
     } else {
       setModbusDataType('uint16');
-      // 确保字节序有默认值
-      if (!byteOrder) {
-        setByteOrder('big-endian');
-      }
+      // 清空字节序，让用户手动选择，显示placeholder
+      setByteOrder('');
+      form.setFieldsValue({ byteOrder: undefined });
     }
   };
 
@@ -250,8 +303,47 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const handleNext = async () => {
     try {
       const values = await form.validateFields();
+      console.log('handleNext - 表单验证通过，获取的值:', values);
       setFunctionName(values.name || ''); // 保存功能名称
+      
+      // 恢复第二步的表单数据（如果之前有填写过）
+      const allValues = form.getFieldsValue();
+      form.setFieldsValue({
+        // 保持第一步的数据
+        name: values.name,
+        identifier: values.identifier,
+        functionType: values.functionType,
+        readWriteMode: values.readWriteMode,
+        dataType: values.dataType,
+        // 设置第二步的数据
+        mappingFunctionName: values.name || '',
+        registerAddress: allValues.registerAddress || registerAddress,
+        functionCode: allValues.functionCode || functionCode || undefined,
+        modbusDataType: allValues.modbusDataType || modbusDataType,
+        byteOrder: allValues.byteOrder || byteOrder || undefined,
+        registerType: allValues.registerType || registerType,
+        isComposite: allValues.isComposite !== undefined ? allValues.isComposite : isComposite
+      });
+      
+      console.log('handleNext - 设置映射功能名称:', values.name);
+      console.log('handleNext - 保存第一步数据到隐藏字段:', {
+        name: values.name,
+        identifier: values.identifier,
+        functionType: values.functionType,
+        readWriteMode: values.readWriteMode,
+        dataType: values.dataType
+      });
+      console.log('handleNext - 恢复第二步数据:', {
+        registerAddress: allValues.registerAddress || registerAddress,
+        functionCode: allValues.functionCode || functionCode,
+        modbusDataType: allValues.modbusDataType || modbusDataType,
+        byteOrder: allValues.byteOrder || byteOrder,
+        registerType: allValues.registerType || registerType,
+        isComposite: allValues.isComposite !== undefined ? allValues.isComposite : isComposite
+      });
+      
       setCurrentStep(1);
+      console.log('handleNext - 切换到步骤1');
     } catch (error) {
       console.error('表单验证失败:', error);
       message.error('请完善基本信息');
@@ -260,6 +352,40 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   // 上一步
   const handlePrev = () => {
+    // 从第二步返回第一步时，确保表单数据正确显示
+    const allValues = form.getFieldsValue();
+    console.log('handlePrev - 当前表单所有值:', allValues);
+    
+    // 确保第一步的数据正确显示（从隐藏字段恢复）
+    const firstStepData = {
+      name: allValues.name || functionName,
+      identifier: allValues.identifier,
+      functionType: allValues.functionType,
+      readWriteMode: allValues.readWriteMode,
+      dataType: allValues.dataType
+    };
+    
+    // 保存第二步的状态数据到表单中，确保数据不丢失
+    form.setFieldsValue({
+      ...firstStepData,
+      registerAddress: registerAddress,
+      functionCode: functionCode || undefined,
+      modbusDataType: modbusDataType,
+      byteOrder: byteOrder || undefined,
+      registerType: registerType,
+      isComposite: isComposite
+    });
+    
+    console.log('handlePrev - 恢复第一步数据:', firstStepData);
+    console.log('handlePrev - 保存第二步状态数据:', {
+      registerAddress,
+      functionCode,
+      modbusDataType,
+      byteOrder,
+      registerType,
+      isComposite
+    });
+    
     setCurrentStep(0);
   };
 
@@ -271,13 +397,14 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       const allValues = form.getFieldsValue();
       console.log('表单所有字段值:', allValues); // 添加调试日志
       
-      // 验证必填字段
-      if (!allValues.name) {
+      // 验证必填字段 - 优先使用functionName状态，其次使用表单值
+      const finalName = functionName || allValues.name;
+      if (!finalName || !finalName.trim()) {
         message.error('请输入功能名称');
         setLoading(false);
         return;
       }
-      if (!allValues.identifier) {
+      if (!allValues.identifier || !allValues.identifier.trim()) {
         message.error('请输入标识符');
         setLoading(false);
         return;
@@ -298,8 +425,28 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         return;
       }
       
+      // 验证第二步的必填字段（非组合模式下的modbus_tcp协议）
+      if (!isComposite && productProtocol === 'modbus_tcp') {
+        if (!registerAddress || !registerAddress.trim()) {
+          message.error('请输入寄存器地址');
+          setLoading(false);
+          return;
+        }
+        if (!functionCode) {
+          message.error('请选择功能码');
+          setLoading(false);
+          return;
+        }
+        // 对于非线圈和非离散量输入类型，字节序是必填的
+        if (registerType !== 'coil' && registerType !== 'discrete-input' && !byteOrder) {
+          message.error('请选择字节序');
+          setLoading(false);
+          return;
+        }
+      }
+      
       const functionData: FunctionConfig = {
-        name: allValues.name,
+        name: finalName,
         identifier: allValues.identifier,
         functionType: allValues.functionType,
         readWriteMode: allValues.readWriteMode,
@@ -308,11 +455,11 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         // 配置映射数据
         isComposite: isComposite,
         protocol: productProtocol,
-        registerAddress: !isComposite && productProtocol === 'modbus-tcp' ? registerAddress : undefined,
-        functionCode: !isComposite && productProtocol === 'modbus-tcp' && functionCode ? functionCode : undefined,
-        modbusDataType: !isComposite && productProtocol === 'modbus-tcp' ? modbusDataType : undefined,
-        byteOrder: !isComposite && productProtocol === 'modbus-tcp' && byteOrder ? byteOrder : undefined,
-        registerType: !isComposite && productProtocol === 'modbus-tcp' ? registerType : undefined,
+        registerAddress: !isComposite && productProtocol === 'modbus_tcp' ? registerAddress : undefined,
+        functionCode: !isComposite && productProtocol === 'modbus_tcp' && functionCode ? functionCode : undefined,
+        modbusDataType: !isComposite && productProtocol === 'modbus_tcp' ? modbusDataType : undefined,
+        byteOrder: !isComposite && productProtocol === 'modbus_tcp' && byteOrder ? byteOrder : undefined,
+        registerType: !isComposite && productProtocol === 'modbus_tcp' ? registerType : undefined,
       };
       
       console.log('准备保存功能数据:', functionData); // 添加调试日志
@@ -439,6 +586,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       form={form}
       layout="vertical"
       initialValues={{
+        name: '',
+        identifier: '',
         functionType: '属性（静态）',
         readWriteMode: '读写',
         dataType: 'text',
@@ -451,7 +600,20 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             name="name"
             rules={[{ required: true, message: '请输入功能名称' }]}
           >
-            <Input placeholder="请输入功能名称" />
+            <Input 
+              placeholder="请输入功能名称" 
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                const newName = e.target.value;
+                console.log('功能名称输入变化:', newName);
+                setFunctionName(newName);
+                // 实时更新映射功能名称字段
+                form.setFieldsValue({
+                  mappingFunctionName: newName
+                });
+                console.log('设置映射功能名称字段:', newName);
+                console.log('当前表单字段值:', form.getFieldsValue());
+              }}
+            />
           </Form.Item>
         </Col>
         <Col xs={24} sm={24} md={12} lg={12} xl={12}>
@@ -611,17 +773,34 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   // 渲染配置映射步骤
   const renderConfigMapping = () => (
     <Form
+      form={form}
       layout="vertical"
       initialValues={{
         isComposite: false,
         protocol: productProtocol,
         registerAddress: '',
         registerType: 'holding-register',
-        functionCode: '', // 去掉默认值
+        functionCode: undefined, // 设置为undefined以显示placeholder
         modbusDataType: 'uint16',
-        byteOrder: '' // 去掉默认值
+        byteOrder: undefined // 设置为undefined以显示placeholder
       }}
     >
+      {/* 隐藏字段保存第一步的数据 */}
+      <Form.Item name="name" style={{ display: 'none' }}>
+        <Input />
+      </Form.Item>
+      <Form.Item name="identifier" style={{ display: 'none' }}>
+        <Input />
+      </Form.Item>
+      <Form.Item name="functionType" style={{ display: 'none' }}>
+        <Input />
+      </Form.Item>
+      <Form.Item name="readWriteMode" style={{ display: 'none' }}>
+        <Input />
+      </Form.Item>
+      <Form.Item name="dataType" style={{ display: 'none' }}>
+        <Input />
+      </Form.Item>
       <Row gutter={16}>
         <Col xs={24} sm={24} md={12} lg={12} xl={12}>
           <Form.Item
@@ -664,10 +843,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 name="mappingFunctionName"
               >
                 <Input 
-                  value={functionName}
                   disabled
                   placeholder="功能名称"
                   style={{ backgroundColor: '#f5f5f5' }}
+                  value={functionName}
                 />
               </Form.Item>
             </Col>
@@ -801,7 +980,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   return (
     <Drawer
-      title="添加功能"
+      title={isEdit ? "编辑功能" : "添加功能"}
       placement="right"
       width="66.67vw" // 占用屏幕的2/3
       onClose={handleClose}

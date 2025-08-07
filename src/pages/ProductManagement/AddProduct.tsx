@@ -27,13 +27,23 @@ import type { ColumnsType } from 'antd/es/table';
 
 const { Option } = Select;
 
-// 功能接口定义
+// 产品功能接口
 interface ProductFunction {
   id: string;
   name: string;
   identifier: string;
   functionType: '属性（静态）' | '属性（动态）' | '服务' | '事件';
+  readWriteMode?: '读写' | '只读';
+  dataType?: string;
   valueConfig: string; // 值配置
+  // 配置映射相关字段
+  isComposite?: boolean;
+  protocol?: string;
+  registerAddress?: string;
+  functionCode?: string;
+  modbusDataType?: string;
+  byteOrder?: 'big-endian' | 'little-endian' | '';
+  registerType?: 'coil' | 'discrete-input' | 'input-register' | 'holding-register';
 }
 
 // 产品类型与协议映射
@@ -63,6 +73,8 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
   // 功能列表状态
   const [functions, setFunctions] = useState<ProductFunction[]>([]);
   const [addFunctionVisible, setAddFunctionVisible] = useState(false);
+  const [editingFunction, setEditingFunction] = useState<any>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   
   // 产品类型选项
   const productTypes = ['机器人产品', '生产产品', '电梯产品', '自动门产品', '虚拟产品'];
@@ -105,20 +117,40 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
     });
   };
 
-  // 查看功能详情
-  const handleViewFunction = (record: ProductFunction) => {
-    Modal.info({
-      title: '功能详情',
-      content: (
-        <div>
-          <p><strong>功能名称:</strong> {record.name}</p>
-          <p><strong>标识符:</strong> {record.identifier}</p>
-          <p><strong>功能类型:</strong> {record.functionType}</p>
-          <p><strong>值配置:</strong> {record.valueConfig}</p>
-        </div>
-      ),
-      width: 500,
-    });
+  // 编辑功能
+  const handleEditFunction = (record: ProductFunction) => {
+    console.log('编辑功能:', record);
+    
+    // 将ProductFunction转换为FunctionConfig格式
+    const functionConfig = {
+      id: record.id, // 保持原有ID
+      name: record.name,
+      identifier: record.identifier,
+      functionType: record.functionType,
+      readWriteMode: record.readWriteMode || '读写' as const,
+      dataType: record.dataType || 'text' as const,
+      valueConfig: record.valueConfig ? record.valueConfig.split(';').map((item, index) => {
+        const [value, description] = item.split(':');
+        return {
+          id: `${index}`,
+          value: value || '',
+          description: description || ''
+        };
+      }) : [],
+      // 配置映射相关字段
+      isComposite: record.isComposite || false,
+      protocol: record.protocol || 'modbus_tcp',
+      registerAddress: record.registerAddress || '',
+      functionCode: record.functionCode || '',
+      modbusDataType: record.modbusDataType || '',
+      byteOrder: record.byteOrder || '',
+      registerType: record.registerType || 'holding-register',
+    };
+    
+    console.log('转换后的功能配置:', functionConfig);
+    setEditingFunction(functionConfig);
+    setIsEditMode(true);
+    setAddFunctionVisible(true);
   };
 
   // 刷新功能列表
@@ -129,6 +161,8 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
   // 添加功能按钮点击
   const handleAddFunction = () => {
     console.log('点击添加功能按钮');
+    setEditingFunction(null);
+    setIsEditMode(false);
     setAddFunctionVisible(true);
   };
 
@@ -141,33 +175,83 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
   // 关闭添加功能抽屉
   const handleCloseAddFunction = () => {
     setAddFunctionVisible(false);
+    setEditingFunction(null);
+    setIsEditMode(false);
   };
 
-  // 保存新功能
+  // 保存功能（新增或编辑）
   const handleSaveFunction = (functionData: any) => {
     console.log('=== 开始保存功能 ===');
     console.log('接收到的功能数据:', functionData);
     console.log('当前functions状态:', functions);
+    console.log('编辑模式:', isEditMode);
+    console.log('编辑的功能:', editingFunction);
     
-    const newFunction: ProductFunction = {
-      id: Date.now().toString(),
-      name: functionData.name,
-      identifier: functionData.identifier,
-      functionType: functionData.functionType,
-      valueConfig: functionData.valueConfig?.map((item: any) => `${item.value}:${item.description}`).join(';') || '',
-    };
-    console.log('新功能对象:', newFunction);
-    
-    setFunctions(prevFunctions => {
-      console.log('setFunctions被调用，prevFunctions:', prevFunctions);
-      const updatedFunctions = [...prevFunctions, newFunction];
-      console.log('更新后的功能列表:', updatedFunctions);
-      return updatedFunctions;
-    });
+    if (isEditMode && editingFunction) {
+      // 编辑模式：更新现有功能
+      const updatedFunction: ProductFunction = {
+        id: editingFunction.id, // 保持原有ID
+        name: functionData.name,
+        identifier: functionData.identifier,
+        functionType: functionData.functionType,
+        readWriteMode: functionData.readWriteMode,
+        dataType: functionData.dataType,
+        valueConfig: functionData.valueConfig?.map((item: any) => `${item.value}:${item.description}`).join(';') || '',
+        // 配置映射相关字段
+        isComposite: functionData.isComposite,
+        protocol: functionData.protocol,
+        registerAddress: functionData.registerAddress,
+        functionCode: functionData.functionCode,
+        modbusDataType: functionData.modbusDataType,
+        byteOrder: functionData.byteOrder,
+        registerType: functionData.registerType,
+      };
+      console.log('更新的功能对象:', updatedFunction);
+      
+      setFunctions(prevFunctions => {
+        const updatedFunctions = prevFunctions.map(func => 
+          func.id === editingFunction.id ? updatedFunction : func
+        );
+        console.log('更新后的功能列表:', updatedFunctions);
+        return updatedFunctions;
+      });
+      
+      message.success('功能编辑成功！');
+    } else {
+      // 新增模式：添加新功能
+      const newFunction: ProductFunction = {
+        id: Date.now().toString(),
+        name: functionData.name,
+        identifier: functionData.identifier,
+        functionType: functionData.functionType,
+        readWriteMode: functionData.readWriteMode,
+        dataType: functionData.dataType,
+        valueConfig: functionData.valueConfig?.map((item: any) => `${item.value}:${item.description}`).join(';') || '',
+        // 配置映射相关字段
+        isComposite: functionData.isComposite,
+        protocol: functionData.protocol,
+        registerAddress: functionData.registerAddress,
+        functionCode: functionData.functionCode,
+        modbusDataType: functionData.modbusDataType,
+        byteOrder: functionData.byteOrder,
+        registerType: functionData.registerType,
+      };
+      console.log('新功能对象:', newFunction);
+      
+      setFunctions(prevFunctions => {
+        console.log('setFunctions被调用，prevFunctions:', prevFunctions);
+        const updatedFunctions = [...prevFunctions, newFunction];
+        console.log('更新后的功能列表:', updatedFunctions);
+        return updatedFunctions;
+      });
+      
+      message.success('功能添加成功！');
+    }
     
     console.log('=== 功能保存完成 ===');
     setAddFunctionVisible(false);
-    message.success('功能添加成功！');
+    setEditingFunction(null);
+    setIsEditMode(false);
   };
 
   // 主流程下一步
@@ -268,14 +352,14 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
       align: 'right',
       render: (_: any, record: ProductFunction) => (
         <Space size={8}>
-          <Tooltip title="查看">
+          <Tooltip title="编辑">
             <Button
               type="link"
               icon={<EyeOutlined />}
-              onClick={() => handleViewFunction(record)}
+              onClick={() => handleEditFunction(record)}
               size="small"
             >
-              查看
+              编辑
             </Button>
           </Tooltip>
           <Tooltip title="删除">
@@ -534,6 +618,8 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
         onClose={handleCloseAddFunction}
         onSave={handleSaveFunction}
         productProtocol={form.getFieldValue('protocol') || ''}
+        editingFunction={editingFunction}
+        isEdit={isEditMode}
       />
     </div>
   );
