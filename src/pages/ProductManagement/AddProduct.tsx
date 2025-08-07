@@ -57,9 +57,10 @@ const protocolMap: Record<string, string[]> = {
 
 interface AddProductProps {
   onClose?: () => void;
+  onProductCreated?: (productData: any) => void;
 }
 
-const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
+const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated }) => {
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -285,13 +286,18 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose }) => {
       };
       
       console.log('创建产品:', productData);
-      message.success('产品创建成功！');
       
-      // 返回产品列表
-      if (onClose) {
-        onClose();
+      // 调用父组件的回调函数来更新产品列表
+      if (onProductCreated) {
+        onProductCreated(productData);
       } else {
-        navigate('/product-management');
+        message.success('产品创建成功！');
+        // 返回产品列表
+        if (onClose) {
+          onClose();
+        } else {
+          navigate('/product-management');
+        }
       }
     } catch (error) {
       console.error('创建失败:', error);

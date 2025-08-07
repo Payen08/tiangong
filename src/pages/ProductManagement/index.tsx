@@ -105,6 +105,37 @@ const ProductManagement: React.FC = () => {
     setIsDrawerVisible(false);
   };
 
+  // 处理产品创建成功
+  const handleProductCreated = (newProduct: any) => {
+    // 生成新产品数据
+    const product: Product = {
+      id: Date.now().toString(),
+      productName: newProduct.productName,
+      productKey: newProduct.productKey || `${newProduct.productName.toLowerCase().replace(/\s+/g, '_')}_${Date.now()}`,
+      productType: newProduct.productType,
+      protocol: newProduct.protocol,
+      deviceCount: 0, // 新产品设备数为0
+      updateTime: new Date().toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      }).replace(/\//g, '-'),
+      updatedBy: '管理员', // 这里可以从用户状态获取
+    };
+    
+    // 添加到产品列表
+    setProducts(prevProducts => [product, ...prevProducts]);
+    
+    // 关闭抽屉
+    setIsDrawerVisible(false);
+    
+    message.success('产品创建成功！');
+  };
+
 
 
   const handleRefresh = () => {
@@ -632,7 +663,10 @@ const ProductManagement: React.FC = () => {
             },
           }}
         >
-          <AddProduct onClose={handleDrawerClose} />
+          <AddProduct 
+            onClose={handleDrawerClose} 
+            onProductCreated={handleProductCreated}
+          />
         </Drawer>
         
 
