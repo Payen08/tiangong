@@ -69,6 +69,13 @@ interface FunctionConfig {
   httpParams?: Record<string, string>; // HTTP请求参数（http协议时使用）
   httpDataPath?: string; // HTTP响应数据路径（http协议时使用）
   httpRequestBody?: string; // HTTP请求体（http协议时使用）
+  // MQTT协议相关字段
+  mqttTopic?: string; // MQTT主题（mqtt协议时使用）
+  mqttQos?: 0 | 1 | 2; // MQTT服务质量等级（mqtt协议时使用）
+  mqttRetain?: boolean; // MQTT保留消息（mqtt协议时使用）
+  mqttDataPath?: string; // MQTT消息数据路径（mqtt协议时使用）
+  mqttPayloadFormat?: 'json' | 'text' | 'binary'; // MQTT消息格式（mqtt协议时使用）
+  mqttClientId?: string; // MQTT客户端ID（mqtt协议时使用）
   // 组合模式相关字段
   compositeType?: 'multi-register' | 'bit-field' | 'data-structure' | 'custom'; // 组合类型
 }
@@ -107,6 +114,14 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const [httpHeaders, setHttpHeaders] = useState<Record<string, string>>({});
   const [httpParams, setHttpParams] = useState<Record<string, string>>({});
   const [httpDataPath, setHttpDataPath] = useState<string>('');
+  
+  // MQTT协议相关状态
+  const [mqttTopic, setMqttTopic] = useState<string>('');
+  const [mqttQos, setMqttQos] = useState<0 | 1 | 2>(0);
+  const [mqttRetain, setMqttRetain] = useState<boolean>(false);
+  const [mqttDataPath, setMqttDataPath] = useState<string>('');
+  const [mqttPayloadFormat, setMqttPayloadFormat] = useState<'json' | 'text' | 'binary'>('json');
+  const [mqttClientId, setMqttClientId] = useState<string>('');
   const [httpRequestBody, setHttpRequestBody] = useState<string>('');
   
   // 组合模式相关状态
@@ -290,6 +305,22 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setRegisterType(editingFunction.registerType || 'holding-register');
         setFunctionName(editingFunction.name);
         
+        // 设置HTTP协议相关状态
+        setHttpMethod(editingFunction.httpMethod || 'GET');
+        setHttpUrl(editingFunction.httpUrl || '');
+        setHttpHeaders(editingFunction.httpHeaders || {});
+        setHttpParams(editingFunction.httpParams || {});
+        setHttpDataPath(editingFunction.httpDataPath || '');
+        setHttpRequestBody(editingFunction.httpRequestBody || '');
+        
+        // 设置MQTT协议相关状态
+        setMqttTopic(editingFunction.mqttTopic || '');
+        setMqttQos(editingFunction.mqttQos || 0);
+        setMqttRetain(editingFunction.mqttRetain || false);
+        setMqttDataPath(editingFunction.mqttDataPath || '');
+        setMqttPayloadFormat(editingFunction.mqttPayloadFormat || 'json');
+        setMqttClientId(editingFunction.mqttClientId || '');
+        
         // 设置组合模式相关状态
         setCompositeType(editingFunction.compositeType || 'multi-register');
 
@@ -332,6 +363,22 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setByteOrder(''); // 清空字节序，显示placeholder
         setRegisterType('holding-register');
         setFunctionName('');
+        
+        // 重置HTTP协议相关状态
+        setHttpMethod('GET');
+        setHttpUrl('');
+        setHttpHeaders({});
+        setHttpParams({});
+        setHttpDataPath('');
+        setHttpRequestBody('');
+        
+        // 重置MQTT协议相关状态
+        setMqttTopic('');
+        setMqttQos(0);
+        setMqttRetain(false);
+        setMqttDataPath('');
+        setMqttPayloadFormat('json');
+        setMqttClientId('');
         
         // 重置组合模式相关状态
         setCompositeType('multi-register');
@@ -729,6 +776,15 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           httpParams: Object.keys(httpParams).length > 0 ? httpParams : undefined,
           httpDataPath: httpDataPath || undefined,
           httpRequestBody: httpRequestBody || undefined,
+        } : {}),
+        ...(productProtocol === 'mqtt' ? {
+          // MQTT协议字段
+          mqttTopic,
+          mqttQos,
+          mqttRetain,
+          mqttDataPath: mqttDataPath || undefined,
+          mqttPayloadFormat,
+          mqttClientId: mqttClientId || undefined,
         } : {})
       };
       
@@ -1519,6 +1575,121 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 </div>
               ))}
             </div>
+            
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                {renderReadOnlyValueConfig()}
+              </Col>
+            </Row>
+          </>
+        )}
+        
+        {!isComposite && productProtocol === 'mqtt' && (
+          <>
+            <Divider orientation="left" style={{ margin: '16px 0' }}>MQTT消息映射</Divider>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="映射功能名称"
+                  name="mappingFunctionName"
+                >
+                  <Input 
+                    disabled
+                    placeholder="功能名称"
+                    style={{ backgroundColor: '#f5f5f5' }}
+                    value={functionName}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="MQTT主题"
+                  name="mqttTopic"
+                  rules={[{ required: true, message: '请输入MQTT主题' }]}
+                >
+                  <Input 
+                    placeholder="请输入MQTT主题（如：device/sensor/temperature）"
+                    value={mqttTopic}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMqttTopic(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                <Form.Item
+                  label="服务质量等级"
+                  name="mqttQos"
+                >
+                  <Select 
+                    value={mqttQos}
+                    onChange={(value: 0 | 1 | 2) => setMqttQos(value)}
+                    placeholder="请选择QoS等级"
+                  >
+                    <Option value={0}>QoS 0 - 最多一次</Option>
+                    <Option value={1}>QoS 1 - 至少一次</Option>
+                    <Option value={2}>QoS 2 - 恰好一次</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                <Form.Item
+                  label="消息格式"
+                  name="mqttPayloadFormat"
+                >
+                  <Select 
+                    value={mqttPayloadFormat}
+                    onChange={(value: 'json' | 'text' | 'binary') => setMqttPayloadFormat(value)}
+                    placeholder="请选择消息格式"
+                  >
+                    <Option value="json">JSON</Option>
+                    <Option value="text">文本</Option>
+                    <Option value="binary">二进制</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                <Form.Item
+                  label="保留消息"
+                  name="mqttRetain"
+                >
+                  <Switch 
+                    checked={mqttRetain}
+                    onChange={(checked: boolean) => setMqttRetain(checked)}
+                    checkedChildren="是"
+                    unCheckedChildren="否"
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="消息数据路径"
+                  name="mqttDataPath"
+                >
+                  <Input 
+                    placeholder="JSON路径（如：data.value）"
+                    value={mqttDataPath}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMqttDataPath(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="客户端ID"
+                  name="mqttClientId"
+                >
+                  <Input 
+                    placeholder="MQTT客户端ID（可选）"
+                    value={mqttClientId}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMqttClientId(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
             
             <Row gutter={16}>
               <Col xs={24} sm={24} md={24} lg={24} xl={24}>
