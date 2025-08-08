@@ -82,6 +82,7 @@ interface FunctionConfig {
   moyingFunctionId?: string; // 墨影采集卡功能ID（墨影采集卡协议时使用）
   moyingPinType?: 'standard' | 'extended'; // 墨影采集卡引脚类型（墨影采集卡协议时使用）
   moyingPinNumber?: string; // 墨影采集卡引脚编号（墨影采集卡协议时使用）
+  moyingPinValue?: string; // 墨影采集卡引脚值（墨影采集卡协议时使用）
   moyingDataPath?: string; // 墨影采集卡数据路径（墨影采集卡协议时使用）
   // 墨影机器人协议相关字段
   robotCommandType?: 'move' | 'action' | 'status' | 'config'; // 墨影机器人命令类型（墨影机器人协议时使用）
@@ -144,6 +145,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const [moyingFunctionId, setMoyingFunctionId] = useState<string>('');
   const [moyingPinType, setMoyingPinType] = useState<'standard' | 'extended'>('standard');
   const [moyingPinNumber, setMoyingPinNumber] = useState<string>('');
+  const [moyingPinValue, setMoyingPinValue] = useState<string>('');
   const [moyingDataPath, setMoyingDataPath] = useState<string>('');
   
   // 墨影机器人协议相关状态
@@ -179,7 +181,26 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         { id: '1', value: '', description: '' },
       ]);
     }
-  }, [productProtocol, dataType, form]);
+    
+    // 当协议为墨影采集卡时，检查并重置不支持的数据类型和功能类型
+    if (productProtocol === '墨影采集卡') {
+      if (dataType !== 'enum') {
+        // 重置为枚举类型
+        setDataType('enum');
+        form.setFieldsValue({ dataType: 'enum' });
+        // 重置值配置
+        setValueConfigItems([
+          { id: '1', value: '', description: '' },
+        ]);
+      }
+      
+      if (currentFunctionType !== '属性（动态）') {
+        // 重置为属性（动态）
+        setCurrentFunctionType('属性（动态）');
+        form.setFieldsValue({ functionType: '属性（动态）' });
+      }
+    }
+  }, [productProtocol, dataType, currentFunctionType, form]);
 
   // 添加寄存器映射项（用于多寄存器组合）
   const addRegisterMapping = (valueConfigItemId: string) => {
@@ -372,6 +393,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setMoyingFunctionId(editingFunction.moyingFunctionId || '');
         setMoyingPinType(editingFunction.moyingPinType || 'standard');
         setMoyingPinNumber(editingFunction.moyingPinNumber || '');
+        setMoyingPinValue(editingFunction.moyingPinValue || '');
         setMoyingDataPath(editingFunction.moyingDataPath || '');
         
         // 设置墨影机器人协议相关状态
@@ -401,20 +423,33 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       } else {
         // 新增模式：重置表单并设置初始值
         form.resetFields();
+        
+        // 根据协议设置默认值
+        const defaultDataType = productProtocol === '墨影采集卡' ? 'enum' : 'text';
+        const defaultFunctionType = '属性（动态）';
+        
         form.setFieldsValue({
           name: '',
           identifier: '',
-          functionType: '属性（动态）',
+          functionType: defaultFunctionType,
           readWriteMode: '读写',
-          dataType: 'text',
+          dataType: defaultDataType,
           functionCode: undefined, // 设置为undefined以显示placeholder
           byteOrder: undefined, // 设置为undefined以显示placeholder
         });
         // 重置所有状态
         setCurrentStep(0);
-        setDataType('text');
-        setCurrentFunctionType('属性（动态）'); // 设置当前功能类型为默认值
-        setValueConfigItems([]);
+        setDataType(defaultDataType);
+        setCurrentFunctionType(defaultFunctionType); // 设置当前功能类型为默认值
+        
+        // 如果是墨影采集卡协议，初始化一个枚举值配置项
+        if (productProtocol === '墨影采集卡') {
+          setValueConfigItems([
+            { id: '1', value: '', description: '' },
+          ]);
+        } else {
+          setValueConfigItems([]);
+        }
         
         // 针对http、mqtt、墨影采集卡和墨影机器人协议的特殊处理：默认为非组合
         setIsComposite(false);
@@ -579,8 +614,33 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       );
     }
     
+    // 如果是墨影采集卡协议，只允许选择枚举
+    if (productProtocol === '墨影采集卡') {
+      return allOptions.filter(option => 
+        option.value === 'enum'
+      );
+    }
+    
     // 其他协议返回所有选项
     return allOptions;
+  };
+
+  // 根据通讯协议过滤功能类型选项
+  const getFilteredFunctionTypeOptions = () => {
+    // 如果是墨影采集卡协议，只允许选择属性（动态）
+    if (productProtocol === '墨影采集卡') {
+      return [
+        { label: '属性（动态）', value: '属性（动态）' }
+      ];
+    }
+    
+    // 其他协议返回所有选项
+    return [
+      { label: '属性（静态）', value: '属性（静态）' },
+      { label: '属性（动态）', value: '属性（动态）' },
+      { label: '事件', value: '事件' },
+      { label: '服务', value: '服务' }
+    ];
   };
 
   const dataTypeOptions = getFilteredDataTypeOptions();
@@ -595,10 +655,48 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         { id: '1', value: 'true', description: '' },
         { id: '2', value: 'false', description: '' },
       ]);
+      
+      // 如果是布尔类型且通讯协议是modbus_tcp，自动设置寄存器类型为线圈
+      if (productProtocol === 'modbus_tcp') {
+        setRegisterType('coil');
+        // 清空功能码，让用户重新选择
+        setFunctionCode('');
+        form.setFieldsValue({ 
+          registerType: 'coil',
+          functionCode: undefined 
+        });
+        // 设置数据类型为bit
+        setModbusDataType('bit');
+        // 清空字节序（线圈不需要字节序）
+        setByteOrder('');
+        form.setFieldsValue({ 
+          modbusDataType: 'bit',
+          byteOrder: undefined 
+        });
+      }
     } else if (value === 'enum') {
       setValueConfigItems([
         { id: '1', value: '', description: '' },
       ]);
+      
+      // 如果是枚举类型且通讯协议是modbus_tcp，自动设置寄存器类型为保持寄存器
+      if (productProtocol === 'modbus_tcp') {
+        setRegisterType('holding-register');
+        // 清空功能码，让用户重新选择
+        setFunctionCode('');
+        form.setFieldsValue({ 
+          registerType: 'holding-register',
+          functionCode: undefined 
+        });
+        // 设置数据类型为uint16
+        setModbusDataType('uint16');
+        // 清空字节序，让用户重新选择
+        setByteOrder('');
+        form.setFieldsValue({ 
+          modbusDataType: 'uint16',
+          byteOrder: undefined 
+        });
+      }
     } else {
       // 为其他数据类型初始化一个默认的值配置项，用于支持多寄存器映射
       setValueConfigItems([
@@ -626,11 +724,22 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   // 更新值配置项
   const updateValueConfigItem = (id: string, field: 'value' | 'description', value: string) => {
-    setValueConfigItems(items =>
-      items.map(item =>
-        item.id === id ? { ...item, [field]: value } : item
-      )
-    );
+    // 如果是墨影采集卡协议且是枚举值字段，只允许输入自然数
+    if (productProtocol === '墨影采集卡' && field === 'value') {
+      // 只允许输入数字
+      const numericValue = value.replace(/[^0-9]/g, '');
+      setValueConfigItems(items =>
+        items.map(item =>
+          item.id === id ? { ...item, [field]: numericValue } : item
+        )
+      );
+    } else {
+      setValueConfigItems(items =>
+        items.map(item =>
+          item.id === id ? { ...item, [field]: value } : item
+        )
+      );
+    }
   };
 
   // 下一步
@@ -894,6 +1003,20 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         }
       }
       
+      // 验证墨影采集卡协议的必填字段
+      if (productProtocol === '墨影采集卡' && !isComposite) {
+        if (!moyingPinNumber || !moyingPinNumber.trim()) {
+          message.error('请输入引脚编号');
+          setLoading(false);
+          return;
+        }
+        if (!moyingPinValue || !moyingPinValue.trim()) {
+          message.error('请输入引脚值');
+          setLoading(false);
+          return;
+        }
+      }
+      
       // 处理值配置数据，确保多寄存器组合模式下包含寄存器映射
       const processedValueConfig = valueConfigItems
         .filter(item => item.value || item.description)
@@ -959,6 +1082,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           moyingFunctionId: moyingFunctionId || undefined,
           moyingPinType,
           moyingPinNumber: moyingPinNumber || undefined,
+          moyingPinValue: moyingPinValue || undefined,
           moyingDataPath: moyingDataPath || undefined,
         } : {}),
         ...(productProtocol === '墨影机器人协议' ? {
@@ -1162,10 +1286,9 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
               placeholder="请选择功能类型"
               onChange={(value: string) => setCurrentFunctionType(value)}
             >
-              <Option value="属性（静态）">属性（静态）</Option>
-              <Option value="属性（动态）">属性（动态）</Option>
-              <Option value="事件">事件</Option>
-              <Option value="服务">服务</Option>
+              {getFilteredFunctionTypeOptions().map(option => (
+                <Option key={option.value} value={option.value}>{option.label}</Option>
+              ))}
             </Select>
           </Form.Item>
         </Col>
@@ -1270,10 +1393,29 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                              size="small"
                              style={{ width: '100%' }}
                            >
-                            <Option value="holding-register">保持寄存器</Option>
-                            <Option value="input-register">输入寄存器</Option>
-                            <Option value="coil">线圈</Option>
-                            <Option value="discrete-input">离散量输入</Option>
+                            {/* 当数据类型为bool时，只显示线圈和离散输入选项 */}
+                            {dataType === 'bool' && (
+                              <>
+                                <Option value="coil">线圈</Option>
+                                <Option value="discrete-input">离散量输入</Option>
+                              </>
+                            )}
+                            {/* 当数据类型为enum时，只显示输入寄存器和保持寄存器选项 */}
+                            {dataType === 'enum' && (
+                              <>
+                                <Option value="input-register">输入寄存器</Option>
+                                <Option value="holding-register">保持寄存器</Option>
+                              </>
+                            )}
+                            {/* 当数据类型为其他类型时，显示所有选项 */}
+                            {dataType !== 'bool' && dataType !== 'enum' && (
+                              <>
+                                <Option value="coil">线圈</Option>
+                                <Option value="discrete-input">离散量输入</Option>
+                                <Option value="input-register">输入寄存器</Option>
+                                <Option value="holding-register">保持寄存器</Option>
+                              </>
+                            )}
                           </Select>
                         </Col>
                         <Col span={5}>
@@ -1413,6 +1555,17 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   // 渲染配置映射步骤
   const renderConfigMapping = () => {
+    // 根据数据类型动态设置默认的寄存器类型
+    const getDefaultRegisterType = () => {
+      if (dataType === 'bool' && productProtocol === 'modbus_tcp') {
+        return 'coil';
+      }
+      if (dataType === 'enum' && productProtocol === 'modbus_tcp') {
+        return 'holding-register';
+      }
+      return 'holding-register';
+    };
+
     return (
       <Form
         form={form}
@@ -1421,9 +1574,9 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           isComposite: false,
           protocol: productProtocol,
           registerAddress: '',
-          registerType: 'holding-register',
+          registerType: getDefaultRegisterType(),
           functionCode: undefined,
-          modbusDataType: 'uint16',
+          modbusDataType: dataType === 'bool' ? 'bit' : 'uint16',
           byteOrder: undefined
         }}
       >
@@ -1447,13 +1600,13 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         <Row gutter={16}>
           <Col xs={24} sm={24} md={12} lg={12} xl={12}>
             <Form.Item
-              label="通信协议"
+              label="通讯协议"
               name="protocol"
             >
               <Input 
                 value={productProtocol} 
                 disabled 
-                placeholder="通信协议"
+                placeholder="通讯协议"
                 style={{ backgroundColor: '#f5f5f5' }}
               />
             </Form.Item>
@@ -1521,10 +1674,29 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                     onChange={handleRegisterTypeChange}
                     placeholder="请选择寄存器类型"
                   >
-                    <Option value="coil">线圈（Coil）</Option>
-                    <Option value="discrete-input">离散量输入（Discrete Input）</Option>
-                    <Option value="input-register">输入寄存器（Input Register）</Option>
-                    <Option value="holding-register">保持寄存器（Holding Register）</Option>
+                    {/* 当数据类型为bool时，只显示线圈和离散输入选项 */}
+                    {dataType === 'bool' && (
+                      <>
+                        <Option value="coil">线圈（Coil）</Option>
+                        <Option value="discrete-input">离散量输入（Discrete Input）</Option>
+                      </>
+                    )}
+                    {/* 当数据类型为enum时，只显示输入寄存器和保持寄存器选项 */}
+                    {dataType === 'enum' && (
+                      <>
+                        <Option value="input-register">输入寄存器（Input Register）</Option>
+                        <Option value="holding-register">保持寄存器（Holding Register）</Option>
+                      </>
+                    )}
+                    {/* 当数据类型为其他类型时，显示所有选项 */}
+                    {dataType !== 'bool' && dataType !== 'enum' && (
+                      <>
+                        <Option value="coil">线圈（Coil）</Option>
+                        <Option value="discrete-input">离散量输入（Discrete Input）</Option>
+                        <Option value="input-register">输入寄存器（Input Register）</Option>
+                        <Option value="holding-register">保持寄存器（Holding Register）</Option>
+                      </>
+                    )}
                   </Select>
                 </Form.Item>
               </Col>
@@ -1908,96 +2080,153 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                   />
                 </Form.Item>
               </Col>
-              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                <Form.Item
-                  label="通道类型"
-                  name="moyingChannelType"
-                  rules={[{ required: true, message: '请选择通道类型' }]}
-                >
-                  <Select 
-                    value={moyingChannelType}
-                    onChange={(value: 'report' | 'control') => setMoyingChannelType(value)}
-                    placeholder="请选择通道类型"
+              {isComposite && (
+                <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                  <Form.Item
+                    label="通道类型"
+                    name="moyingChannelType"
+                    rules={[{ required: true, message: '请选择通道类型' }]}
                   >
-                    <Option value="report">上报通道</Option>
-                    <Option value="control">控制通道</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
+                    <Select 
+                      value={moyingChannelType}
+                      onChange={(value: 'report' | 'control') => setMoyingChannelType(value)}
+                      placeholder="请选择通道类型"
+                    >
+                      <Option value="report">上报通道</Option>
+                      <Option value="control">控制通道</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+              )}
             </Row>
             
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                <Form.Item
-                  label="MAC地址"
-                  name="moyingMacAddress"
-                >
-                  <Input 
-                    placeholder="请输入MAC地址（如：AA:BB:CC:DD:EE:FF）"
-                    value={moyingMacAddress}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingMacAddress(e.target.value)}
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                <Form.Item
-                  label="功能ID"
-                  name="moyingFunctionId"
-                >
-                  <Input 
-                    placeholder="请输入功能ID"
-                    value={moyingFunctionId}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingFunctionId(e.target.value)}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
+            {isComposite && (
+              <>
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Item
+                      label="MAC地址"
+                      name="moyingMacAddress"
+                    >
+                      <Input 
+                        placeholder="请输入MAC地址（如：AA:BB:CC:DD:EE:FF）"
+                        value={moyingMacAddress}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingMacAddress(e.target.value)}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Item
+                      label="功能ID"
+                      name="moyingFunctionId"
+                    >
+                      <Input 
+                        placeholder="请输入功能ID"
+                        value={moyingFunctionId}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingFunctionId(e.target.value)}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Item
+                      label="引脚类型"
+                      name="moyingPinType"
+                      rules={[{ required: true, message: '请选择引脚类型' }]}
+                    >
+                      <Select 
+                        value={moyingPinType}
+                        onChange={(value: 'standard' | 'extended') => setMoyingPinType(value)}
+                        placeholder="请选择引脚类型"
+                      >
+                        <Option value="standard">标准引脚</Option>
+                        <Option value="extended">扩展引脚</Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Item
+                      label="引脚编号"
+                      name="moyingPinNumber"
+                    >
+                      <Input 
+                        placeholder="请输入引脚编号"
+                        value={moyingPinNumber}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingPinNumber(e.target.value)}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                    <Form.Item
+                      label="数据路径"
+                      name="moyingDataPath"
+                    >
+                      <Input 
+                        placeholder="数据路径（如：data.value）"
+                        value={moyingDataPath}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingDataPath(e.target.value)}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </>
+            )}
             
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                <Form.Item
-                  label="引脚类型"
-                  name="moyingPinType"
-                  rules={[{ required: true, message: '请选择引脚类型' }]}
-                >
-                  <Select 
-                    value={moyingPinType}
-                    onChange={(value: 'standard' | 'extended') => setMoyingPinType(value)}
-                    placeholder="请选择引脚类型"
-                  >
-                    <Option value="standard">标准引脚</Option>
-                    <Option value="extended">扩展引脚</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                <Form.Item
-                  label="引脚编号"
-                  name="moyingPinNumber"
-                >
-                  <Input 
-                    placeholder="请输入引脚编号"
-                    value={moyingPinNumber}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingPinNumber(e.target.value)}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
-            
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
-                <Form.Item
-                  label="数据路径"
-                  name="moyingDataPath"
-                >
-                  <Input 
-                    placeholder="数据路径（如：data.value）"
-                    value={moyingDataPath}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingDataPath(e.target.value)}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
+            {!isComposite && (
+              <>
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Item
+                      label="引脚类型"
+                      name="moyingPinType"
+                    >
+                      <Select 
+                        value={moyingPinType}
+                        onChange={(value: 'standard' | 'extended') => setMoyingPinType(value)}
+                        placeholder="请选择引脚类型"
+                      >
+                        <Option value="standard">标准引脚</Option>
+                        <Option value="extended">扩展引脚</Option>
+                      </Select>
+                    </Form.Item>
+                  </Col>
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Item
+                      label="引脚编号"
+                      name="moyingPinNumber"
+                      rules={[{ required: true, message: '请输入引脚编号' }]}
+                    >
+                      <Input 
+                        placeholder="请输入引脚编号"
+                        value={moyingPinNumber}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingPinNumber(e.target.value)}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                
+                <Row gutter={[16, 16]}>
+                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                    <Form.Item
+                      label="引脚值"
+                      name="moyingPinValue"
+                      rules={[{ required: true, message: '请输入引脚值' }]}
+                    >
+                      <Input 
+                        placeholder="请输入引脚值"
+                        value={moyingPinValue}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingPinValue(e.target.value)}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+              </>
+            )}
             
             <Row gutter={16}>
               <Col xs={24} sm={24} md={24} lg={24} xl={24}>
