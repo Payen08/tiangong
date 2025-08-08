@@ -80,7 +80,7 @@ interface FunctionConfig {
   moyingChannelType?: 'report' | 'control'; // 墨影采集卡通道类型（墨影采集卡协议时使用）
   moyingMacAddress?: string; // 墨影采集卡MAC地址（墨影采集卡协议时使用）
   moyingFunctionId?: string; // 墨影采集卡功能ID（墨影采集卡协议时使用）
-  moyingPinType?: 'standard' | 'extended'; // 墨影采集卡引脚类型（墨影采集卡协议时使用）
+  moyingPinType?: 'input' | 'output'; // 墨影采集卡引脚类型（墨影采集卡协议时使用）
   moyingPinNumber?: string; // 墨影采集卡引脚编号（墨影采集卡协议时使用）
   moyingPinValue?: string; // 墨影采集卡引脚值（墨影采集卡协议时使用）
   moyingDataPath?: string; // 墨影采集卡数据路径（墨影采集卡协议时使用）
@@ -92,7 +92,7 @@ interface FunctionConfig {
   robotDataFormat?: 'json' | 'binary' | 'text'; // 墨影机器人数据格式（墨影机器人协议时使用）
   robotDataPath?: string; // 墨影机器人数据路径（墨影机器人协议时使用）
   // 组合模式相关字段
-  compositeType?: 'multi-register' | 'bit-field' | 'data-structure' | 'custom'; // 组合类型
+  compositeType?: 'multi-register' | 'multi-pin'; // 组合类型
 }
 
 interface AddFunctionProps {
@@ -143,7 +143,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const [moyingChannelType, setMoyingChannelType] = useState<'report' | 'control'>('report');
   const [moyingMacAddress, setMoyingMacAddress] = useState<string>('');
   const [moyingFunctionId, setMoyingFunctionId] = useState<string>('');
-  const [moyingPinType, setMoyingPinType] = useState<'standard' | 'extended'>('standard');
+  const [moyingPinType, setMoyingPinType] = useState<'input' | 'output'>('input');
   const [moyingPinNumber, setMoyingPinNumber] = useState<string>('');
   const [moyingPinValue, setMoyingPinValue] = useState<string>('');
   const [moyingDataPath, setMoyingDataPath] = useState<string>('');
@@ -157,7 +157,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const [robotDataPath, setRobotDataPath] = useState<string>('');
   
   // 组合模式相关状态
-  const [compositeType, setCompositeType] = useState<'multi-register' | 'bit-field' | 'data-structure' | 'custom'>('multi-register');
+  const [compositeType, setCompositeType] = useState<'multi-register' | 'multi-pin'>('multi-register');
 
 
   const [functionName, setFunctionName] = useState(''); // 用于存储第一步的功能名称
@@ -391,7 +391,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setMoyingChannelType(editingFunction.moyingChannelType || 'report');
         setMoyingMacAddress(editingFunction.moyingMacAddress || '');
         setMoyingFunctionId(editingFunction.moyingFunctionId || '');
-        setMoyingPinType(editingFunction.moyingPinType || 'standard');
+        setMoyingPinType(editingFunction.moyingPinType || 'input');
         setMoyingPinNumber(editingFunction.moyingPinNumber || '');
         setMoyingPinValue(editingFunction.moyingPinValue || '');
         setMoyingDataPath(editingFunction.moyingDataPath || '');
@@ -481,7 +481,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setMoyingChannelType('report');
         setMoyingMacAddress('');
         setMoyingFunctionId('');
-        setMoyingPinType('standard');
+        setMoyingPinType('input');
         setMoyingPinNumber('');
         setMoyingDataPath('');
         
@@ -1336,7 +1336,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   // 渲染只读值配置（用于配置映射页面）
   const renderReadOnlyValueConfig = () => {
-    // 多寄存器组合模式下的值配置（支持所有数据类型）
+    // 多引脚组合模式下的值配置（支持所有数据类型）
     if (isComposite && compositeType === 'multi-register') {
       return (
         <Form.Item label="值配置与寄存器映射">
@@ -2080,6 +2080,25 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                   />
                 </Form.Item>
               </Col>
+              {!isComposite && (
+                <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                  <Form.Item
+                    label="引脚类型"
+                    name="moyingPinType"
+                    rules={[{ required: true, message: '请选择引脚类型' }]}
+                  >
+                    <Select 
+                      value={moyingPinType}
+                      onChange={(value: 'input' | 'output') => setMoyingPinType(value)}
+                      placeholder="请选择引脚类型"
+                      defaultValue="input"
+                    >
+                      <Option value="input">输入类型</Option>
+                      <Option value="output">输出类型</Option>
+                    </Select>
+                  </Form.Item>
+                </Col>
+              )}
               {isComposite && (
                 <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                   <Form.Item
@@ -2138,11 +2157,11 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                     >
                       <Select 
                         value={moyingPinType}
-                        onChange={(value: 'standard' | 'extended') => setMoyingPinType(value)}
+                        onChange={(value: 'input' | 'output') => setMoyingPinType(value)}
                         placeholder="请选择引脚类型"
                       >
-                        <Option value="standard">标准引脚</Option>
-                        <Option value="extended">扩展引脚</Option>
+                        <Option value="input">输入类型</Option>
+                        <Option value="output">输出类型</Option>
                       </Select>
                     </Form.Item>
                   </Col>
@@ -2152,9 +2171,12 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                       name="moyingPinNumber"
                     >
                       <Input 
-                        placeholder="请输入引脚编号"
+                        placeholder="请输入引脚编号（自然数）"
                         value={moyingPinNumber}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingPinNumber(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '');
+                          setMoyingPinNumber(value);
+                        }}
                       />
                     </Form.Item>
                   </Col>
@@ -2182,35 +2204,20 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 <Row gutter={[16, 16]}>
                   <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                     <Form.Item
-                      label="引脚类型"
-                      name="moyingPinType"
-                    >
-                      <Select 
-                        value={moyingPinType}
-                        onChange={(value: 'standard' | 'extended') => setMoyingPinType(value)}
-                        placeholder="请选择引脚类型"
-                      >
-                        <Option value="standard">标准引脚</Option>
-                        <Option value="extended">扩展引脚</Option>
-                      </Select>
-                    </Form.Item>
-                  </Col>
-                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                    <Form.Item
                       label="引脚编号"
                       name="moyingPinNumber"
                       rules={[{ required: true, message: '请输入引脚编号' }]}
                     >
                       <Input 
-                        placeholder="请输入引脚编号"
+                        placeholder="请输入引脚编号（自然数）"
                         value={moyingPinNumber}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingPinNumber(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '');
+                          setMoyingPinNumber(value);
+                        }}
                       />
                     </Form.Item>
                   </Col>
-                </Row>
-                
-                <Row gutter={[16, 16]}>
                   <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                     <Form.Item
                       label="引脚值"
@@ -2218,9 +2225,12 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                       rules={[{ required: true, message: '请输入引脚值' }]}
                     >
                       <Input 
-                        placeholder="请输入引脚值"
+                        placeholder="请输入引脚值（自然数）"
                         value={moyingPinValue}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingPinValue(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                          const value = e.target.value.replace(/[^0-9]/g, '');
+                          setMoyingPinValue(value);
+                        }}
                       />
                     </Form.Item>
                   </Col>
@@ -2385,10 +2395,12 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                   rules={[{ required: true, message: '请选择组合类型' }]}
                 >
                   <Select placeholder="请选择组合类型">
-                    <Option value="multi-register">多寄存器组合</Option>
-                    <Option value="bit-field">位域组合</Option>
-                    <Option value="data-structure">数据结构组合</Option>
-                    <Option value="custom">自定义组合</Option>
+                    {productProtocol === 'modbus_tcp' && (
+                      <Option value="multi-register">多寄存器组合</Option>
+                    )}
+                    {productProtocol === '墨影采集卡' && (
+                      <Option value="multi-pin">多引脚组合</Option>
+                    )}
                   </Select>
                 </Form.Item>
               </Col>
