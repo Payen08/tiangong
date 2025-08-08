@@ -1338,8 +1338,12 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const renderReadOnlyValueConfig = () => {
     // 多引脚组合模式下的值配置（支持所有数据类型）
     if (isComposite && compositeType === 'multi-register') {
+      // 根据协议类型确定显示文本
+      const mappingLabel = productProtocol === '墨影采集卡' ? '采集卡映射' : '寄存器映射';
+      const addButtonText = productProtocol === '墨影采集卡' ? '添加引脚' : '添加寄存器';
+      
       return (
-        <Form.Item label="值配置与寄存器映射">
+        <Form.Item label={`值配置与${mappingLabel}`}>
           <div>
             {valueConfigItems.map((item, index) => (
               <div key={item.id} style={{ marginBottom: 16, border: '1px solid #d9d9d9', borderRadius: 6, padding: 12 }}>
@@ -1358,14 +1362,14 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 {/* 寄存器映射配置 */}
                 <div style={{ marginTop: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                    <Text strong style={{ marginRight: 16 }}>寄存器映射：</Text>
+                    <Text strong style={{ marginRight: 16 }}>{mappingLabel}：</Text>
                     <Button
                       type="dashed"
                       icon={<PlusOutlined />}
                       onClick={() => addRegisterMapping(item.id)}
                       size="small"
                     >
-                      添加寄存器
+                      {addButtonText}
                     </Button>
                   </div>
                   
