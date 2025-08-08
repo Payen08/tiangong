@@ -76,6 +76,20 @@ interface FunctionConfig {
   mqttDataPath?: string; // MQTT消息数据路径（mqtt协议时使用）
   mqttPayloadFormat?: 'json' | 'text' | 'binary'; // MQTT消息格式（mqtt协议时使用）
   mqttClientId?: string; // MQTT客户端ID（mqtt协议时使用）
+  // 墨影采集卡协议相关字段
+  moyingChannelType?: 'report' | 'control'; // 墨影采集卡通道类型（墨影采集卡协议时使用）
+  moyingMacAddress?: string; // 墨影采集卡MAC地址（墨影采集卡协议时使用）
+  moyingFunctionId?: string; // 墨影采集卡功能ID（墨影采集卡协议时使用）
+  moyingPinType?: 'standard' | 'extended'; // 墨影采集卡引脚类型（墨影采集卡协议时使用）
+  moyingPinNumber?: string; // 墨影采集卡引脚编号（墨影采集卡协议时使用）
+  moyingDataPath?: string; // 墨影采集卡数据路径（墨影采集卡协议时使用）
+  // 墨影机器人协议相关字段
+  robotCommandType?: 'move' | 'action' | 'status' | 'config'; // 墨影机器人命令类型（墨影机器人协议时使用）
+  robotDeviceId?: string; // 墨影机器人设备ID（墨影机器人协议时使用）
+  robotActionId?: string; // 墨影机器人动作ID（墨影机器人协议时使用）
+  robotParameterType?: 'position' | 'speed' | 'force' | 'sensor'; // 墨影机器人参数类型（墨影机器人协议时使用）
+  robotDataFormat?: 'json' | 'binary' | 'text'; // 墨影机器人数据格式（墨影机器人协议时使用）
+  robotDataPath?: string; // 墨影机器人数据路径（墨影机器人协议时使用）
   // 组合模式相关字段
   compositeType?: 'multi-register' | 'bit-field' | 'data-structure' | 'custom'; // 组合类型
 }
@@ -124,11 +138,28 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const [mqttClientId, setMqttClientId] = useState<string>('');
   const [httpRequestBody, setHttpRequestBody] = useState<string>('');
   
+  // 墨影采集卡协议相关状态
+  const [moyingChannelType, setMoyingChannelType] = useState<'report' | 'control'>('report');
+  const [moyingMacAddress, setMoyingMacAddress] = useState<string>('');
+  const [moyingFunctionId, setMoyingFunctionId] = useState<string>('');
+  const [moyingPinType, setMoyingPinType] = useState<'standard' | 'extended'>('standard');
+  const [moyingPinNumber, setMoyingPinNumber] = useState<string>('');
+  const [moyingDataPath, setMoyingDataPath] = useState<string>('');
+  
+  // 墨影机器人协议相关状态
+  const [robotCommandType, setRobotCommandType] = useState<'move' | 'action' | 'status' | 'config'>('move');
+  const [robotDeviceId, setRobotDeviceId] = useState<string>('');
+  const [robotActionId, setRobotActionId] = useState<string>('');
+  const [robotParameterType, setRobotParameterType] = useState<'position' | 'speed' | 'force' | 'sensor'>('position');
+  const [robotDataFormat, setRobotDataFormat] = useState<'json' | 'binary' | 'text'>('json');
+  const [robotDataPath, setRobotDataPath] = useState<string>('');
+  
   // 组合模式相关状态
   const [compositeType, setCompositeType] = useState<'multi-register' | 'bit-field' | 'data-structure' | 'custom'>('multi-register');
 
 
   const [functionName, setFunctionName] = useState(''); // 用于存储第一步的功能名称
+  const [currentFunctionType, setCurrentFunctionType] = useState<string>('属性（动态）'); // 当前选择的功能类型
 
   // 组件初始化时确保valueConfigItems正确设置
   useEffect(() => {
@@ -136,6 +167,19 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       setValueConfigItems([{ id: '1', value: '', description: '默认值配置' }]);
     }
   }, [dataType, isEdit, valueConfigItems.length]);
+
+  // 当协议为modbus_tcp时，检查并重置不支持的数据类型
+  useEffect(() => {
+    if (productProtocol === 'modbus_tcp' && dataType !== 'enum' && dataType !== 'bool') {
+      // 重置为默认的枚举类型
+      setDataType('enum');
+      form.setFieldsValue({ dataType: 'enum' });
+      // 重置值配置
+      setValueConfigItems([
+        { id: '1', value: '', description: '' },
+      ]);
+    }
+  }, [productProtocol, dataType, form]);
 
   // 添加寄存器映射项（用于多寄存器组合）
   const addRegisterMapping = (valueConfigItemId: string) => {
@@ -289,10 +333,11 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         // 设置状态
         setCurrentStep(0);
         setDataType(editingFunction.dataType);
+        setCurrentFunctionType(editingFunction.functionType); // 设置当前功能类型
         setValueConfigItems(editingFunction.valueConfig || []);
         
-        // 针对http和mqtt协议的特殊处理
-        if (productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt') {
+        // 针对http、mqtt、墨影采集卡和墨影机器人协议的特殊处理
+        if (productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt' || productProtocol === '墨影采集卡' || productProtocol === '墨影机器人协议') {
           setIsComposite(false); // 强制设置为非组合
         } else {
           setIsComposite(editingFunction.isComposite || false);
@@ -321,6 +366,22 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setMqttPayloadFormat(editingFunction.mqttPayloadFormat || 'json');
         setMqttClientId(editingFunction.mqttClientId || '');
         
+        // 设置墨影采集卡协议相关状态
+        setMoyingChannelType(editingFunction.moyingChannelType || 'report');
+        setMoyingMacAddress(editingFunction.moyingMacAddress || '');
+        setMoyingFunctionId(editingFunction.moyingFunctionId || '');
+        setMoyingPinType(editingFunction.moyingPinType || 'standard');
+        setMoyingPinNumber(editingFunction.moyingPinNumber || '');
+        setMoyingDataPath(editingFunction.moyingDataPath || '');
+        
+        // 设置墨影机器人协议相关状态
+        setRobotCommandType(editingFunction.robotCommandType || 'move');
+        setRobotDeviceId(editingFunction.robotDeviceId || '');
+        setRobotActionId(editingFunction.robotActionId || '');
+        setRobotParameterType(editingFunction.robotParameterType || 'position');
+        setRobotDataFormat(editingFunction.robotDataFormat || 'json');
+        setRobotDataPath(editingFunction.robotDataPath || '');
+        
         // 设置组合模式相关状态
         setCompositeType(editingFunction.compositeType || 'multi-register');
 
@@ -334,7 +395,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             functionCode: editingFunction.functionCode || '',
             modbusDataType: editingFunction.modbusDataType || 'uint16',
             byteOrder: editingFunction.byteOrder || '',
-            isComposite: (productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt') ? false : (editingFunction.isComposite || false),
+            isComposite: (productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt' || productProtocol === '墨影采集卡') ? false : (editingFunction.isComposite || false),
           });
         }, 0);
       } else {
@@ -343,7 +404,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         form.setFieldsValue({
           name: '',
           identifier: '',
-          functionType: '属性（静态）',
+          functionType: '属性（动态）',
           readWriteMode: '读写',
           dataType: 'text',
           functionCode: undefined, // 设置为undefined以显示placeholder
@@ -352,9 +413,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         // 重置所有状态
         setCurrentStep(0);
         setDataType('text');
+        setCurrentFunctionType('属性（动态）'); // 设置当前功能类型为默认值
         setValueConfigItems([]);
         
-        // 针对http和mqtt协议的特殊处理：默认为非组合
+        // 针对http、mqtt、墨影采集卡和墨影机器人协议的特殊处理：默认为非组合
         setIsComposite(false);
         
         setRegisterAddress('');
@@ -379,6 +441,22 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setMqttDataPath('');
         setMqttPayloadFormat('json');
         setMqttClientId('');
+        
+        // 重置墨影采集卡协议相关状态
+        setMoyingChannelType('report');
+        setMoyingMacAddress('');
+        setMoyingFunctionId('');
+        setMoyingPinType('standard');
+        setMoyingPinNumber('');
+        setMoyingDataPath('');
+        
+        // 重置墨影机器人协议相关状态
+        setRobotCommandType('move');
+        setRobotDeviceId('');
+        setRobotActionId('');
+        setRobotParameterType('position');
+        setRobotDataFormat('json');
+        setRobotDataPath('');
         
         // 重置组合模式相关状态
         setCompositeType('multi-register');
@@ -478,7 +556,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   ];
 
   // 数据类型选项
-  const dataTypeOptions = [
+  const getAllDataTypeOptions = () => [
     { label: '整数', value: 'int' },
     { label: '浮点数', value: 'float' },
     { label: '双精度', value: 'double' },
@@ -489,6 +567,23 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     { label: '结构体', value: 'struct' },
     { label: '数组', value: 'array' },
   ];
+
+  // 根据通讯协议过滤数据类型选项
+  const getFilteredDataTypeOptions = () => {
+    const allOptions = getAllDataTypeOptions();
+    
+    // 如果是modbus_tcp协议，只允许选择枚举和布尔
+    if (productProtocol === 'modbus_tcp') {
+      return allOptions.filter(option => 
+        option.value === 'enum' || option.value === 'bool'
+      );
+    }
+    
+    // 其他协议返回所有选项
+    return allOptions;
+  };
+
+  const dataTypeOptions = getFilteredDataTypeOptions();
 
   // 处理数据类型变化
   const handleDataTypeChange = (value: string) => {
@@ -544,6 +639,13 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       const values = await form.validateFields();
       console.log('handleNext - 表单验证通过，获取的值:', values);
       setFunctionName(values.name || ''); // 保存功能名称
+      
+      // 如果功能类型是属性（静态），直接保存，不进入配置映射页面
+      if (values.functionType === '属性（静态）') {
+        console.log('handleNext - 功能类型为属性（静态），直接保存');
+        await handleSaveStaticProperty(values);
+        return;
+      }
       
       // 恢复第二步的表单数据（如果之前有填写过）
       const allValues = form.getFieldsValue();
@@ -626,6 +728,70 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     });
     
     setCurrentStep(0);
+  };
+
+  // 保存属性（静态）功能
+  const handleSaveStaticProperty = async (values: any) => {
+    setLoading(true);
+    try {
+      // 验证必填字段
+      if (!values.name || !values.name.trim()) {
+        message.error('请输入功能名称');
+        setLoading(false);
+        return;
+      }
+      if (!values.identifier || !values.identifier.trim()) {
+        message.error('请输入标识符');
+        setLoading(false);
+        return;
+      }
+      if (!values.functionType) {
+        message.error('请选择功能类型');
+        setLoading(false);
+        return;
+      }
+      if (!values.readWriteMode) {
+        message.error('请选择读写方式');
+        setLoading(false);
+        return;
+      }
+      if (!values.dataType) {
+        message.error('请选择数据类型');
+        setLoading(false);
+        return;
+      }
+
+      // 处理值配置数据
+      const processedValueConfig = valueConfigItems
+        .filter(item => item.value || item.description)
+        .map(item => {
+          // 属性（静态）不需要寄存器映射
+          const { registerMappings, ...itemWithoutMappings } = item;
+          return itemWithoutMappings;
+        });
+
+      const functionData: FunctionConfig = {
+        name: values.name,
+        identifier: values.identifier,
+        functionType: values.functionType,
+        readWriteMode: values.readWriteMode,
+        dataType: values.dataType,
+        valueConfig: processedValueConfig,
+        // 属性（静态）的默认配置
+        isComposite: false,
+        protocol: productProtocol,
+      };
+
+      console.log('保存属性（静态）功能数据:', functionData);
+      onSave(functionData);
+      onClose();
+      message.success(isEdit ? '功能更新成功' : '功能添加成功');
+    } catch (error) {
+      console.error('保存功能失败:', error);
+      message.error('保存功能失败');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 保存功能
@@ -785,6 +951,24 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           mqttDataPath: mqttDataPath || undefined,
           mqttPayloadFormat,
           mqttClientId: mqttClientId || undefined,
+        } : {}),
+        ...(productProtocol === '墨影采集卡' ? {
+          // 墨影采集卡协议字段
+          moyingChannelType,
+          moyingMacAddress: moyingMacAddress || undefined,
+          moyingFunctionId: moyingFunctionId || undefined,
+          moyingPinType,
+          moyingPinNumber: moyingPinNumber || undefined,
+          moyingDataPath: moyingDataPath || undefined,
+        } : {}),
+        ...(productProtocol === '墨影机器人协议' ? {
+          // 墨影机器人协议字段
+          robotCommandType,
+          robotDeviceId: robotDeviceId || undefined,
+          robotActionId: robotActionId || undefined,
+          robotParameterType,
+          robotDataFormat,
+          robotDataPath: robotDataPath || undefined,
         } : {})
       };
       
@@ -925,7 +1109,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       initialValues={{
         name: '',
         identifier: '',
-        functionType: '属性（静态）',
+        functionType: '属性（动态）',
         readWriteMode: '读写',
         dataType: 'text',
       }}
@@ -974,7 +1158,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             name="functionType"
             rules={[{ required: true, message: '请选择功能类型' }]}
           >
-            <Select placeholder="请选择功能类型">
+            <Select 
+              placeholder="请选择功能类型"
+              onChange={(value: string) => setCurrentFunctionType(value)}
+            >
               <Option value="属性（静态）">属性（静态）</Option>
               <Option value="属性（动态）">属性（动态）</Option>
               <Option value="事件">事件</Option>
@@ -1704,6 +1891,247 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           </>
         )}
         
+        {!isComposite && productProtocol === '墨影采集卡' && (
+          <>
+            <Divider orientation="left" style={{ margin: '16px 0' }}>墨影采集卡协议映射</Divider>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="映射功能名称"
+                  name="mappingFunctionName"
+                >
+                  <Input 
+                    disabled
+                    placeholder="功能名称"
+                    style={{ backgroundColor: '#f5f5f5' }}
+                    value={functionName}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="通道类型"
+                  name="moyingChannelType"
+                  rules={[{ required: true, message: '请选择通道类型' }]}
+                >
+                  <Select 
+                    value={moyingChannelType}
+                    onChange={(value: 'report' | 'control') => setMoyingChannelType(value)}
+                    placeholder="请选择通道类型"
+                  >
+                    <Option value="report">上报通道</Option>
+                    <Option value="control">控制通道</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="MAC地址"
+                  name="moyingMacAddress"
+                >
+                  <Input 
+                    placeholder="请输入MAC地址（如：AA:BB:CC:DD:EE:FF）"
+                    value={moyingMacAddress}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingMacAddress(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="功能ID"
+                  name="moyingFunctionId"
+                >
+                  <Input 
+                    placeholder="请输入功能ID"
+                    value={moyingFunctionId}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingFunctionId(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="引脚类型"
+                  name="moyingPinType"
+                  rules={[{ required: true, message: '请选择引脚类型' }]}
+                >
+                  <Select 
+                    value={moyingPinType}
+                    onChange={(value: 'standard' | 'extended') => setMoyingPinType(value)}
+                    placeholder="请选择引脚类型"
+                  >
+                    <Option value="standard">标准引脚</Option>
+                    <Option value="extended">扩展引脚</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="引脚编号"
+                  name="moyingPinNumber"
+                >
+                  <Input 
+                    placeholder="请输入引脚编号"
+                    value={moyingPinNumber}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingPinNumber(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                <Form.Item
+                  label="数据路径"
+                  name="moyingDataPath"
+                >
+                  <Input 
+                    placeholder="数据路径（如：data.value）"
+                    value={moyingDataPath}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMoyingDataPath(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                {renderReadOnlyValueConfig()}
+              </Col>
+            </Row>
+          </>
+        )}
+        
+        {!isComposite && productProtocol === '墨影机器人协议' && (
+          <>
+            <Divider orientation="left" style={{ margin: '16px 0' }}>墨影机器人协议映射</Divider>
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="映射功能名称"
+                  name="mappingFunctionName"
+                >
+                  <Input 
+                    disabled
+                    placeholder="功能名称"
+                    style={{ backgroundColor: '#f5f5f5' }}
+                    value={functionName}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="命令类型"
+                  name="robotCommandType"
+                  rules={[{ required: true, message: '请选择命令类型' }]}
+                >
+                  <Select 
+                    value={robotCommandType}
+                    onChange={(value: 'move' | 'action' | 'status' | 'config') => setRobotCommandType(value)}
+                    placeholder="请选择命令类型"
+                  >
+                    <Option value="move">移动命令</Option>
+                    <Option value="action">动作命令</Option>
+                    <Option value="status">状态查询</Option>
+                    <Option value="config">配置命令</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="设备ID"
+                  name="robotDeviceId"
+                >
+                  <Input 
+                    placeholder="请输入设备ID"
+                    value={robotDeviceId}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRobotDeviceId(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="动作ID"
+                  name="robotActionId"
+                >
+                  <Input 
+                    placeholder="请输入动作ID"
+                    value={robotActionId}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRobotActionId(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="参数类型"
+                  name="robotParameterType"
+                  rules={[{ required: true, message: '请选择参数类型' }]}
+                >
+                  <Select 
+                    value={robotParameterType}
+                    onChange={(value: 'position' | 'speed' | 'force' | 'sensor') => setRobotParameterType(value)}
+                    placeholder="请选择参数类型"
+                  >
+                    <Option value="position">位置参数</Option>
+                    <Option value="speed">速度参数</Option>
+                    <Option value="force">力度参数</Option>
+                    <Option value="sensor">传感器参数</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="数据格式"
+                  name="robotDataFormat"
+                  rules={[{ required: true, message: '请选择数据格式' }]}
+                >
+                  <Select 
+                    value={robotDataFormat}
+                    onChange={(value: 'json' | 'binary' | 'text') => setRobotDataFormat(value)}
+                    placeholder="请选择数据格式"
+                  >
+                    <Option value="json">JSON格式</Option>
+                    <Option value="binary">二进制格式</Option>
+                    <Option value="text">文本格式</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                <Form.Item
+                  label="数据路径"
+                  name="robotDataPath"
+                >
+                  <Input 
+                    placeholder="数据路径（如：data.position.x）"
+                    value={robotDataPath}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRobotDataPath(e.target.value)}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+            
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                {renderReadOnlyValueConfig()}
+              </Col>
+            </Row>
+          </>
+        )}
+        
         {isComposite && (
           <>
             <Divider orientation="left" style={{ margin: '16px 0' }}>组合模式配置</Divider>
@@ -1792,7 +2220,12 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 上一步
               </Button>
             )}
-            {currentStep === 0 && (
+            {currentStep === 0 && currentFunctionType === '属性（静态）' && (
+              <Button type="primary" onClick={handleNext} loading={loading}>
+                保存
+              </Button>
+            )}
+            {currentStep === 0 && currentFunctionType !== '属性（静态）' && (
               <Button type="primary" onClick={handleNext}>
                 下一步
               </Button>

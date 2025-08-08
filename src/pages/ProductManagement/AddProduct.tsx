@@ -48,10 +48,11 @@ interface ProductFunction {
 
 // 产品类型与协议映射
 const protocolMap: Record<string, string[]> = {
-  '机器人产品': ['http', 'Mqtt', 'modbus_tcp'],
-  '生产产品': ['http', 'Mqtt', '墨影采集卡'],
-  '电梯产品': ['modbus_tcp', '墨影采集卡'],
-  '自动门产品': ['http', 'Mqtt'],
+  '机器人产品': ['墨影机器人协议'],
+  '生产产品': ['modbus_tcp', 'Mqtt', 'http', '墨影采集卡'],
+  '其他产品': ['modbus_tcp', 'Mqtt', 'http', '墨影采集卡'],
+  '电梯产品': ['modbus_tcp', 'Mqtt', 'http', '墨影采集卡'],
+  '自动门产品': ['modbus_tcp', 'Mqtt', 'http', '墨影采集卡'],
   '虚拟产品': [], // 虚拟产品不显示通讯协议
 };
 
@@ -65,7 +66,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [selectedProductType, setSelectedProductType] = useState<string>('机器人产品');
+  const [selectedProductType, setSelectedProductType] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   
   // 主步骤状态
@@ -108,10 +109,14 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
       }
     } else {
       form.resetFields();
-      setSelectedProductType('机器人产品');
+      setSelectedProductType('');
       setBasicInfoData(null);
       setCurrentStep(0);
       setFunctions([]);
+      setSearchText(''); // 清空搜索文本
+      setAddFunctionVisible(false); // 关闭添加功能抽屉
+      setEditingFunction(null); // 清空编辑功能数据
+      setIsEditMode(false); // 重置编辑模式
     }
   }, [editingProduct, form]);
   
@@ -333,6 +338,21 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
           navigate('/product-management');
         }
       }
+      
+      // 如果是新增模式，创建成功后重置所有状态
+      if (!editingProduct) {
+        // 重置表单
+        form.resetFields();
+        // 重置所有状态
+        setSelectedProductType('');
+        setBasicInfoData(null);
+        setCurrentStep(0);
+        setFunctions([]);
+        setSearchText('');
+        setAddFunctionVisible(false);
+        setEditingFunction(null);
+        setIsEditMode(false);
+      }
     } catch (error) {
       console.error(editingProduct ? '编辑失败:' : '创建失败:', error);
       message.error(editingProduct ? '编辑失败，请重试' : '创建失败，请重试');
@@ -460,7 +480,6 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
                 <Form.Item
                   label="产品类型"
                   name="productType"
-                  initialValue={selectedProductType}
                   rules={[{ required: true, message: '请选择产品类型' }]}
                 >
                   <Select
@@ -484,7 +503,6 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
                   <Form.Item
                     label="通讯协议"
                     name="protocol"
-                    initialValue="modbus_tcp"
                     rules={[{ required: true, message: '请选择通讯协议' }]}
                   >
                     <Select placeholder="请选择通讯协议">

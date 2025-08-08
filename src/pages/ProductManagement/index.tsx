@@ -203,6 +203,7 @@ const ProductManagement: React.FC = () => {
   });
 
   const handleAdd = () => {
+    setEditingProduct(null); // 确保新增模式时清空编辑产品数据
     setIsDrawerVisible(true);
   };
 
@@ -728,10 +729,6 @@ const ProductManagement: React.FC = () => {
         <Form
           form={form}
           layout="vertical"
-          initialValues={{
-            productType: '机器人产品',
-            protocol: 'Mqtt',
-          }}
         >
           <Row gutter={16}>
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>
@@ -810,6 +807,7 @@ const ProductManagement: React.FC = () => {
           <AddProduct 
             onClose={handleDrawerClose} 
             onProductCreated={handleProductCreated}
+            editingProduct={null}
           />
         </Drawer>
 
