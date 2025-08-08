@@ -32,6 +32,8 @@ interface ValueConfigItem {
   description: string;
   // 多寄存器组合相关字段
   registerMappings?: RegisterMapping[]; // 寄存器地址映射（多寄存器组合时使用）
+  // 多引脚组合相关字段
+  pinMappings?: PinMapping[]; // 引脚映射（多引脚组合时使用）
 }
 
 // 寄存器映射接口（用于多寄存器组合）
@@ -42,6 +44,15 @@ interface RegisterMapping {
   functionCode?: string; // 功能码
   dataType: string; // 数据类型
   byteOrder?: 'big-endian' | 'little-endian'; // 字节序
+  description?: string; // 描述
+}
+
+// 引脚映射接口（用于墨影采集卡多引脚组合）
+interface PinMapping {
+  id: string;
+  pinType: 'input' | 'output'; // 引脚类型
+  pinNumber: string; // 引脚编号
+  pinValue: string; // 引脚值
   description?: string; // 描述
 }
 
@@ -225,6 +236,27 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     }));
   };
 
+  // 添加引脚映射项（用于多引脚组合）
+  const addPinMapping = (valueConfigItemId: string) => {
+    const newMapping: PinMapping = {
+      id: Date.now().toString(),
+      pinType: 'output',
+      pinNumber: '',
+      pinValue: '',
+      description: ''
+    };
+    
+    setValueConfigItems(prev => prev.map(item => {
+      if (item.id === valueConfigItemId) {
+        return {
+          ...item,
+          pinMappings: [...(item.pinMappings || []), newMapping]
+        };
+      }
+      return item;
+    }));
+  };
+
   // 删除寄存器映射项
   const removeRegisterMapping = (valueConfigItemId: string, mappingId: string) => {
     setValueConfigItems(prev => prev.map(item => {
@@ -232,6 +264,19 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         return {
           ...item,
           registerMappings: (item.registerMappings || []).filter(mapping => mapping.id !== mappingId)
+        };
+      }
+      return item;
+    }));
+  };
+
+  // 删除引脚映射项
+  const removePinMapping = (valueConfigItemId: string, mappingId: string) => {
+    setValueConfigItems(prev => prev.map(item => {
+      if (item.id === valueConfigItemId) {
+        return {
+          ...item,
+          pinMappings: (item.pinMappings || []).filter(mapping => mapping.id !== mappingId)
         };
       }
       return item;
@@ -261,6 +306,24 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 }
                 return updatedMapping;
               }
+              return { ...mapping, [field]: value };
+            }
+            return mapping;
+          })
+        };
+      }
+      return item;
+    }));
+  };
+
+  // 更新引脚映射项
+  const updatePinMapping = (valueConfigItemId: string, mappingId: string, field: keyof PinMapping, value: any) => {
+    setValueConfigItems(prev => prev.map(item => {
+      if (item.id === valueConfigItemId) {
+        return {
+          ...item,
+          pinMappings: (item.pinMappings || []).map(mapping => {
+            if (mapping.id === mappingId) {
               return { ...mapping, [field]: value };
             }
             return mapping;
@@ -494,7 +557,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setRobotDataPath('');
         
         // 重置组合模式相关状态
-        setCompositeType('multi-register');
+        const defaultCompositeType = productProtocol === '墨影采集卡' ? 'multi-pin' : 'multi-register';
+        setCompositeType(defaultCompositeType);
 
 
       }
@@ -1000,6 +1064,30 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
               return;
             }
           }
+          
+          // 多引脚组合模式下的引脚映射验证
+          if (compositeType === 'multi-pin') {
+            const hasInvalidPinMappings = valueConfigItems.some(item => {
+              if (!item.pinMappings || item.pinMappings.length === 0) {
+                return true; // 没有引脚映射
+              }
+              return item.pinMappings.some(mapping => {
+                // 基本字段验证
+                if (!mapping.pinType || 
+                    !mapping.pinNumber || 
+                    !mapping.pinValue) {
+                  return true;
+                }
+                return false;
+              });
+            });
+            
+            if (hasInvalidPinMappings) {
+              message.error('多引脚组合模式下，每个值配置项都必须配置完整的引脚映射');
+              setLoading(false);
+              return;
+            }
+          }
         }
       }
       
@@ -1017,19 +1105,28 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         }
       }
       
-      // 处理值配置数据，确保多寄存器组合模式下包含寄存器映射
+      // 处理值配置数据，确保组合模式下包含相应的映射数据
       const processedValueConfig = valueConfigItems
         .filter(item => item.value || item.description)
         .map(item => {
-          // 多寄存器组合模式下，确保包含寄存器映射数据（支持所有数据类型）
+          // 多寄存器组合模式下，确保包含寄存器映射数据
           if (isComposite && compositeType === 'multi-register') {
+            const { pinMappings, ...itemWithoutPinMappings } = item;
             return {
-              ...item,
+              ...itemWithoutPinMappings,
               registerMappings: item.registerMappings || []
             };
           }
-          // 非多寄存器组合模式，移除registerMappings字段
-          const { registerMappings, ...itemWithoutMappings } = item;
+          // 多引脚组合模式下，确保包含引脚映射数据
+          if (isComposite && compositeType === 'multi-pin') {
+            const { registerMappings, ...itemWithoutRegisterMappings } = item;
+            return {
+              ...itemWithoutRegisterMappings,
+              pinMappings: item.pinMappings || []
+            };
+          }
+          // 非组合模式，移除所有映射字段
+          const { registerMappings, pinMappings, ...itemWithoutMappings } = item;
           return itemWithoutMappings;
         });
 
@@ -1336,14 +1433,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   // 渲染只读值配置（用于配置映射页面）
   const renderReadOnlyValueConfig = () => {
-    // 多引脚组合模式下的值配置（支持所有数据类型）
+    // 多寄存器组合模式下的值配置（支持所有数据类型）
     if (isComposite && compositeType === 'multi-register') {
-      // 根据协议类型确定显示文本
-      const mappingLabel = productProtocol === '墨影采集卡' ? '采集卡映射' : '寄存器映射';
-      const addButtonText = productProtocol === '墨影采集卡' ? '添加引脚' : '添加寄存器';
-      
       return (
-        <Form.Item label={`值配置与${mappingLabel}`}>
+        <Form.Item label="值配置与寄存器映射">
           <div>
             {valueConfigItems.map((item, index) => (
               <div key={item.id} style={{ marginBottom: 16, border: '1px solid #d9d9d9', borderRadius: 6, padding: 12 }}>
@@ -1362,14 +1455,14 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                 {/* 寄存器映射配置 */}
                 <div style={{ marginTop: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-                    <Text strong style={{ marginRight: 16 }}>{mappingLabel}：</Text>
+                    <Text strong style={{ marginRight: 16 }}>寄存器映射：</Text>
                     <Button
                       type="dashed"
                       icon={<PlusOutlined />}
                       onClick={() => addRegisterMapping(item.id)}
                       size="small"
                     >
-                      {addButtonText}
+                      添加寄存器
                     </Button>
                   </div>
                   
@@ -1493,6 +1586,111 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                   {(!item.registerMappings || item.registerMappings.length === 0) && (
                     <div style={{ textAlign: 'center', color: '#999', padding: 16, backgroundColor: '#fafafa', borderRadius: 4 }}>
                       暂无寄存器映射，点击上方按钮添加
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Form.Item>
+      );
+    }
+
+    // 多引脚组合模式下的值配置（墨影采集卡协议）
+    if (isComposite && compositeType === 'multi-pin') {
+      return (
+        <Form.Item label="值配置与采集卡映射">
+          <div>
+            {valueConfigItems.map((item, index) => (
+              <div key={item.id} style={{ marginBottom: 16, border: '1px solid #d9d9d9', borderRadius: 6, padding: 12 }}>
+                {/* 值配置基本信息 */}
+                <Row gutter={16} style={{ marginBottom: 8 }}>
+                  <Col span={6}>
+                    <Text strong>值：</Text>
+                    <Input value={item.value} disabled style={{ backgroundColor: '#f5f5f5', marginTop: 4 }} />
+                  </Col>
+                  <Col span={18}>
+                    <Text strong>描述：</Text>
+                    <Input value={item.description} disabled style={{ backgroundColor: '#f5f5f5', marginTop: 4 }} />
+                  </Col>
+                </Row>
+                
+                {/* 引脚映射配置 */}
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+                    <Text strong style={{ marginRight: 16 }}>采集卡映射：</Text>
+                    <Button
+                      type="dashed"
+                      icon={<PlusOutlined />}
+                      onClick={() => addPinMapping(item.id)}
+                      size="small"
+                    >
+                      添加引脚
+                    </Button>
+                  </div>
+                  
+                  {(item.pinMappings || []).map((mapping, mappingIndex) => (
+                    <div key={mapping.id} style={{ marginBottom: 8, padding: 8, backgroundColor: '#fafafa', borderRadius: 4 }}>
+                      <Row gutter={8}>
+                        <Col span={8}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>引脚类型</Text>
+                          <Select
+                             value={mapping.pinType}
+                             onChange={(value: 'input' | 'output') => updatePinMapping(item.id, mapping.id, 'pinType', value)}
+                             size="small"
+                             style={{ width: '100%' }}
+                           >
+                            <Option value="input">输入类型</Option>
+                            <Option value="output">输出类型</Option>
+                          </Select>
+                        </Col>
+                        <Col span={7}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>引脚编号</Text>
+                          <Input
+                             placeholder="请输入自然数"
+                             value={mapping.pinNumber}
+                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                               const value = e.target.value;
+                               // 只允许输入自然数
+                               if (/^\d*$/.test(value)) {
+                                 updatePinMapping(item.id, mapping.id, 'pinNumber', value);
+                               }
+                             }}
+                             size="small"
+                           />
+                        </Col>
+                        <Col span={7}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>引脚值</Text>
+                          <Input
+                             placeholder="请输入自然数"
+                             value={mapping.pinValue}
+                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                               const value = e.target.value;
+                               // 只允许输入自然数
+                               if (/^\d*$/.test(value)) {
+                                 updatePinMapping(item.id, mapping.id, 'pinValue', value);
+                               }
+                             }}
+                             size="small"
+                           />
+                        </Col>
+                        <Col span={2}>
+                          <Button
+                            type="text"
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={() => removePinMapping(item.id, mapping.id)}
+                            size="small"
+                            style={{ marginTop: 16 }}
+                          />
+                        </Col>
+                      </Row>
+                    </div>
+                  ))}
+                  
+                  {(!item.pinMappings || item.pinMappings.length === 0) && (
+                    <div style={{ textAlign: 'center', color: '#999', padding: 16, backgroundColor: '#fafafa', borderRadius: 4 }}>
+                      暂无引脚映射，点击上方按钮添加
                     </div>
                   )}
                 </div>
