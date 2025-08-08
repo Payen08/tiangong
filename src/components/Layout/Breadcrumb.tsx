@@ -1,6 +1,6 @@
 import React from 'react';
 import { Breadcrumb as AntBreadcrumb } from 'antd';
-import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined } from '@ant-design/icons';
+import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined } from '@ant-design/icons';
 import { useLocation, Link } from 'react-router-dom';
 
 const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
@@ -8,6 +8,7 @@ const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
   '/resources': { title: '资源管理', icon: <DatabaseOutlined /> },
   '/resources/products': { title: '产品管理', icon: <AppstoreOutlined /> },
   '/resources/products/add': { title: '新增产品', icon: <AppstoreOutlined /> },
+  '/resources/devices': { title: '设备管理', icon: <SettingOutlined /> },
   '/system': { title: '系统管理', icon: <UserOutlined /> },
   '/system/users': { title: '用户管理', icon: <TeamOutlined /> },
   '/system/roles': { title: '角色管理', icon: <SafetyOutlined /> },

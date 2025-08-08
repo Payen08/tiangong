@@ -8,6 +8,7 @@ import RoleManagement from '@/pages/SystemManagement/RoleManagement';
 import PermissionManagement from '@/pages/SystemManagement/PermissionManagement';
 import ProductManagement from '@/pages/ProductManagement/index';
 import AddProduct from '@/pages/ProductManagement/AddProduct';
+import DeviceManagement from '@/pages/DeviceManagement/index';
 
 
 
@@ -34,6 +35,10 @@ export const router = createBrowserRouter([
           {
             path: 'products/add',
             element: <AddProduct />,
+          },
+          {
+            path: 'devices',
+            element: <DeviceManagement />,
           },
         ],
       },

@@ -46,6 +46,11 @@ const Layout: React.FC = () => {
           icon: <AppstoreOutlined />,
           label: '产品管理',
         },
+        {
+          key: '/resources/devices',
+          icon: <SettingOutlined />,
+          label: '设备管理',
+        },
       ],
     },
     {

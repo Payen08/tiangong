@@ -188,19 +188,480 @@ const ProductManagement: React.FC = () => {
         },
       ],
     },
+    {
+      id: '4',
+      productName: 'CNC加工中心',
+      productKey: 'cnc_machining_center_001',
+      productType: '生产产品',
+      protocol: '墨影采集卡',
+      deviceCount: 12,
+      updateTime: '2024-01-16 10:20:15',
+      updatedBy: '赵六',
+      functions: [
+        {
+          id: '6',
+          name: '主轴转速',
+          identifier: 'spindle_speed',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'int',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '7',
+          name: '切削液压力',
+          identifier: 'coolant_pressure',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'float',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '8',
+          name: '设备状态',
+          identifier: 'machine_status',
+          functionType: '属性（静态）',
+          readWriteMode: '读写',
+          dataType: 'enum',
+          valueConfig: '0:停机;1:运行;2:故障;3:维护',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+        {
+          id: '9',
+          name: '故障报警',
+          identifier: 'fault_alarm',
+          functionType: '事件',
+          readWriteMode: '只读',
+          dataType: 'text',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+      ],
+    },
+    {
+      id: '5',
+      productName: 'CNC数控车床',
+      productKey: 'cnc_lathe_002',
+      productType: '生产产品',
+      protocol: '墨影采集卡',
+      deviceCount: 8,
+      updateTime: '2024-01-16 11:35:42',
+      updatedBy: '孙七',
+      functions: [
+        {
+          id: '10',
+          name: '主轴负载',
+          identifier: 'spindle_load',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'float',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '11',
+          name: '进给速度',
+          identifier: 'feed_rate',
+          functionType: '属性（动态）',
+          readWriteMode: '读写',
+          dataType: 'int',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+        {
+          id: '12',
+          name: '刀具磨损',
+          identifier: 'tool_wear',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'float',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+      ],
+    },
+    {
+      id: '6',
+      productName: 'CNC铣床',
+      productKey: 'cnc_milling_003',
+      productType: '生产产品',
+      protocol: '墨影采集卡',
+      deviceCount: 6,
+      updateTime: '2024-01-16 13:15:28',
+      updatedBy: '周八',
+      functions: [
+        {
+          id: '13',
+          name: 'X轴位置',
+          identifier: 'x_axis_position',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'float',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '14',
+          name: 'Y轴位置',
+          identifier: 'y_axis_position',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'float',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '15',
+          name: 'Z轴位置',
+          identifier: 'z_axis_position',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'float',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '16',
+          name: '加工程序',
+          identifier: 'machining_program',
+          functionType: '服务',
+          readWriteMode: '读写',
+          dataType: 'text',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影采集卡',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+      ],
+    },
+    {
+      id: '7',
+      productName: 'AGV自动导引车',
+      productKey: 'agv_robot_001',
+      productType: '机器人产品',
+      protocol: '墨影机器人',
+      deviceCount: 5,
+      updateTime: '2024-01-16 14:25:18',
+      updatedBy: '吴九',
+      functions: [
+        {
+          id: '17',
+          name: '当前位置',
+          identifier: 'current_position',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'text',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '18',
+          name: '电池电量',
+          identifier: 'battery_level',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'int',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '19',
+          name: '运行状态',
+          identifier: 'running_status',
+          functionType: '属性（静态）',
+          readWriteMode: '读写',
+          dataType: 'enum',
+          valueConfig: '0:待机;1:运行;2:充电;3:故障',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+        {
+          id: '20',
+          name: '导航指令',
+          identifier: 'navigation_command',
+          functionType: '服务',
+          readWriteMode: '读写',
+          dataType: 'text',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+      ],
+    },
+    {
+      id: '8',
+      productName: 'AMR自主移动机器人',
+      productKey: 'amr_robot_002',
+      productType: '机器人产品',
+      protocol: '墨影机器人',
+      deviceCount: 3,
+      updateTime: '2024-01-16 15:10:33',
+      updatedBy: '郑十',
+      functions: [
+        {
+          id: '21',
+          name: '激光雷达数据',
+          identifier: 'lidar_data',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'text',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '22',
+          name: '移动速度',
+          identifier: 'movement_speed',
+          functionType: '属性（动态）',
+          readWriteMode: '读写',
+          dataType: 'float',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+        {
+          id: '23',
+          name: '避障状态',
+          identifier: 'obstacle_avoidance',
+          functionType: '属性（静态）',
+          readWriteMode: '只读',
+          dataType: 'enum',
+          valueConfig: '0:正常;1:检测到障碍;2:避障中',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '24',
+          name: '路径规划',
+          identifier: 'path_planning',
+          functionType: '服务',
+          readWriteMode: '读写',
+          dataType: 'text',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+      ],
+    },
+    {
+      id: '9',
+      productName: 'MCR多功能协作机器人',
+      productKey: 'mcr_robot_003',
+      productType: '机器人产品',
+      protocol: '墨影机器人',
+      deviceCount: 2,
+      updateTime: '2024-01-16 16:45:27',
+      updatedBy: '钱十一',
+      functions: [
+        {
+          id: '25',
+          name: '关节角度',
+          identifier: 'joint_angles',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'text',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '26',
+          name: '末端位置',
+          identifier: 'end_effector_position',
+          functionType: '属性（动态）',
+          readWriteMode: '读写',
+          dataType: 'text',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+        {
+          id: '27',
+          name: '力传感器数据',
+          identifier: 'force_sensor_data',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'float',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
+        },
+        {
+          id: '28',
+          name: '协作模式',
+          identifier: 'collaboration_mode',
+          functionType: '属性（静态）',
+          readWriteMode: '读写',
+          dataType: 'enum',
+          valueConfig: '0:手动模式;1:自动模式;2:协作模式;3:安全模式',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+        {
+          id: '29',
+          name: '动作指令',
+          identifier: 'motion_command',
+          functionType: '服务',
+          readWriteMode: '读写',
+          dataType: 'text',
+          valueConfig: '',
+          isComposite: false,
+          protocol: '墨影机器人',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'holding-register',
+        },
+      ],
+    },
   ]);
 
   const productTypes = ['机器人产品', '生产产品', '虚拟产品', '电梯产品', '自动门产品'];
-  const protocols = ['http', 'Mqtt', 'modbus_tcp', '墨影采集卡'];
+  const protocols = ['http', 'Mqtt', 'modbus_tcp', '墨影采集卡', '墨影机器人'];
 
-  // 筛选数据
-  const filteredProducts = products.filter((product) => {
-    const matchesSearch = product.productName
-      .toLowerCase()
-      .includes(searchText.toLowerCase());
-    const matchesType = !selectedType || product.productType === selectedType;
-    return matchesSearch && matchesType;
-  });
+  // 筛选数据并按更新时间倒序排序
+  const filteredProducts = products
+    .filter((product) => {
+      const matchesSearch = product.productName
+        .toLowerCase()
+        .includes(searchText.toLowerCase());
+      const matchesType = !selectedType || product.productType === selectedType;
+      return matchesSearch && matchesType;
+    })
+    .sort((a, b) => {
+      // 按更新时间倒序排序，最新的在前面
+      return new Date(b.updateTime).getTime() - new Date(a.updateTime).getTime();
+    });
 
   const handleAdd = () => {
     setEditingProduct(null); // 确保新增模式时清空编辑产品数据
@@ -385,18 +846,16 @@ const ProductManagement: React.FC = () => {
         <div style={{ padding: '8px 0' }}>
           <div style={{ marginBottom: '4px' }}>
             <span 
-              style={{ 
-                color: '#1890ff', 
-                cursor: 'pointer',
-                fontWeight: 500,
-                fontSize: '14px'
-              }}
-              onClick={() => {
-                console.log('跳转到产品详情页面:', record.id);
-              }}
-            >
-              {record.productName}
-            </span>
+            style={{ 
+              color: '#1890ff', 
+              cursor: 'pointer',
+              fontWeight: 500,
+              fontSize: '14px'
+            }}
+            onClick={() => handleEdit(record)}
+          >
+            {record.productName}
+          </span>
           </div>
           <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
             <span>Key: </span>
@@ -468,9 +927,7 @@ const ProductManagement: React.FC = () => {
         <Tooltip title={text}>
           <span 
             style={{ color: '#1890ff', cursor: 'pointer' }}
-            onClick={() => {
-              console.log('跳转到产品详情页面:', record.id);
-            }}
+            onClick={() => handleEdit(record)}
           >
             {text}
           </span>
@@ -589,26 +1046,10 @@ const ProductManagement: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: isLargeScreen ? 150 : 120,
+      width: isLargeScreen ? 140 : 110,
       align: 'right',
       fixed: 'right',
       render: (_: any, record: Product) => {
-        const moreMenuItems = [
-          {
-            key: 'edit',
-            label: '编辑',
-            icon: <EditOutlined />,
-            onClick: () => handleEdit(record),
-          },
-          {
-            key: 'delete',
-            label: '删除',
-            icon: <DeleteOutlined />,
-            danger: true,
-            onClick: () => handleDelete(record),
-          },
-        ];
-
         return (
           <Space size={4}>
             <Tooltip title="编辑产品">
@@ -622,20 +1063,17 @@ const ProductManagement: React.FC = () => {
                 编辑
               </Button>
             </Tooltip>
-            <Dropdown
-              menu={{ items: moreMenuItems }}
-              placement="bottomRight"
-              trigger={['click']}
-            >
+            <Tooltip title="删除产品">
               <Button
                 type="link"
-                icon={<MoreOutlined />}
+                danger
+                onClick={() => handleDelete(record)}
                 size="small"
                 style={{ padding: '0 4px' }}
               >
-                更多
+                删除
               </Button>
-            </Dropdown>
+            </Tooltip>
           </Space>
         );
       },
