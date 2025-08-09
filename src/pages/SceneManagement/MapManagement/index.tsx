@@ -321,37 +321,18 @@ const MapManagement: React.FC = () => {
 
   return (
     <div style={{ background: 'transparent' }}>
-      <Card 
-        title="地图管理" 
-        style={{ height: 'calc(100vh - 200px)' }}
-        bodyStyle={{ padding: 16, height: 'calc(100% - 57px)' }}
-      >
-        <Row gutter={[16, 16]} style={{ height: '100%' }}>
+      <Row gutter={[16, 16]}>
           {/* 左侧地图列表 */}
-          <Col 
-            xs={24} 
-            lg={8} 
-            style={{ 
-              height: windowWidth < 992 ? 'auto' : '100%',
-              minHeight: windowWidth < 992 ? '300px' : 'auto'
-            }}
-          >
-            <div style={{ 
-              height: windowWidth < 992 ? 'auto' : '100%', 
-              display: 'flex', 
-              flexDirection: 'column' 
-            }}>
-              <Title level={5} style={{ margin: '0 0 12px 0', color: '#666' }}>地图列表</Title>
-              <Card
-                size="small"
-                bodyStyle={{ 
-                  padding: 0, 
-                  flex: windowWidth < 992 ? 'none' : 1, 
-                  overflow: 'auto',
-                  minHeight: windowWidth < 992 ? '250px' : 'auto'
-                }}
-                style={{ flex: windowWidth < 992 ? 'none' : 1 }}
-              >
+          <Col xs={24} lg={8}>
+            <Card 
+              title="地图列表"
+              size="small"
+              style={{ marginBottom: '16px' }}
+              bodyStyle={{ 
+                padding: 0, 
+                minHeight: windowWidth < 992 ? '250px' : '400px'
+              }}
+            >
                 <Table
                   columns={columns}
                   dataSource={mapData}
@@ -380,34 +361,19 @@ const MapManagement: React.FC = () => {
                   } as React.CSSProperties}
                 />
               </Card>
-            </div>
-          </Col>
+            </Col>
 
-          {/* 右侧地图文件 */}
-          <Col 
-            xs={24} 
-            lg={16} 
-            style={{ 
-              height: windowWidth < 992 ? 'auto' : '100%',
-              minHeight: windowWidth < 992 ? '400px' : 'auto'
-            }}
-          >
-            <div style={{ 
-              height: windowWidth < 992 ? 'auto' : '100%', 
-              display: 'flex', 
-              flexDirection: 'column' 
-            }}>
-              <Title level={5} style={{ margin: '0 0 12px 0', color: '#666' }}>地图文件</Title>
+            {/* 右侧地图文件 */}
+            <Col xs={24} lg={16}>
               {selectedMap ? (
                 <Card
+                  title="地图文件"
                   size="small"
+                  style={{ marginBottom: '16px' }}
                   bodyStyle={{ 
                     padding: 16, 
-                    flex: windowWidth < 992 ? 'none' : 1, 
-                    overflow: 'auto',
-                    minHeight: windowWidth < 992 ? '350px' : 'auto'
+                    minHeight: windowWidth < 992 ? '350px' : '400px'
                   }}
-                  style={{ flex: windowWidth < 992 ? 'none' : 1 }}
                 >
                   <Row gutter={[16, 16]}>
                     {getMapFiles(selectedMap.id).map((file) => (
@@ -491,15 +457,15 @@ const MapManagement: React.FC = () => {
                 </Card>
               ) : (
                 <Card
+                  title="地图文件"
                   size="small"
+                  style={{ marginBottom: '16px' }}
                   bodyStyle={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flex: windowWidth < 992 ? 'none' : 1,
-                    minHeight: windowWidth < 992 ? '200px' : '200px'
+                    minHeight: windowWidth < 992 ? '200px' : '400px'
                   }}
-                  style={{ flex: windowWidth < 992 ? 'none' : 1 }}
                 >
                   <div style={{ textAlign: 'center' }}>
                     <FileImageOutlined style={{ 
@@ -516,10 +482,8 @@ const MapManagement: React.FC = () => {
                   </div>
                 </Card>
               )}
-            </div>
-          </Col>
+            </Col>
         </Row>
-      </Card>
     </div>
   );
 };
