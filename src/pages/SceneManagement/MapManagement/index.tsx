@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   Table,
@@ -92,6 +92,13 @@ const MapManagement: React.FC = () => {
       updateUser: '王五',
     },
   ];
+
+  // 初始化时默认选中第一条地图数据
+  useEffect(() => {
+    if (mapData.length > 0) {
+      setSelectedMap(mapData[0]);
+    }
+  }, []);
 
   // 模拟地图文件数据
   const getMapFiles = (mapId: string): MapFile[] => {
