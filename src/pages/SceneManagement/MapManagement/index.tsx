@@ -335,6 +335,10 @@ const MapManagement: React.FC = () => {
                     showQuickJumper: true,
                     showTotal: (total: number, range: [number, number]) =>
                       `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+                    style: {
+                      marginLeft: '16px',
+                      marginRight: '16px',
+                    },
                   }}
                   onRow={(record: MapData) => ({
                     onClick: () => handleRowClick(record),
