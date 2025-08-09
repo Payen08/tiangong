@@ -355,10 +355,96 @@ const MapManagement: React.FC = () => {
                 />
               </Card>
             </div>
+            
+            {/* 小屏幕下的地图文件区域 */}
+            <div className="lg:hidden" style={{ marginTop: 16 }}>
+              <Title level={5} style={{ margin: '0 0 12px 0', color: '#666' }}>地图文件</Title>
+              {selectedMap ? (
+                <Card
+                  size="small"
+                  bodyStyle={{ padding: 16, overflow: 'auto' }}
+                >
+                  <Row gutter={[16, 16]}>
+                    {getMapFiles(selectedMap.id).map((file) => (
+                      <Col xs={24} sm={12} key={file.id}>
+                        <Card
+                          size="small"
+                          hoverable
+                          cover={
+                            <img
+                              alt={file.name}
+                              src={file.thumbnail}
+                              style={{
+                                height: 120,
+                                objectFit: 'cover',
+                                backgroundColor: '#f5f5f5',
+                              }}
+                            />
+                          }
+                          actions={[
+                            <DownloadOutlined
+                              key="download"
+                              onClick={() => handleDownload(file)}
+                              title="下载"
+                            />,
+                            <DeleteOutlined
+                              key="delete"
+                              onClick={() => handleDeleteFile(file)}
+                              title="删除"
+                            />,
+                            <PlayCircleOutlined
+                              key="enable"
+                              onClick={() => handleEnableFile(file)}
+                              title="启用"
+                            />,
+                            <SyncOutlined
+                              key="sync"
+                              onClick={() => handleSyncFile(file)}
+                              title="同步"
+                            />,
+                            <EyeOutlined
+                              key="details"
+                              onClick={() => handleViewDetails(file)}
+                              title="详情"
+                            />,
+                          ]}
+                        >
+                          <Card.Meta
+                            title={
+                              <div>
+                                <div style={{ marginBottom: 4 }}>{file.name}</div>
+                              </div>
+                            }
+                            description={null}
+                          />
+                        </Card>
+                      </Col>
+                    ))}
+                  </Row>
+                </Card>
+              ) : (
+                <Card
+                  size="small"
+                  bodyStyle={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minHeight: '200px'
+                  }}
+                >
+                  <div style={{ textAlign: 'center' }}>
+                    <FileImageOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
+                    <div style={{ marginTop: 16, color: '#999' }}>
+                      请从左侧列表选择一个地图查看文件
+                    </div>
+                  </div>
+                </Card>
+              )}
+            </div>
           </Col>
 
-          {/* 右侧地图文件 */}
-          <Col xs={24} lg={16} style={{ height: '100%' }}>
+          {/* 大屏幕下的右侧地图文件 */}
+          <Col xs={0} lg={16} style={{ height: '100%' }}>
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <Title level={5} style={{ margin: '0 0 12px 0', color: '#666' }}>地图文件</Title>
               {selectedMap ? (
