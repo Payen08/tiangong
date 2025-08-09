@@ -11,6 +11,8 @@ import {
   SettingOutlined,
   AppstoreOutlined,
   DatabaseOutlined,
+  EnvironmentOutlined,
+  NodeIndexOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useAppStore } from '@/store';
@@ -35,6 +37,18 @@ const Layout: React.FC = () => {
       key: '/',
       icon: <HomeOutlined />,
       label: '首页',
+    },
+    {
+      key: 'scene',
+      icon: <EnvironmentOutlined />,
+      label: '场景管理',
+      children: [
+        {
+          key: '/scene/maps',
+          icon: <NodeIndexOutlined />,
+          label: '地图管理',
+        },
+      ],
     },
     {
       key: 'resources',

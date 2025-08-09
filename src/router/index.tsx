@@ -9,6 +9,7 @@ import PermissionManagement from '@/pages/SystemManagement/PermissionManagement'
 import ProductManagement from '@/pages/ProductManagement/index';
 import AddProduct from '@/pages/ProductManagement/AddProduct';
 import DeviceManagement from '@/pages/DeviceManagement/index';
+import MapManagement from '@/pages/SceneManagement/MapManagement';
 
 
 
@@ -24,6 +25,15 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: <Home />,
+      },
+      {
+        path: 'scene',
+        children: [
+          {
+            path: 'maps',
+            element: <MapManagement />,
+          },
+        ],
       },
       {
         path: 'resources',

@@ -1,10 +1,12 @@
 import React from 'react';
 import { Breadcrumb as AntBreadcrumb } from 'antd';
-import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined } from '@ant-design/icons';
+import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined } from '@ant-design/icons';
 import { useLocation, Link } from 'react-router-dom';
 
 const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
   '/': { title: '首页', icon: <HomeOutlined /> },
+  '/scene': { title: '场景管理', icon: <EnvironmentOutlined /> },
+  '/scene/maps': { title: '地图管理', icon: <NodeIndexOutlined /> },
   '/resources': { title: '资源管理', icon: <DatabaseOutlined /> },
   '/resources/products': { title: '产品管理', icon: <AppstoreOutlined /> },
   '/resources/products/add': { title: '新增产品', icon: <AppstoreOutlined /> },
