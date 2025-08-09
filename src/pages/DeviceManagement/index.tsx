@@ -515,14 +515,14 @@ const DeviceManagement: React.FC = () => {
           <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
             <span style={{ color: '#000000', fontWeight: '500' }}>{record.deviceType}</span>
             <span style={{ marginLeft: '8px' }}>{record.productName}</span>
-            {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && (
+            {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && selectedDeviceType !== '虚拟设备' && (
               <>
                 <span> | </span>
                 {getStatusTag(record.currentStatus)}
               </>
             )}
           </div>
-          {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && (
+          {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && selectedDeviceType !== '虚拟设备' && (
             <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
               <ThunderboltOutlined style={{ color: getBatteryColor(record.batteryLevel) }} />
               <span style={{ marginLeft: '4px' }}>{record.batteryLevel}%</span>
@@ -538,7 +538,7 @@ const DeviceManagement: React.FC = () => {
               </span>
             </div>
           )}
-          {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && (
+          {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && selectedDeviceType !== '虚拟设备' && (
             record.deviceType === '虚拟设备' ? (
               record.relatedDevices.length > 0 ? (
                 <div style={{ fontSize: '12px', color: '#666' }}>
@@ -931,6 +931,10 @@ const DeviceManagement: React.FC = () => {
     }
     // 如果是其他设备，隐藏当前电量、关联设备和当前状态列
     if (selectedDeviceType === '其他设备' && (column.key === 'batteryLevel' || column.key === 'relatedDevices' || column.key === 'currentStatus')) {
+      return false;
+    }
+    // 如果是虚拟设备，隐藏当前电量、是否在线、MAC地址、IP/端口和当前状态列
+    if (selectedDeviceType === '虚拟设备' && (column.key === 'batteryLevel' || column.key === 'isOnline' || column.key === 'macAddress' || column.key === 'ipPort' || column.key === 'currentStatus')) {
       return false;
     }
     return true;
