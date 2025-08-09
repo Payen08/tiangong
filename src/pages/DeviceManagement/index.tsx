@@ -10,6 +10,7 @@ import {
   Col,
   Tooltip,
   Modal,
+  Drawer,
   Form,
   message,
   Dropdown,
@@ -45,10 +46,13 @@ interface Device {
   currentStatus: '空闲' | '执行中' | '充电中' | '异常' | '交管中' | '避障' | '解包闸' | '急停';
   isOnline: boolean;
   relatedDevices: string[]; // 关联设备列表
-  currentMap: string;
-  batteryLevel: number;
-  ipPort: string;
+  relatedMap: string; // 关联地图
+  mapPosition: string; // 地图点位
+  ipAddress: string; // IP地址
+  port: string; // 端口
   macAddress: string;
+  isRelatedDevice: boolean; // 是否关联设备
+  batteryLevel: number;
   updateTime: string;
   updatedBy: string;
 }
@@ -66,6 +70,81 @@ const DeviceManagement: React.FC = () => {
   const [isEditingDeviceKey, setIsEditingDeviceKey] = useState(false);
   const [editingDeviceKeyRecord, setEditingDeviceKeyRecord] = useState<Device | null>(null);
   const [deviceKeyForm] = Form.useForm();
+  
+  // 监听表单字段变化
+  const productName = Form.useWatch('productName', form);
+  const deviceType = Form.useWatch('deviceType', form);
+  const isRelatedDevice = Form.useWatch('isRelatedDevice', form);
+  const relatedDeviceType = Form.useWatch('relatedDeviceType', form);
+
+  // 产品与设备类型的对应关系
+  const getDeviceTypeByProduct = (product: string): string => {
+    if (product?.includes('AGV') || product?.includes('AMR') || product?.includes('MCR')) {
+      return '机器人设备';
+    }
+    if (product?.includes('CNC') || product?.includes('生产线')) {
+      return '生产设备';
+    }
+    if (product?.includes('电梯') || product?.includes('升降机')) {
+      return '电梯设备';
+    }
+    if (product?.includes('门') || product?.includes('卷帘')) {
+      return '自动门设备';
+    }
+    if (product?.includes('虚拟')) {
+      return '虚拟设备';
+    }
+    return '其他设备';
+  };
+
+  // 根据设备类型筛选对应的产品
+  const getProductsByDeviceType = (deviceType: string): string[] => {
+    switch (deviceType) {
+      case '机器人设备':
+        return productNames.filter(product => 
+          product.includes('AGV') || product.includes('AMR') || product.includes('MCR')
+        );
+      case '生产设备':
+        return productNames.filter(product => 
+          product.includes('CNC') || product.includes('生产线')
+        );
+      case '电梯设备':
+        return productNames.filter(product => 
+          product.includes('电梯') || product.includes('升降机')
+        );
+      case '自动门设备':
+        return productNames.filter(product => 
+          product.includes('门') || product.includes('卷帘')
+        );
+      case '虚拟设备':
+        return productNames.filter(product => 
+          product.includes('虚拟')
+        );
+      case '其他设备':
+        return productNames.filter(product => 
+          !product.includes('AGV') && !product.includes('AMR') && !product.includes('MCR') &&
+          !product.includes('CNC') && !product.includes('生产线') &&
+          !product.includes('电梯') && !product.includes('升降机') &&
+          !product.includes('门') && !product.includes('卷帘') &&
+          !product.includes('虚拟')
+        );
+      default:
+        return productNames;
+    }
+  };
+
+  // 当选择产品时，自动设置对应的设备类型
+  React.useEffect(() => {
+    if (productName) {
+      const correspondingDeviceType = getDeviceTypeByProduct(productName);
+      form.setFieldsValue({ deviceType: correspondingDeviceType });
+    }
+  }, [productName, form]);
+
+  // 当设备类型改变时的处理逻辑（已禁用产品清空功能）
+  // React.useEffect(() => {
+  //   // 产品选择不再受设备类型限制，因此不需要清空产品选择
+  // }, [deviceType, form, editingDevice, selectedDeviceType]);
 
   // 模拟数据
   const [devices, setDevices] = useState<Device[]>([
@@ -79,9 +158,12 @@ const DeviceManagement: React.FC = () => {
       currentStatus: '执行中',
       isOnline: true,
       relatedDevices: ['AMR-002'],
-      currentMap: '仓库一层',
+      relatedMap: '仓库一层',
+      mapPosition: '点位1',
+      ipAddress: '192.168.1.101',
+      port: '8080',
+      isRelatedDevice: false,
       batteryLevel: 85,
-      ipPort: '192.168.1.101:8080',
       macAddress: '00:1B:44:11:3A:B7',
       updateTime: '2024-01-15 14:30:25',
       updatedBy: '张三',
@@ -96,9 +178,12 @@ const DeviceManagement: React.FC = () => {
       currentStatus: '充电中',
       isOnline: true,
       relatedDevices: ['AGV-001'],
-      currentMap: '生产车间',
+      relatedMap: '生产车间',
+      mapPosition: '点位2',
+      ipAddress: '192.168.1.102',
+      port: '8080',
+      isRelatedDevice: true,
       batteryLevel: 25,
-      ipPort: '192.168.1.102:8080',
       macAddress: '00:1B:44:11:3A:B8',
       updateTime: '2024-01-15 13:45:12',
       updatedBy: '李四',
@@ -113,9 +198,12 @@ const DeviceManagement: React.FC = () => {
       currentStatus: '异常',
       isOnline: false,
       relatedDevices: [],
-      currentMap: '装配线A',
+      relatedMap: '装配线A',
+      mapPosition: '点位3',
+      ipAddress: '192.168.1.103',
+      port: '8080',
+      isRelatedDevice: false,
       batteryLevel: 0,
-      ipPort: '192.168.1.103:8080',
       macAddress: '00:1B:44:11:3A:B9',
       updateTime: '2024-01-15 12:20:08',
       updatedBy: '王五',
@@ -130,9 +218,12 @@ const DeviceManagement: React.FC = () => {
       currentStatus: '空闲',
       isOnline: true,
       relatedDevices: ['AGV-005'],
-      currentMap: '加工车间',
+      relatedMap: '加工车间',
+      mapPosition: '点位4',
+      ipAddress: '192.168.1.104',
+      port: '8080',
+      isRelatedDevice: true,
       batteryLevel: 100,
-      ipPort: '192.168.1.104:8080',
       macAddress: '00:1B:44:11:3A:C0',
       updateTime: '2024-01-15 11:15:30',
       updatedBy: '赵六',
@@ -147,9 +238,12 @@ const DeviceManagement: React.FC = () => {
       currentStatus: '避障',
       isOnline: true,
       relatedDevices: ['CNC-004'],
-      currentMap: '仓库二层',
+      relatedMap: '仓库二层',
+      mapPosition: '点位5',
+      ipAddress: '192.168.1.105',
+      port: '8080',
+      isRelatedDevice: false,
       batteryLevel: 60,
-      ipPort: '192.168.1.105:8080',
       macAddress: '00:1B:44:11:3A:C1',
       updateTime: '2024-01-15 10:30:45',
       updatedBy: '孙七',
@@ -164,9 +258,12 @@ const DeviceManagement: React.FC = () => {
       currentStatus: '执行中',
       isOnline: true,
       relatedDevices: ['AGV-001', 'AMR-002', 'CNC-004'],
-      currentMap: '虚拟环境',
+      relatedMap: '虚拟环境',
+      mapPosition: '点位6',
+      ipAddress: '192.168.1.106',
+      port: '8080',
+      isRelatedDevice: true,
       batteryLevel: 100,
-      ipPort: '192.168.1.106:8080',
       macAddress: '00:1B:44:11:3A:C2',
       updateTime: '2024-01-15 15:20:30',
       updatedBy: '系统管理员',
@@ -181,16 +278,259 @@ const DeviceManagement: React.FC = () => {
       currentStatus: '空闲',
       isOnline: true,
       relatedDevices: ['AGV-005'],
-      currentMap: '监控中心',
+      relatedMap: '监控中心',
+      mapPosition: '点位7',
+      ipAddress: '192.168.1.107',
+      port: '8080',
+      isRelatedDevice: false,
       batteryLevel: 100,
-      ipPort: '192.168.1.107:8080',
       macAddress: '00:1B:44:11:3A:C3',
       updateTime: '2024-01-15 14:45:15',
       updatedBy: '系统管理员',
     },
+    {
+      id: '8',
+      deviceName: 'CNC-008',
+      deviceKey: 'cnc_008_key',
+      deviceType: '生产设备',
+      productName: 'CNC数控车床',
+      isEnabled: true,
+      currentStatus: '执行中',
+      isOnline: true,
+      relatedDevices: [],
+      relatedMap: '精密加工区',
+      mapPosition: '点位8',
+      ipAddress: '192.168.1.108',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:C4',
+      updateTime: '2024-01-15 16:10:20',
+      updatedBy: '操作员A',
+    },
+    {
+      id: '9',
+      deviceName: 'CNC-009',
+      deviceKey: 'cnc_009_key',
+      deviceType: '生产设备',
+      productName: 'CNC铣床',
+      isEnabled: false,
+      currentStatus: '异常',
+      isOnline: false,
+      relatedDevices: [],
+      relatedMap: '机械加工车间',
+      mapPosition: '点位9',
+      ipAddress: '192.168.1.109',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:C5',
+      updateTime: '2024-01-15 09:30:15',
+      updatedBy: '维修工程师',
+    },
+    {
+      id: '10',
+      deviceName: 'PROD-010',
+      deviceKey: 'prod_010_key',
+      deviceType: '生产设备',
+      productName: '自动化生产线',
+      isEnabled: true,
+      currentStatus: '空闲',
+      isOnline: true,
+      relatedDevices: ['AGV-001'],
+      relatedMap: '生产车间A',
+      mapPosition: '点位10',
+      ipAddress: '192.168.1.110',
+      port: '8080',
+      isRelatedDevice: true,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:C6',
+      updateTime: '2024-01-15 17:25:40',
+      updatedBy: '生产主管',
+    },
+    {
+      id: '11',
+      deviceName: 'ELEV-011',
+      deviceKey: 'elev_011_key',
+      deviceType: '电梯设备',
+      productName: '货运电梯A',
+      isEnabled: true,
+      currentStatus: '空闲',
+      isOnline: true,
+      relatedDevices: [],
+      relatedMap: '物流中心',
+      mapPosition: '1F-3F',
+      ipAddress: '192.168.1.111',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:C7',
+      updateTime: '2024-01-15 18:00:10',
+      updatedBy: '设备管理员',
+    },
+    {
+      id: '12',
+      deviceName: 'ELEV-012',
+      deviceKey: 'elev_012_key',
+      deviceType: '电梯设备',
+      productName: '客运电梯B',
+      isEnabled: true,
+      currentStatus: '执行中',
+      isOnline: true,
+      relatedDevices: [],
+      relatedMap: '办公大楼',
+      mapPosition: '1F-10F',
+      ipAddress: '192.168.1.112',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:C8',
+      updateTime: '2024-01-15 17:45:30',
+      updatedBy: '维保人员',
+    },
+    {
+      id: '13',
+      deviceName: 'ELEV-013',
+      deviceKey: 'elev_013_key',
+      deviceType: '电梯设备',
+      productName: '载货升降机',
+      isEnabled: false,
+      currentStatus: '异常',
+      isOnline: false,
+      relatedDevices: [],
+      relatedMap: '仓储区域',
+      mapPosition: '地下1F-2F',
+      ipAddress: '192.168.1.113',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:C9',
+      updateTime: '2024-01-15 08:20:45',
+      updatedBy: '安全检查员',
+    },
+    {
+      id: '14',
+      deviceName: 'OTHER-014',
+      deviceKey: 'other_014_key',
+      deviceType: '其他设备',
+      productName: '环境监测系统',
+      isEnabled: true,
+      currentStatus: '执行中',
+      isOnline: true,
+      relatedDevices: [],
+      relatedMap: '全厂区',
+      mapPosition: '监测点1-20',
+      ipAddress: '192.168.1.114',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:D0',
+      updateTime: '2024-01-15 19:10:25',
+      updatedBy: '环境工程师',
+    },
+    {
+      id: '15',
+      deviceName: 'OTHER-015',
+      deviceKey: 'other_015_key',
+      deviceType: '其他设备',
+      productName: '安防监控系统',
+      isEnabled: true,
+      currentStatus: '空闲',
+      isOnline: true,
+      relatedDevices: [],
+      relatedMap: '安防中心',
+      mapPosition: '摄像头1-50',
+      ipAddress: '192.168.1.115',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:D1',
+      updateTime: '2024-01-15 20:30:15',
+      updatedBy: '安保主管',
+    },
+    {
+      id: '16',
+      deviceName: 'OTHER-016',
+      deviceKey: 'other_016_key',
+      deviceType: '其他设备',
+      productName: '消防报警系统',
+      isEnabled: true,
+      currentStatus: '空闲',
+      isOnline: true,
+      relatedDevices: [],
+      relatedMap: '全厂区',
+      mapPosition: '报警点1-30',
+      ipAddress: '192.168.1.116',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:D2',
+      updateTime: '2024-01-15 21:15:50',
+      updatedBy: '消防管理员',
+    },
+    {
+      id: '17',
+      deviceName: 'DOOR-017',
+      deviceKey: 'door_017_key',
+      deviceType: '自动门设备',
+      productName: '感应玻璃门',
+      isEnabled: true,
+      currentStatus: '空闲',
+      isOnline: true,
+      relatedDevices: [],
+      relatedMap: '办公大楼入口',
+      mapPosition: '1F大厅',
+      ipAddress: '192.168.1.117',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:D3',
+      updateTime: '2024-01-15 22:00:30',
+      updatedBy: '门禁管理员',
+    },
+    {
+      id: '18',
+      deviceName: 'DOOR-018',
+      deviceKey: 'door_018_key',
+      deviceType: '自动门设备',
+      productName: '旋转门系统',
+      isEnabled: true,
+      currentStatus: '执行中',
+      isOnline: true,
+      relatedDevices: [],
+      relatedMap: '主入口大厅',
+      mapPosition: '正门',
+      ipAddress: '192.168.1.118',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:D4',
+      updateTime: '2024-01-15 21:45:20',
+      updatedBy: '安保人员',
+    },
+    {
+      id: '19',
+      deviceName: 'DOOR-019',
+      deviceKey: 'door_019_key',
+      deviceType: '自动门设备',
+      productName: '防火卷帘门',
+      isEnabled: false,
+      currentStatus: '异常',
+      isOnline: false,
+      relatedDevices: [],
+      relatedMap: '生产车间B',
+      mapPosition: '防火分区',
+      ipAddress: '192.168.1.119',
+      port: '8080',
+      isRelatedDevice: false,
+      batteryLevel: 0,
+      macAddress: '00:1B:44:11:3A:D5',
+      updateTime: '2024-01-15 07:30:10',
+      updatedBy: '消防维保',
+    },
   ]);
 
-  const productNames = ['AGV自动导引车', 'AMR自主移动机器人', 'MCR协作机器人', 'CNC加工中心', 'CNC数控车床', 'CNC铣床', '虚拟控制器', '虚拟监控系统'];
+  const productNames = ['AGV自动导引车', 'AMR自主移动机器人', 'MCR协作机器人', 'CNC加工中心', 'CNC数控车床', 'CNC铣床', '自动化生产线', '货运电梯A', '客运电梯B', '载货升降机', '感应玻璃门', '旋转门系统', '防火卷帘门', '环境监测系统', '安防监控系统', '消防报警系统', '虚拟控制器', '虚拟监控系统'];
   const deviceTypeOptions = ['机器人设备', '生产设备', '电梯设备', '自动门设备', '虚拟设备', '其他设备'];
   const statusOptions = ['空闲', '执行中', '充电中', '异常', '交管中', '避障', '解包闸', '急停'];
   const onlineStatusOptions = ['在线', '离线'];
@@ -226,6 +566,14 @@ const DeviceManagement: React.FC = () => {
   const handleAdd = () => {
     setEditingDevice(null);
     form.resetFields();
+    
+    // 如果当前选中了特定的设备类型标签页，则预设设备类型
+    if (selectedDeviceType && selectedDeviceType !== '') {
+      form.setFieldsValue({
+        deviceType: selectedDeviceType
+      });
+    }
+    
     setIsModalVisible(true);
   };
 
@@ -286,9 +634,10 @@ const DeviceManagement: React.FC = () => {
           <p><strong>是否启用：</strong>{record.isEnabled ? '启用' : '禁用'}</p>
           <p><strong>当前状态：</strong>{record.currentStatus}</p>
           <p><strong>是否在线：</strong>{record.isOnline ? '在线' : '离线'}</p>
-          <p><strong>当前地图：</strong>{record.currentMap}</p>
+          <p><strong>当前地图：</strong>{record.relatedMap}</p>
           <p><strong>当前电量：</strong>{record.batteryLevel}%</p>
-          <p><strong>IP/端口：</strong>{record.ipPort}</p>
+          <p><strong>IP地址：</strong>{record.ipAddress}</p>
+          <p><strong>端口：</strong>{record.port}</p>
           <p><strong>MAC地址：</strong>{record.macAddress}</p>
           <p><strong>更新时间：</strong>{record.updateTime}</p>
           <p><strong>更新人：</strong>{record.updatedBy}</p>
@@ -494,7 +843,9 @@ const DeviceManagement: React.FC = () => {
               >
                 {record.deviceName}
               </span>
-              {record.isOnline ? (
+              {record.deviceType === '虚拟设备' ? (
+                <span style={{ color: '#999', fontSize: '12px' }}>--</span>
+              ) : record.isOnline ? (
                 <Badge status="success" />
               ) : (
                 <Badge status="error" />
@@ -515,26 +866,32 @@ const DeviceManagement: React.FC = () => {
           </div>
           <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
             <span style={{ color: '#000000', fontWeight: '500' }}>{record.productName}</span>
-            {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && selectedDeviceType !== '虚拟设备' && (
+            {/* 只有机器人设备显示状态，其他设备类型显示"--" */}
+            {record.deviceType === '机器人设备' ? (
               <>
                 <span> | </span>
                 {getStatusTag(record.currentStatus)}
               </>
+            ) : (
+              <>
+                <span> | </span>
+                <span style={{ color: '#999' }}>--</span>
+              </>
             )}
           </div>
-          {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && selectedDeviceType !== '虚拟设备' && (
+          {record.deviceType === '机器人设备' && (
             <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
               <ThunderboltOutlined style={{ color: getBatteryColor(record.batteryLevel) }} />
               <span style={{ marginLeft: '4px' }}>{record.batteryLevel}%</span>
               <span style={{ marginLeft: '8px' }}>
-                <EnvironmentOutlined /> {record.currentMap}
+                <EnvironmentOutlined /> {record.relatedMap}
               </span>
             </div>
           )}
           {selectedDeviceType === '生产设备' && (
             <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
               <span style={{ marginLeft: '8px' }}>
-                <EnvironmentOutlined /> {record.currentMap}
+                <EnvironmentOutlined /> {record.relatedMap}
               </span>
             </div>
           )}
@@ -751,7 +1108,13 @@ const DeviceManagement: React.FC = () => {
       key: 'currentStatus',
       width: getColumnWidth(90),
       align: 'left',
-      render: (status: string) => getStatusTag(status),
+      render: (status: string, record: Device) => {
+        // 只有机器人设备显示状态，其他设备类型显示"--"
+        if (record.deviceType === '机器人设备') {
+          return getStatusTag(status);
+        }
+        return <span style={{ color: '#999' }}>--</span>;
+      },
     },
     {
       title: '是否在线',
@@ -759,18 +1122,24 @@ const DeviceManagement: React.FC = () => {
       key: 'isOnline',
       width: getColumnWidth(100),
       align: 'left',
-      render: (online: boolean) => (
-        <Space size={4}>
-          {online ? (
-            <WifiOutlined style={{ color: '#52c41a' }} />
-          ) : (
-            <DisconnectOutlined style={{ color: '#ff4d4f' }} />
-          )}
-          <Tag color={online ? 'success' : 'error'}>
-            {online ? '在线' : '离线'}
-          </Tag>
-        </Space>
-      ),
+      render: (online: boolean, record: Device) => {
+        // 虚拟设备显示"--"，其他设备显示在线状态
+        if (record.deviceType === '虚拟设备') {
+          return <span style={{ color: '#999' }}>--</span>;
+        }
+        return (
+          <Space size={4}>
+            {online ? (
+              <WifiOutlined style={{ color: '#52c41a' }} />
+            ) : (
+              <DisconnectOutlined style={{ color: '#ff4d4f' }} />
+            )}
+            <Tag color={online ? 'success' : 'error'}>
+              {online ? '在线' : '离线'}
+            </Tag>
+          </Space>
+        );
+      },
     },
     {
       title: '关联设备',
@@ -799,8 +1168,8 @@ const DeviceManagement: React.FC = () => {
     },
     {
       title: '当前地图',
-      dataIndex: 'currentMap',
-      key: 'currentMap',
+      dataIndex: 'relatedMap',
+      key: 'relatedMap',
       width: getColumnWidth(110),
       align: 'left',
       ellipsis: true,
@@ -820,27 +1189,32 @@ const DeviceManagement: React.FC = () => {
       width: getColumnWidth(90),
       align: 'left',
       sorter: (a: Device, b: Device) => a.batteryLevel - b.batteryLevel,
-      render: (level: number) => (
-        <Space size={4}>
-          <ThunderboltOutlined style={{ color: getBatteryColor(level) }} />
-          <span style={{ color: getBatteryColor(level), fontWeight: 500 }}>
-            {level}%
-          </span>
-        </Space>
-      ),
+      render: (level: number, record: Device) => {
+        // 只有机器人设备显示电量，其他设备类型显示"--"
+        if (record.deviceType === '机器人设备') {
+          return (
+            <Space size={4}>
+              <ThunderboltOutlined style={{ color: getBatteryColor(level) }} />
+              <span style={{ color: getBatteryColor(level), fontWeight: 500 }}>
+                {level}%
+              </span>
+            </Space>
+          );
+        }
+        return <span style={{ color: '#999' }}>--</span>;
+      },
     },
     {
       title: 'IP/端口',
-      dataIndex: 'ipPort',
-      key: 'ipPort',
+      dataIndex: 'ipAddress',
+      key: 'ipAddress',
       width: getColumnWidth(130),
       align: 'left',
-      render: (ipPort: string) => {
-        const [ip, port] = ipPort.split(':');
+      render: (_: string, record: Device) => {
         return (
           <div style={{ lineHeight: '1.2' }}>
-            <div style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: '500' }}>{ip}</div>
-            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#666' }}>{port}</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: '500' }}>{record.ipAddress}</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#666' }}>{record.port}</div>
           </div>
         );
       },
@@ -961,11 +1335,11 @@ const DeviceManagement: React.FC = () => {
       return false;
     }
     // 如果是电梯设备，隐藏当前电量、关联设备、当前状态和当前地图列
-    if (selectedDeviceType === '电梯设备' && (column.key === 'batteryLevel' || column.key === 'relatedDevices' || column.key === 'currentStatus' || column.key === 'currentMap')) {
+    if (selectedDeviceType === '电梯设备' && (column.key === 'batteryLevel' || column.key === 'relatedDevices' || column.key === 'currentStatus' || column.key === 'relatedMap')) {
       return false;
     }
     // 如果是自动门设备，隐藏当前电量、关联设备、当前状态和当前地图列
-    if (selectedDeviceType === '自动门设备' && (column.key === 'batteryLevel' || column.key === 'relatedDevices' || column.key === 'currentStatus' || column.key === 'currentMap')) {
+    if (selectedDeviceType === '自动门设备' && (column.key === 'batteryLevel' || column.key === 'relatedDevices' || column.key === 'currentStatus' || column.key === 'relatedMap')) {
       return false;
     }
     // 如果是其他设备，隐藏当前电量、关联设备和当前状态列
@@ -973,7 +1347,7 @@ const DeviceManagement: React.FC = () => {
       return false;
     }
     // 如果是虚拟设备，隐藏当前电量、是否在线、MAC地址、IP/端口和当前状态列
-    if (selectedDeviceType === '虚拟设备' && (column.key === 'batteryLevel' || column.key === 'isOnline' || column.key === 'macAddress' || column.key === 'ipPort' || column.key === 'currentStatus')) {
+    if (selectedDeviceType === '虚拟设备' && (column.key === 'batteryLevel' || column.key === 'isOnline' || column.key === 'macAddress' || column.key === 'ipAddress' || column.key === 'currentStatus')) {
       return false;
     }
     return true;
@@ -1034,7 +1408,6 @@ const DeviceManagement: React.FC = () => {
         <Tabs
           activeKey={selectedDeviceType || 'all'}
           onChange={(key) => setSelectedDeviceType(key === 'all' ? '' : key)}
-          style={{ marginBottom: '16px' }}
           items={[
             {
               key: 'all',
@@ -1069,13 +1442,14 @@ const DeviceManagement: React.FC = () => {
         
         {/* 搜索和筛选区域 */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          {/* 搜索框 */}
           <Col 
             xs={24} 
             sm={24} 
-            md={selectedDeviceType === '虚拟设备' ? 16 : 12} 
-            lg={selectedDeviceType === '虚拟设备' ? 14 : 10} 
-            xl={selectedDeviceType === '虚拟设备' ? (isLargeScreen ? 16 : 14) : (isLargeScreen ? 12 : 10)} 
-            xxl={selectedDeviceType === '虚拟设备' ? 18 : 14}
+            md={selectedDeviceType === '虚拟设备' ? 12 : 10} 
+            lg={selectedDeviceType === '虚拟设备' ? 12 : 10} 
+            xl={selectedDeviceType === '虚拟设备' ? 12 : 10} 
+            xxl={selectedDeviceType === '虚拟设备' ? 12 : 10}
           >
             <Input
               placeholder={selectedDeviceType ? `请输入${selectedDeviceType}名称搜索` : "请输入设备名称搜索"}
@@ -1086,13 +1460,15 @@ const DeviceManagement: React.FC = () => {
               size={isMobile ? 'large' : 'middle'}
             />
           </Col>
+          
+          {/* 所属产品筛选 */}
           <Col 
-            xs={selectedDeviceType === '虚拟设备' ? 12 : 8} 
-            sm={selectedDeviceType === '虚拟设备' ? 12 : 8} 
+            xs={12} 
+            sm={12} 
             md={selectedDeviceType === '虚拟设备' ? 4 : 4} 
             lg={selectedDeviceType === '虚拟设备' ? 4 : 4} 
-            xl={selectedDeviceType === '虚拟设备' ? (isLargeScreen ? 3 : 4) : (isLargeScreen ? 4 : 4)} 
-            xxl={selectedDeviceType === '虚拟设备' ? 3 : 4}
+            xl={selectedDeviceType === '虚拟设备' ? 4 : 4} 
+            xxl={selectedDeviceType === '虚拟设备' ? 4 : 4}
           >
             <Select
               placeholder="所属产品"
@@ -1109,10 +1485,17 @@ const DeviceManagement: React.FC = () => {
               ))}
             </Select>
           </Col>
-          {/* 设备状态过滤器已隐藏 */}
-          {/* 在虚拟设备Tab页面中隐藏在线状态过滤器 */}
+          
+          {/* 在线状态筛选 - 虚拟设备时隐藏 */}
           {selectedDeviceType !== '虚拟设备' && (
-            <Col xs={8} sm={8} md={4} lg={4} xl={isLargeScreen ? 3 : 4} xxl={3}>
+            <Col 
+              xs={12} 
+              sm={12} 
+              md={4} 
+              lg={4} 
+              xl={4} 
+              xxl={4}
+            >
               <Select
                 placeholder="在线状态"
                 value={selectedOnlineStatus}
@@ -1129,13 +1512,15 @@ const DeviceManagement: React.FC = () => {
               </Select>
             </Col>
           )}
+          
+          {/* 刷新按钮 */}
           <Col 
-            xs={selectedDeviceType === '虚拟设备' ? 6 : 4} 
-            sm={selectedDeviceType === '虚拟设备' ? 6 : 4} 
-            md={selectedDeviceType === '虚拟设备' ? 2 : 2} 
-            lg={selectedDeviceType === '虚拟设备' ? 3 : 3} 
-            xl={selectedDeviceType === '虚拟设备' ? (isLargeScreen ? 2 : 3) : (isLargeScreen ? 2 : 3)} 
-            xxl={selectedDeviceType === '虚拟设备' ? 2 : 2}
+            xs={12} 
+            sm={12} 
+            md={selectedDeviceType === '虚拟设备' ? 4 : 3} 
+            lg={selectedDeviceType === '虚拟设备' ? 4 : 3} 
+            xl={selectedDeviceType === '虚拟设备' ? 4 : 3} 
+            xxl={selectedDeviceType === '虚拟设备' ? 4 : 3}
           >
             <Button
               icon={<ReloadOutlined />}
@@ -1147,13 +1532,15 @@ const DeviceManagement: React.FC = () => {
               {isMobile ? '' : '刷新'}
             </Button>
           </Col>
+          
+          {/* 新增按钮 */}
           <Col 
-            xs={selectedDeviceType === '虚拟设备' ? 6 : 4} 
-            sm={selectedDeviceType === '虚拟设备' ? 6 : 4} 
-            md={selectedDeviceType === '虚拟设备' ? 2 : 2} 
-            lg={selectedDeviceType === '虚拟设备' ? 3 : 3} 
-            xl={selectedDeviceType === '虚拟设备' ? (isLargeScreen ? 2 : 3) : (isLargeScreen ? 2 : 3)} 
-            xxl={selectedDeviceType === '虚拟设备' ? 1 : 3}
+            xs={12} 
+            sm={12} 
+            md={selectedDeviceType === '虚拟设备' ? 4 : 3} 
+            lg={selectedDeviceType === '虚拟设备' ? 4 : 3} 
+            xl={selectedDeviceType === '虚拟设备' ? 4 : 3} 
+            xxl={selectedDeviceType === '虚拟设备' ? 4 : 3}
           >
             <Button
               type="primary"
@@ -1188,14 +1575,32 @@ const DeviceManagement: React.FC = () => {
         />
       </Card>
 
-      {/* 新增/编辑模态框 */}
-      <Modal
+      {/* 新增/编辑抽屉 */}
+      <Drawer
         title={editingDevice ? '编辑设备' : '新增设备'}
         open={isModalVisible}
-        onOk={handleModalOk}
-        onCancel={() => setIsModalVisible(false)}
-        confirmLoading={loading}
-        width={isLargeScreen ? 800 : isMobile ? '90vw' : 600}
+        onClose={() => setIsModalVisible(false)}
+        width="66.67vw"
+        placement="right"
+        footer={
+          <div style={{ 
+            textAlign: 'center',
+            padding: '16px 24px',
+            background: '#fff',
+            position: 'sticky',
+            bottom: 0,
+            zIndex: 1
+          }}>
+            <Space size={16}>
+              <Button size="large" onClick={() => setIsModalVisible(false)}>
+                取消
+              </Button>
+              <Button size="large" type="primary" onClick={handleModalOk} loading={loading}>
+                {editingDevice ? '更新' : '新增'}
+              </Button>
+            </Space>
+          </div>
+        }
       >
         <Form
           form={form}
@@ -1208,10 +1613,11 @@ const DeviceManagement: React.FC = () => {
                 name="deviceName"
                 rules={[
                   { required: true, message: '请输入设备名称' },
-                  { max: 50, message: '设备名称不能超过50个字符' },
+                  { max: 64, message: '设备名称最多输入64个字符' },
+                  { pattern: /^[^\s]*$/, message: '设备名称不支持空格' },
                 ]}
               >
-                <Input placeholder="请输入设备名称" />
+                <Input placeholder="请输入设备名称（最多64个字符，不支持空格）" maxLength={64} />
               </Form.Item>
             </Col>
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>
@@ -1219,11 +1625,11 @@ const DeviceManagement: React.FC = () => {
                 label="设备Key"
                 name="deviceKey"
                 rules={[
-                  { required: true, message: '请输入设备Key' },
-                  { pattern: /^[a-zA-Z0-9_]+$/, message: '设备Key只能包含字母、数字和下划线' },
+                  { max: 64, message: '设备Key最多输入64个字符' },
+                  { pattern: /^[a-zA-Z0-9_]*$/, message: '设备Key只能包含字母、数字和下划线' },
                 ]}
               >
-                <Input placeholder="请输入设备Key" />
+                <Input placeholder="请输入设备Key（非必填，系统可自动生成）" maxLength={64} />
               </Form.Item>
             </Col>
           </Row>
@@ -1245,17 +1651,24 @@ const DeviceManagement: React.FC = () => {
             </Col>
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
-                label="是否启用"
-                name="isEnabled"
-                rules={[{ required: true, message: '请选择是否启用' }]}
+                label="设备类型"
+                name="deviceType"
+                rules={[{ required: true, message: '请选择设备类型' }]}
               >
-                <Select placeholder="请选择是否启用">
-                  <Option value={true}>启用</Option>
-                  <Option value={false}>禁用</Option>
+                <Select 
+                  placeholder={deviceType ? `设备类型已固定为${deviceType}` : (selectedDeviceType ? "设备类型将根据标签页自动设置" : "设备类型将根据所属产品自动设置")}
+                  disabled={true}
+                >
+                  {deviceTypeOptions.map((type) => (
+                    <Option key={type} value={type}>
+                      {type}
+                    </Option>
+                  ))}
                 </Select>
               </Form.Item>
             </Col>
           </Row>
+
           <Row gutter={16}>
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
@@ -1288,37 +1701,60 @@ const DeviceManagement: React.FC = () => {
           <Row gutter={16}>
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
-                label="当前地图"
-                name="currentMap"
-                rules={[{ required: true, message: '请输入当前地图' }]}
+                label="关联地图"
+                name="relatedMap"
+                rules={[{ required: true, message: '请选择关联地图' }]}
               >
-                <Input placeholder="请输入当前地图" />
+                <Select placeholder="请选择关联地图">
+                  <Option value="地图1">地图1</Option>
+                  <Option value="地图2">地图2</Option>
+                  <Option value="地图3">地图3</Option>
+                </Select>
               </Form.Item>
             </Col>
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
-                label="当前电量(%)"
-                name="batteryLevel"
-                rules={[
-                  { required: true, message: '请输入当前电量' },
-                  { type: 'number', min: 0, max: 100, message: '电量范围为0-100' },
-                ]}
+                label="地图点位"
+                name="mapPosition"
+                rules={[{ required: true, message: '请选择地图点位' }]}
               >
-                <Input type="number" placeholder="请输入当前电量" min={0} max={100} />
+                <Select placeholder="请选择地图点位">
+                  <Option value="点位1">点位1</Option>
+                  <Option value="点位2">点位2</Option>
+                  <Option value="点位3">点位3</Option>
+                </Select>
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>
               <Form.Item
-                label="IP/端口"
-                name="ipPort"
-                rules={[{ required: true, message: '请输入IP/端口' }]}
+                label="IP地址"
+                name="ipAddress"
+                rules={[
+                  { required: true, message: '请输入IP地址' },
+                  { pattern: /^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$/, message: 'IP地址格式不正确' },
+                ]}
               >
-                <Input placeholder="请输入IP/端口，如：192.168.1.100:8080" />
+                <Input placeholder="请输入IP地址，如：192.168.1.100" />
               </Form.Item>
             </Col>
             <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="端口"
+                name="port"
+                rules={[
+                  { required: true, message: '请输入端口' },
+                  { pattern: /^([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$/, message: '端口范围为1-65535' },
+                ]}
+              >
+                <Input placeholder="请输入端口，如：8080" />
+              </Form.Item>
+            </Col>
+          </Row>
+          {/* MAC地址独占一行 */}
+          <Row gutter={16}>
+            <Col xs={24}>
               <Form.Item
                 label="MAC地址"
                 name="macAddress"
@@ -1331,8 +1767,77 @@ const DeviceManagement: React.FC = () => {
               </Form.Item>
             </Col>
           </Row>
+          
+          {/* 是否关联设备字段 - 仅在设备类型为虚拟设备时显示 */}
+          {deviceType === '虚拟设备' && (
+            <Row gutter={16}>
+              <Col xs={24}>
+                <Form.Item
+                  label="是否关联设备"
+                  name="isRelatedDevice"
+                  initialValue={false}
+                >
+                  <Select placeholder="请选择是否关联设备">
+                    <Option value={true}>是</Option>
+                    <Option value={false}>否</Option>
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+          )}
+          
+          {/* 关联设备类型和关联设备 - 仅在选择关联设备时显示 */}
+          {deviceType === '虚拟设备' && isRelatedDevice && (
+            <Row gutter={16}>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="关联设备类型"
+                  name="relatedDeviceType"
+                  rules={[{ required: true, message: '请选择关联设备类型' }]}
+                >
+                  <Select 
+                    placeholder="请选择要关联的设备类型"
+                    onChange={() => {
+                      // 清空关联设备选择
+                      form.setFieldsValue({ relatedDeviceId: undefined });
+                    }}
+                  >
+                    {deviceTypeOptions
+                      .filter(type => type !== '虚拟设备')
+                      .map(type => (
+                        <Option key={type} value={type}>
+                          {type}
+                        </Option>
+                      ))
+                    }
+                  </Select>
+                </Form.Item>
+              </Col>
+              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                <Form.Item
+                  label="关联设备"
+                  name="relatedDeviceId"
+                  rules={[{ required: relatedDeviceType, message: '请选择关联设备' }]}
+                >
+                  <Select 
+                    placeholder={relatedDeviceType ? `请选择要关联的${relatedDeviceType}` : '请先选择关联设备类型'}
+                    disabled={!relatedDeviceType}
+                  >
+                    {devices
+                      .filter(device => device.deviceType === relatedDeviceType)
+                      .map(device => (
+                        <Option key={device.id} value={device.id}>
+                          {device.deviceName}
+                        </Option>
+                      ))
+                    }
+                  </Select>
+                </Form.Item>
+              </Col>
+            </Row>
+          )}
         </Form>
-      </Modal>
+      </Drawer>
 
       {/* 设备Key编辑Modal */}
       <Modal
