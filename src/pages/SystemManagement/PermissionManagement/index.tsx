@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   Table,
@@ -12,6 +12,8 @@ import {
   message,
   Popconfirm,
   TreeSelect,
+  Row,
+  Col,
 } from 'antd';
 import {
   PlusOutlined,
@@ -42,6 +44,57 @@ const PermissionManagement: React.FC = () => {
   const [modalType, setModalType] = useState<'add' | 'edit' | 'view'>('add');
   const [currentPermission, setCurrentPermission] = useState<Permission | null>(null);
   const [form] = Form.useForm();
+  
+  // 屏幕尺寸检测
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1400);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      setIsLargeScreen(window.innerWidth >= 1400);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // 动态计算列宽
+  const getColumnWidth = (baseWidth: number) => {
+    if (isMobile) return baseWidth;
+    if (isLargeScreen) return Math.floor(baseWidth * 1.2);
+    return baseWidth;
+  };
+
+  // 根据列数调整列宽
+  const adjustColumnWidths = (columns: ColumnsType<Permission>, isMobile: boolean): ColumnsType<Permission> => {
+    if (isMobile) return columns;
+    
+    const columnCount = columns.length;
+    let widthMultiplier = 1;
+    
+    if (columnCount <= 5) {
+      widthMultiplier = 1.3;
+    } else if (columnCount <= 7) {
+      widthMultiplier = 1.1;
+    } else if (columnCount >= 10) {
+      widthMultiplier = 0.9;
+    }
+    
+    return columns.map((col: any) => ({
+      ...col,
+      width: col.width ? col.width * widthMultiplier : col.width
+    }));
+  };
+
+  // 获取表格配置
+  const getTableConfig = () => {
+    const scrollWidth = isMobile ? 'max-content' : isLargeScreen ? 1400 : 1200;
+    return {
+      scroll: { x: scrollWidth },
+      size: isMobile ? 'small' : 'middle' as const
+    };
+  };
 
   // 模拟权限数据
   const [permissions, setPermissions] = useState<Permission[]>([
@@ -168,13 +221,66 @@ const PermissionManagement: React.FC = () => {
     return options;
   };
 
-  const columns: ColumnsType<Permission & { level: number }> = [
+  // 移动端列配置
+  const mobileColumns: ColumnsType<Permission & { level: number }> = [
+    {
+      title: '权限信息',
+      key: 'permissionInfo',
+      render: (_: any, record: Permission & { level: number }) => (
+        <div style={{ paddingLeft: record.level * 10 }}>
+          <div style={{ fontWeight: 'bold' }}>{record.name}</div>
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+            <Tag color="blue" size="small">{record.code}</Tag>
+            <Tag color={record.type === 'menu' ? 'green' : record.type === 'button' ? 'blue' : 'orange'} size="small">
+              {record.type === 'menu' ? '菜单' : record.type === 'button' ? '按钮' : 'API'}
+            </Tag>
+          </div>
+          <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+            {record.description}
+          </div>
+          <div style={{ marginTop: '4px' }}>
+            <Tag color={record.status === 'active' ? 'success' : 'error'} size="small">
+              {record.status === 'active' ? '启用' : '禁用'}
+            </Tag>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 100,
+      render: (_: any, record: Permission & { level: number }) => (
+        <Space direction="vertical" size="small">
+          <Button
+            type="link"
+            size="small"
+            icon={<EyeOutlined />}
+            onClick={() => handleView(record)}
+          >
+            查看
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+          >
+            编辑
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  // 桌面端列配置
+  const desktopColumns: ColumnsType<Permission & { level: number }> = [
     {
       title: '权限名称',
       dataIndex: 'name',
       key: 'name',
-      width: 250,
-      render: (name: string, record) => (
+      width: getColumnWidth(250),
+      render: (name: string, record: Permission & { level: number }) => (
         <span style={{ paddingLeft: record.level * 20 }}>
           {name}
         </span>
@@ -184,14 +290,14 @@ const PermissionManagement: React.FC = () => {
       title: '权限编码',
       dataIndex: 'code',
       key: 'code',
-      width: 200,
+      width: getColumnWidth(200),
       render: (code: string) => <Tag color="blue">{code}</Tag>,
     },
     {
       title: '类型',
       dataIndex: 'type',
       key: 'type',
-      width: 100,
+      width: getColumnWidth(100),
       render: (type: string) => {
         const typeMap: Record<string, { color: string; text: string }> = {
           menu: { color: 'green', text: '菜单' },
@@ -206,7 +312,7 @@ const PermissionManagement: React.FC = () => {
       title: '路径',
       dataIndex: 'path',
       key: 'path',
-      width: 200,
+      width: getColumnWidth(200),
       render: (path: string) => path || '-',
     },
     {
@@ -219,7 +325,7 @@ const PermissionManagement: React.FC = () => {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      width: 100,
+      width: getColumnWidth(100),
       render: (status: string) => (
         <Tag color={status === 'active' ? 'success' : 'error'}>
           {status === 'active' ? '启用' : '禁用'}
@@ -230,14 +336,14 @@ const PermissionManagement: React.FC = () => {
       title: '创建时间',
       dataIndex: 'createTime',
       key: 'createTime',
-      width: 160,
+      width: getColumnWidth(160),
     },
     {
       title: '操作',
       key: 'action',
-      width: 180,
+      width: getColumnWidth(180),
       fixed: 'right',
-      render: (_, record) => (
+      render: (_: any, record: Permission & { level: number }) => (
         <Space size="small">
           <Button
             type="link"
@@ -411,39 +517,62 @@ const PermissionManagement: React.FC = () => {
   return (
     <div className="space-y-4">
       <Card>
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center space-x-4">
+        {/* 搜索和筛选区域 */}
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          <Col 
+            xs={24} 
+            sm={24} 
+            md={16} 
+            lg={14} 
+            xl={isLargeScreen ? 16 : 14} 
+            xxl={18}
+          >
             <Input
               placeholder="搜索权限名称、编码或描述"
               prefix={<SearchOutlined />}
               value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              style={{ width: 300 }}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
               allowClear
+              size={isMobile ? 'large' : 'middle'}
             />
-          </div>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={handleAdd}
+          </Col>
+          <Col 
+            xs={24} 
+            sm={24} 
+            md={8} 
+            lg={10} 
+            xl={isLargeScreen ? 8 : 10} 
+            xxl={6}
           >
-            新增权限
-          </Button>
-        </div>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+              size={isMobile ? 'large' : 'middle'}
+              style={{ width: '100%' }}
+            >
+              {isMobile ? '新增' : '新增权限'}
+            </Button>
+          </Col>
+        </Row>
 
         <Table
-          columns={columns}
+          columns={isMobile ? mobileColumns : adjustColumnWidths(desktopColumns, isMobile)}
           dataSource={filteredPermissions}
           rowKey="id"
           loading={loading}
-          scroll={{ x: 1200 }}
+          {...getTableConfig()}
           pagination={{
             total: filteredPermissions.length,
-            pageSize: 20,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total, range) =>
+            pageSize: isMobile ? 10 : 20,
+            showSizeChanger: !isMobile,
+            showQuickJumper: !isMobile,
+            showTotal: isMobile ? undefined : (total: number, range: [number, number]) =>
               `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+            simple: isMobile,
+            size: isMobile ? 'small' : 'default',
+            showLessItems: isMobile,
+            pageSizeOptions: isMobile ? ['5', '10'] : ['10', '20', '50', '100'],
           }}
         />
       </Card>

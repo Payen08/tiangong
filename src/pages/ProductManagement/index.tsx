@@ -836,6 +836,52 @@ const ProductManagement: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // 动态列宽计算函数
+  const getColumnWidth = (baseWidth: number) => {
+    if (isMobile) return baseWidth * 0.8;
+    if (isLargeScreen) return baseWidth * 1.2;
+    return baseWidth;
+  };
+
+  // 根据列数调整列宽
+  const adjustColumnWidths = (columns: ColumnsType<Product>, isMobile: boolean): ColumnsType<Product> => {
+    if (isMobile) return columns;
+    
+    const columnCount = columns.length;
+    let widthMultiplier = 1;
+    
+    if (columnCount <= 5) {
+      widthMultiplier = 1.3;
+    } else if (columnCount <= 7) {
+      widthMultiplier = 1.1;
+    } else if (columnCount >= 10) {
+      widthMultiplier = 0.9;
+    }
+    
+    return columns.map((col: any) => ({
+      ...col,
+      width: col.width ? col.width * widthMultiplier : col.width
+    }));
+  };
+
+  // 动态表格配置
+  const getTableConfig = (isMobile: boolean, isLargeScreen: boolean, columnCount: number) => {
+    let scrollWidth: number | string = 1000;
+    
+    if (isMobile) {
+      scrollWidth = 'max-content';
+    } else if (isLargeScreen) {
+      scrollWidth = Math.max(1200, columnCount * 150);
+    } else {
+      scrollWidth = Math.max(1000, columnCount * 120);
+    }
+    
+    return {
+      scroll: { x: scrollWidth },
+      size: 'small' as const
+    };
+  };
+
   // 移动端列配置
   const mobileColumns: ColumnsType<Product> = [
     {
@@ -914,12 +960,12 @@ const ProductManagement: React.FC = () => {
   ];
 
   // 桌面端列配置
-  const desktopColumns: ColumnsType<Product> = [
+  const filteredColumns: ColumnsType<Product> = [
     {
       title: '产品名称',
       dataIndex: 'productName',
       key: 'productName',
-      width: isLargeScreen ? 200 : 150,
+      width: getColumnWidth(150),
       align: 'left',
       ellipsis: true,
       fixed: 'left',
@@ -938,7 +984,7 @@ const ProductManagement: React.FC = () => {
       title: '产品Key',
       dataIndex: 'productKey',
       key: 'productKey',
-      width: isLargeScreen ? 180 : 140,
+      width: getColumnWidth(140),
       align: 'left',
       ellipsis: true,
       render: (text: string) => (
@@ -981,7 +1027,7 @@ const ProductManagement: React.FC = () => {
       title: '类型',
       dataIndex: 'productType',
       key: 'productType',
-      width: isLargeScreen ? 120 : 100,
+      width: getColumnWidth(100),
       align: 'left',
       ellipsis: true,
       render: (type: string) => (
@@ -994,7 +1040,7 @@ const ProductManagement: React.FC = () => {
       title: '协议',
       dataIndex: 'protocol',
       key: 'protocol',
-      width: isLargeScreen ? 100 : 80,
+      width: getColumnWidth(80),
       align: 'left',
       ellipsis: true,
       render: (protocol: string) => (
@@ -1007,7 +1053,7 @@ const ProductManagement: React.FC = () => {
       title: '设备数',
       dataIndex: 'deviceCount',
       key: 'deviceCount',
-      width: isLargeScreen ? 100 : 80,
+      width: getColumnWidth(80),
       align: 'center',
       sorter: (a: Product, b: Product) => a.deviceCount - b.deviceCount,
       render: (count: number) => (
@@ -1020,7 +1066,7 @@ const ProductManagement: React.FC = () => {
       title: '更新时间',
       dataIndex: 'updateTime',
       key: 'updateTime',
-      width: isLargeScreen ? 180 : 140,
+      width: getColumnWidth(140),
       align: 'left',
       ellipsis: true,
       sorter: (a: Product, b: Product) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
@@ -1042,7 +1088,7 @@ const ProductManagement: React.FC = () => {
       title: '更新人',
       dataIndex: 'updatedBy',
       key: 'updatedBy',
-      width: isLargeScreen ? 100 : 80,
+      width: getColumnWidth(80),
       align: 'left',
       ellipsis: true,
       render: (user: string) => (
@@ -1054,7 +1100,7 @@ const ProductManagement: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: isLargeScreen ? 140 : 110,
+      width: getColumnWidth(110),
       align: 'right',
       fixed: 'right',
       render: (_: any, record: Product) => {
@@ -1087,6 +1133,12 @@ const ProductManagement: React.FC = () => {
       },
     },
   ];
+
+  // 应用动态列宽调整
+  const desktopColumns = adjustColumnWidths(filteredColumns, isMobile);
+
+  // 获取表格配置
+  const tableConfig = getTableConfig(isMobile, isLargeScreen, desktopColumns.length);
 
   return (
     <div style={{ background: 'transparent' }}>
@@ -1158,8 +1210,8 @@ const ProductManagement: React.FC = () => {
             showLessItems: !isLargeScreen,
             pageSizeOptions: isLargeScreen ? ['10', '15', '20', '50'] : ['10', '20', '50'],
           }}
-          scroll={isMobile ? { x: 'max-content' } : isLargeScreen ? { x: 1200 } : { x: 1000 }}
-          size={isMobile ? 'small' : 'middle'}
+          scroll={tableConfig.scroll}
+          size={tableConfig.size}
         />
       </Card>
 

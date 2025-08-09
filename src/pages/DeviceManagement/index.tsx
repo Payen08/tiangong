@@ -203,10 +203,11 @@ const DeviceManagement: React.FC = () => {
         .includes(searchText.toLowerCase());
       const matchesProduct = !selectedProduct || device.productName === selectedProduct;
       const matchesDeviceType = !selectedDeviceType || device.deviceType === selectedDeviceType;
-      const matchesStatus = !selectedStatus || device.currentStatus === selectedStatus;
-      const matchesOnlineStatus = !selectedOnlineStatus || 
+      // 设备状态过滤已移除
+      // 在虚拟设备Tab页面中不应用在线状态过滤
+      const matchesOnlineStatus = selectedDeviceType === '虚拟设备' || !selectedOnlineStatus || 
         (selectedOnlineStatus === '在线' ? device.isOnline : !device.isOnline);
-      return matchesSearch && matchesProduct && matchesDeviceType && matchesStatus && matchesOnlineStatus;
+      return matchesSearch && matchesProduct && matchesDeviceType && matchesOnlineStatus;
     })
     .sort((a, b) => {
       // 按更新时间倒序排序，最新的在前面
@@ -1029,90 +1030,6 @@ const DeviceManagement: React.FC = () => {
   return (
     <div style={{ background: 'transparent' }}>
       <Card style={{ marginBottom: 16 }}>
-        {/* 搜索和筛选区域 */}
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col xs={24} sm={24} md={8} lg={6} xl={isLargeScreen ? 8 : 6} xxl={10}>
-            <Input
-              placeholder="请输入设备名称搜索"
-              prefix={<SearchOutlined />}
-              value={searchText}
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
-              allowClear
-              size={isMobile ? 'large' : 'middle'}
-            />
-          </Col>
-          <Col xs={8} sm={8} md={4} lg={4} xl={isLargeScreen ? 3 : 4} xxl={3}>
-            <Select
-              placeholder="所属产品"
-              value={selectedProduct}
-              onChange={setSelectedProduct}
-              allowClear
-              style={{ width: '100%' }}
-              size={isMobile ? 'large' : 'middle'}
-            >
-              {productNames.map((product) => (
-                <Option key={product} value={product}>
-                  {product}
-                </Option>
-              ))}
-            </Select>
-          </Col>
-          <Col xs={8} sm={8} md={4} lg={4} xl={isLargeScreen ? 3 : 4} xxl={3}>
-            <Select
-              placeholder="设备状态"
-              value={selectedStatus}
-              onChange={setSelectedStatus}
-              allowClear
-              style={{ width: '100%' }}
-              size={isMobile ? 'large' : 'middle'}
-            >
-              {statusOptions.map((status) => (
-                <Option key={status} value={status}>
-                  {status}
-                </Option>
-              ))}
-            </Select>
-          </Col>
-          <Col xs={8} sm={8} md={4} lg={4} xl={isLargeScreen ? 3 : 4} xxl={3}>
-            <Select
-              placeholder="在线状态"
-              value={selectedOnlineStatus}
-              onChange={setSelectedOnlineStatus}
-              allowClear
-              style={{ width: '100%' }}
-              size={isMobile ? 'large' : 'middle'}
-            >
-              {onlineStatusOptions.map((status) => (
-                <Option key={status} value={status}>
-                  {status}
-                </Option>
-              ))}
-            </Select>
-          </Col>
-          <Col xs={6} sm={6} md={2} lg={3} xl={isLargeScreen ? 2 : 3} xxl={2}>
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={handleRefresh}
-              loading={loading}
-              size={isMobile ? 'large' : 'middle'}
-              style={{ width: '100%' }}
-            >
-              {isMobile ? '' : '刷新'}
-            </Button>
-          </Col>
-          <Col xs={6} sm={6} md={4} lg={3} xl={isLargeScreen ? 3 : 3} xxl={3}>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleAdd}
-              size={isMobile ? 'large' : 'middle'}
-              style={{ width: '100%' }}
-            >
-              {isMobile ? '新增' : '新增设备'}
-            </Button>
-          </Col>
-        </Row>
-        
         {/* 设备类型Tab切换 */}
         <Tabs
           activeKey={selectedDeviceType || 'all'}
@@ -1149,6 +1066,106 @@ const DeviceManagement: React.FC = () => {
             },
           ]}
         />
+        
+        {/* 搜索和筛选区域 */}
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+          <Col 
+            xs={24} 
+            sm={24} 
+            md={selectedDeviceType === '虚拟设备' ? 16 : 12} 
+            lg={selectedDeviceType === '虚拟设备' ? 14 : 10} 
+            xl={selectedDeviceType === '虚拟设备' ? (isLargeScreen ? 16 : 14) : (isLargeScreen ? 12 : 10)} 
+            xxl={selectedDeviceType === '虚拟设备' ? 18 : 14}
+          >
+            <Input
+              placeholder={selectedDeviceType ? `请输入${selectedDeviceType}名称搜索` : "请输入设备名称搜索"}
+              prefix={<SearchOutlined />}
+              value={searchText}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
+              allowClear
+              size={isMobile ? 'large' : 'middle'}
+            />
+          </Col>
+          <Col 
+            xs={selectedDeviceType === '虚拟设备' ? 12 : 8} 
+            sm={selectedDeviceType === '虚拟设备' ? 12 : 8} 
+            md={selectedDeviceType === '虚拟设备' ? 4 : 4} 
+            lg={selectedDeviceType === '虚拟设备' ? 4 : 4} 
+            xl={selectedDeviceType === '虚拟设备' ? (isLargeScreen ? 3 : 4) : (isLargeScreen ? 4 : 4)} 
+            xxl={selectedDeviceType === '虚拟设备' ? 3 : 4}
+          >
+            <Select
+              placeholder="所属产品"
+              value={selectedProduct}
+              onChange={setSelectedProduct}
+              allowClear
+              style={{ width: '100%' }}
+              size={isMobile ? 'large' : 'middle'}
+            >
+              {productNames.map((product) => (
+                <Option key={product} value={product}>
+                  {product}
+                </Option>
+              ))}
+            </Select>
+          </Col>
+          {/* 设备状态过滤器已隐藏 */}
+          {/* 在虚拟设备Tab页面中隐藏在线状态过滤器 */}
+          {selectedDeviceType !== '虚拟设备' && (
+            <Col xs={8} sm={8} md={4} lg={4} xl={isLargeScreen ? 3 : 4} xxl={3}>
+              <Select
+                placeholder="在线状态"
+                value={selectedOnlineStatus}
+                onChange={setSelectedOnlineStatus}
+                allowClear
+                style={{ width: '100%' }}
+                size={isMobile ? 'large' : 'middle'}
+              >
+                {onlineStatusOptions.map((status) => (
+                  <Option key={status} value={status}>
+                    {status}
+                  </Option>
+                ))}
+              </Select>
+            </Col>
+          )}
+          <Col 
+            xs={selectedDeviceType === '虚拟设备' ? 6 : 4} 
+            sm={selectedDeviceType === '虚拟设备' ? 6 : 4} 
+            md={selectedDeviceType === '虚拟设备' ? 2 : 2} 
+            lg={selectedDeviceType === '虚拟设备' ? 3 : 3} 
+            xl={selectedDeviceType === '虚拟设备' ? (isLargeScreen ? 2 : 3) : (isLargeScreen ? 2 : 3)} 
+            xxl={selectedDeviceType === '虚拟设备' ? 2 : 2}
+          >
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={handleRefresh}
+              loading={loading}
+              size={isMobile ? 'large' : 'middle'}
+              style={{ width: '100%' }}
+            >
+              {isMobile ? '' : '刷新'}
+            </Button>
+          </Col>
+          <Col 
+            xs={selectedDeviceType === '虚拟设备' ? 6 : 4} 
+            sm={selectedDeviceType === '虚拟设备' ? 6 : 4} 
+            md={selectedDeviceType === '虚拟设备' ? 2 : 2} 
+            lg={selectedDeviceType === '虚拟设备' ? 3 : 3} 
+            xl={selectedDeviceType === '虚拟设备' ? (isLargeScreen ? 2 : 3) : (isLargeScreen ? 2 : 3)} 
+            xxl={selectedDeviceType === '虚拟设备' ? 1 : 3}
+          >
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+              size={isMobile ? 'large' : 'middle'}
+              style={{ width: '100%' }}
+            >
+              {isMobile ? '新增' : '新增设备'}
+            </Button>
+          </Col>
+        </Row>
         
         <Table
           columns={isMobile ? mobileColumns : desktopColumns}
