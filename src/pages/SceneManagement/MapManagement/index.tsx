@@ -389,18 +389,32 @@ const MapManagement: React.FC = () => {
     <div style={{ background: 'transparent' }}>
       <Card 
         title="地图管理" 
-        style={{ height: 'calc(100vh - 120px)' }}
-        bodyStyle={{ padding: 16, height: 'calc(100% - 57px)' }}
+        style={{ 
+          height: isSmallScreen ? 'auto' : 'calc(100vh - 120px)',
+          minHeight: isSmallScreen ? 'calc(100vh - 120px)' : 'auto'
+        }}
+        bodyStyle={{ 
+          padding: 16, 
+          height: isSmallScreen ? 'auto' : 'calc(100% - 57px)'
+        }}
       >
-        <Row gutter={16} style={{ height: '100%' }}>
+        <Row gutter={16} style={{ height: isSmallScreen ? 'auto' : '100%' }}>
           {/* 左侧地图列表 */}
-          <Col xs={24} lg={8} style={{ height: '100%' }}>
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Col xs={24} lg={8} style={{ height: isSmallScreen ? 'auto' : '100%' }}>
+            <div style={{ 
+              height: isSmallScreen ? 'auto' : '100%', 
+              display: 'flex', 
+              flexDirection: 'column' 
+            }}>
               <Title level={5} style={{ margin: '0 0 12px 0', color: '#666' }}>地图列表</Title>
               <Card
                 size="small"
-                bodyStyle={{ padding: 0, flex: 1, overflow: 'auto' }}
-                style={{ flex: 1 }}
+                bodyStyle={{ 
+                  padding: 0, 
+                  flex: isSmallScreen ? 'none' : 1, 
+                  overflow: isSmallScreen ? 'visible' : 'auto'
+                }}
+                style={{ flex: isSmallScreen ? 'none' : 1 }}
               >
                 <Table
                   columns={columns}
