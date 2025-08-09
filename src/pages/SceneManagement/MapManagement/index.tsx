@@ -55,6 +55,17 @@ interface MapFile {
 const MapManagement: React.FC = () => {
   const [selectedMap, setSelectedMap] = useState<MapData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowWidth(window.innerWidth);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // 模拟地图数据
   const mapData: MapData[] = [
@@ -315,26 +326,44 @@ const MapManagement: React.FC = () => {
         style={{ height: 'calc(100vh - 200px)' }}
         bodyStyle={{ padding: 16, height: 'calc(100% - 57px)' }}
       >
-        <Row gutter={16} style={{ height: '100%' }}>
+        <Row gutter={[16, 16]} style={{ height: '100%' }}>
           {/* 左侧地图列表 */}
-          <Col xs={24} lg={8} style={{ height: '100%' }}>
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Col 
+            xs={24} 
+            lg={8} 
+            style={{ 
+              height: windowWidth < 992 ? 'auto' : '100%',
+              minHeight: windowWidth < 992 ? '300px' : 'auto'
+            }}
+          >
+            <div style={{ 
+              height: windowWidth < 992 ? 'auto' : '100%', 
+              display: 'flex', 
+              flexDirection: 'column' 
+            }}>
               <Title level={5} style={{ margin: '0 0 12px 0', color: '#666' }}>地图列表</Title>
               <Card
                 size="small"
-                bodyStyle={{ padding: 0, flex: 1, overflow: 'auto' }}
-                style={{ flex: 1 }}
+                bodyStyle={{ 
+                  padding: 0, 
+                  flex: windowWidth < 992 ? 'none' : 1, 
+                  overflow: 'auto',
+                  minHeight: windowWidth < 992 ? '250px' : 'auto'
+                }}
+                style={{ flex: windowWidth < 992 ? 'none' : 1 }}
               >
                 <Table
                   columns={columns}
                   dataSource={mapData}
                   rowKey="id"
                   pagination={{
-                    pageSize: 10,
-                    showSizeChanger: true,
-                    showQuickJumper: true,
-                    showTotal: (total: number, range: [number, number]) =>
-                      `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+                    pageSize: windowWidth < 992 ? 5 : 10,
+                    showSizeChanger: windowWidth >= 992,
+                    showQuickJumper: windowWidth >= 992,
+                    showTotal: windowWidth >= 992 ? 
+                      (total: number, range: [number, number]) =>
+                        `第 ${range[0]}-${range[1]} 条/共 ${total} 条` : undefined,
+                    simple: windowWidth < 992
                   }}
                   onRow={(record: MapData) => ({
                     onClick: () => handleRowClick(record),
@@ -345,6 +374,7 @@ const MapManagement: React.FC = () => {
                     },
                   })}
                   size="small"
+                  scroll={{ x: windowWidth < 992 ? 300 : undefined }}
                   style={{
                     '--ant-table-padding-horizontal': '8px',
                   } as React.CSSProperties}
@@ -354,18 +384,34 @@ const MapManagement: React.FC = () => {
           </Col>
 
           {/* 右侧地图文件 */}
-          <Col xs={24} lg={16} style={{ height: '100%' }}>
-            <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+          <Col 
+            xs={24} 
+            lg={16} 
+            style={{ 
+              height: windowWidth < 992 ? 'auto' : '100%',
+              minHeight: windowWidth < 992 ? '400px' : 'auto'
+            }}
+          >
+            <div style={{ 
+              height: windowWidth < 992 ? 'auto' : '100%', 
+              display: 'flex', 
+              flexDirection: 'column' 
+            }}>
               <Title level={5} style={{ margin: '0 0 12px 0', color: '#666' }}>地图文件</Title>
               {selectedMap ? (
                 <Card
                   size="small"
-                  bodyStyle={{ padding: 16, flex: 1, overflow: 'auto' }}
-                  style={{ flex: 1 }}
+                  bodyStyle={{ 
+                    padding: 16, 
+                    flex: windowWidth < 992 ? 'none' : 1, 
+                    overflow: 'auto',
+                    minHeight: windowWidth < 992 ? '350px' : 'auto'
+                  }}
+                  style={{ flex: windowWidth < 992 ? 'none' : 1 }}
                 >
                   <Row gutter={[16, 16]}>
                     {getMapFiles(selectedMap.id).map((file) => (
-                      <Col xs={24} sm={12} lg={8} xl={6} key={file.id}>
+                      <Col xs={12} sm={12} lg={8} xl={6} key={file.id}>
                         <Card
                           size="small"
                           hoverable
@@ -374,13 +420,29 @@ const MapManagement: React.FC = () => {
                               alt={file.name}
                               src={file.thumbnail}
                               style={{
-                                height: 120,
+                                height: windowWidth < 576 ? 80 : 120,
                                 objectFit: 'cover',
                                 backgroundColor: '#f5f5f5',
                               }}
                             />
                           }
-                          actions={[
+                          actions={windowWidth < 576 ? [
+                            <DownloadOutlined
+                              key="download"
+                              onClick={() => handleDownload(file)}
+                              title="下载"
+                            />,
+                            <DeleteOutlined
+                              key="delete"
+                              onClick={() => handleDeleteFile(file)}
+                              title="删除"
+                            />,
+                            <EyeOutlined
+                              key="details"
+                              onClick={() => handleViewDetails(file)}
+                              title="详情"
+                            />,
+                          ] : [
                             <DownloadOutlined
                               key="download"
                               onClick={() => handleDownload(file)}
@@ -411,7 +473,13 @@ const MapManagement: React.FC = () => {
                           <Card.Meta
                             title={
                               <div>
-                                <div style={{ marginBottom: 4 }}>{file.name}</div>
+                                <div style={{ 
+                                  marginBottom: 4,
+                                  fontSize: windowWidth < 576 ? '12px' : '14px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
+                                }}>{file.name}</div>
                               </div>
                             }
                             description={null}
@@ -428,14 +496,21 @@ const MapManagement: React.FC = () => {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flex: 1,
-                    minHeight: '200px'
+                    flex: windowWidth < 992 ? 'none' : 1,
+                    minHeight: windowWidth < 992 ? '200px' : '200px'
                   }}
-                  style={{ flex: 1 }}
+                  style={{ flex: windowWidth < 992 ? 'none' : 1 }}
                 >
                   <div style={{ textAlign: 'center' }}>
-                    <FileImageOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
-                    <div style={{ marginTop: 16, color: '#999' }}>
+                    <FileImageOutlined style={{ 
+                      fontSize: windowWidth < 576 ? 32 : 48, 
+                      color: '#d9d9d9' 
+                    }} />
+                    <div style={{ 
+                      marginTop: 16, 
+                      color: '#999',
+                      fontSize: windowWidth < 576 ? '12px' : '14px'
+                    }}>
                       请从左侧列表选择一个地图查看文件
                     </div>
                   </div>
