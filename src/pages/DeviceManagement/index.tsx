@@ -601,13 +601,48 @@ const DeviceManagement: React.FC = () => {
     },
   ];
 
+  // 根据显示列数动态计算列宽
+  const getColumnWidth = (baseWidth: number) => {
+    if (isMobile) return baseWidth;
+    return isLargeScreen ? baseWidth + 20 : baseWidth;
+  };
+
+  // 根据实际显示列数动态调整列宽
+  const adjustColumnWidths = (columns: any[], actualColumnCount: number) => {
+    return columns.map(column => {
+      if (column.width && typeof column.width === 'number') {
+        let widthFactor = 1;
+        
+        // 根据实际列数调整宽度系数
+        if (actualColumnCount <= 6) {
+          widthFactor = 1.4; // 列数少时，列宽可以更宽
+        } else if (actualColumnCount <= 8) {
+          widthFactor = 1.2;
+        } else if (actualColumnCount <= 10) {
+          widthFactor = 1.1;
+        } else if (actualColumnCount <= 12) {
+          widthFactor = 1.0;
+        } else {
+          widthFactor = 0.9; // 列数多时，列宽需要压缩
+        }
+        
+        const adjustedWidth = Math.round(column.width * widthFactor);
+        return {
+          ...column,
+          width: adjustedWidth
+        };
+      }
+      return column;
+    });
+  };
+
   // 桌面端列配置
   const allDesktopColumns: ColumnsType<Device> = [
     {
       title: '设备名称',
       dataIndex: 'deviceName',
       key: 'deviceName',
-      width: isLargeScreen ? 140 : 120,
+      width: getColumnWidth(120),
       align: 'left',
       ellipsis: true,
       fixed: 'left',
@@ -626,7 +661,7 @@ const DeviceManagement: React.FC = () => {
       title: '设备Key',
       dataIndex: 'deviceKey',
       key: 'deviceKey',
-      width: isLargeScreen ? 170 : 140,
+      width: getColumnWidth(150),
       align: 'left',
       ellipsis: true,
       render: (text: string, record: Device) => (
@@ -678,7 +713,7 @@ const DeviceManagement: React.FC = () => {
       title: '设备类型',
       dataIndex: 'deviceType',
       key: 'deviceType',
-      width: isLargeScreen ? 110 : 100,
+      width: getColumnWidth(100),
       align: 'left',
       render: (deviceType: string) => (
         <span style={{ color: '#000000' }}>{deviceType}</span>
@@ -688,7 +723,7 @@ const DeviceManagement: React.FC = () => {
       title: '所属产品',
       dataIndex: 'productName',
       key: 'productName',
-      width: isLargeScreen ? 130 : 110,
+      width: getColumnWidth(120),
       align: 'left',
       ellipsis: true,
       render: (text: string) => (
@@ -701,7 +736,7 @@ const DeviceManagement: React.FC = () => {
       title: '是否启用',
       dataIndex: 'isEnabled',
       key: 'isEnabled',
-      width: 90,
+      width: getColumnWidth(90),
       align: 'left',
       render: (enabled: boolean) => (
         <Tag color={enabled ? 'success' : 'error'}>
@@ -713,7 +748,7 @@ const DeviceManagement: React.FC = () => {
       title: '当前状态',
       dataIndex: 'currentStatus',
       key: 'currentStatus',
-      width: 90,
+      width: getColumnWidth(90),
       align: 'left',
       render: (status: string) => getStatusTag(status),
     },
@@ -721,7 +756,7 @@ const DeviceManagement: React.FC = () => {
       title: '是否在线',
       dataIndex: 'isOnline',
       key: 'isOnline',
-      width: 110,
+      width: getColumnWidth(100),
       align: 'left',
       render: (online: boolean) => (
         <Space size={4}>
@@ -740,7 +775,7 @@ const DeviceManagement: React.FC = () => {
       title: '关联设备',
       dataIndex: 'relatedDevices',
       key: 'relatedDevices',
-      width: isLargeScreen ? 150 : 130,
+      width: getColumnWidth(140),
       align: 'left',
       ellipsis: true,
       render: (relatedDevices: string[], record: Device) => (
@@ -765,7 +800,7 @@ const DeviceManagement: React.FC = () => {
       title: '当前地图',
       dataIndex: 'currentMap',
       key: 'currentMap',
-      width: isLargeScreen ? 110 : 100,
+      width: getColumnWidth(110),
       align: 'left',
       ellipsis: true,
       render: (map: string) => (
@@ -781,7 +816,7 @@ const DeviceManagement: React.FC = () => {
       title: '当前电量',
       dataIndex: 'batteryLevel',
       key: 'batteryLevel',
-      width: 90,
+      width: getColumnWidth(90),
       align: 'left',
       sorter: (a: Device, b: Device) => a.batteryLevel - b.batteryLevel,
       render: (level: number) => (
@@ -797,7 +832,7 @@ const DeviceManagement: React.FC = () => {
       title: 'IP/端口',
       dataIndex: 'ipPort',
       key: 'ipPort',
-      width: isLargeScreen ? 140 : 120,
+      width: getColumnWidth(130),
       align: 'left',
       render: (ipPort: string) => {
         const [ip, port] = ipPort.split(':');
@@ -813,7 +848,7 @@ const DeviceManagement: React.FC = () => {
       title: 'MAC地址',
       dataIndex: 'macAddress',
       key: 'macAddress',
-      width: isLargeScreen ? 150 : 130,
+      width: getColumnWidth(140),
       align: 'left',
       ellipsis: true,
       render: (mac: string) => (
@@ -826,7 +861,7 @@ const DeviceManagement: React.FC = () => {
       title: '更新时间',
       dataIndex: 'updateTime',
       key: 'updateTime',
-      width: isLargeScreen ? 160 : 140,
+      width: getColumnWidth(150),
       align: 'left',
       sorter: (a: Device, b: Device) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
       render: (time: string) => {
@@ -845,7 +880,7 @@ const DeviceManagement: React.FC = () => {
       title: '更新人',
       dataIndex: 'updatedBy',
       key: 'updatedBy',
-      width: 90,
+      width: getColumnWidth(90),
       align: 'left',
       ellipsis: true,
       render: (user: string) => (
@@ -857,7 +892,7 @@ const DeviceManagement: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: isLargeScreen ? 140 : 110,
+      width: getColumnWidth(120),
       align: 'right',
       fixed: 'right',
       render: (_: any, record: Device) => {
@@ -911,7 +946,7 @@ const DeviceManagement: React.FC = () => {
   ];
 
   // 根据选中的设备类型动态过滤列
-  const desktopColumns = allDesktopColumns.filter((column: any) => {
+  const filteredColumns = allDesktopColumns.filter((column: any) => {
     // 在所有设备类型tab页中隐藏设备类型列
     if (selectedDeviceType && column.key === 'deviceType') {
       return false;
@@ -942,6 +977,54 @@ const DeviceManagement: React.FC = () => {
     }
     return true;
   });
+
+  // 根据实际显示列数动态调整列宽
+  const desktopColumns = isMobile ? filteredColumns : adjustColumnWidths(filteredColumns, filteredColumns.length);
+
+  // 根据显示列数动态计算表格配置
+  const getTableConfig = () => {
+    const columnCount = desktopColumns.length;
+    let scrollWidth: number;
+    let tableSize: 'small' | 'middle' | 'large';
+    
+    // 根据列数和屏幕尺寸动态调整滚动宽度
+    if (isMobile) {
+      scrollWidth = Math.max(800, columnCount * 120); // 移动端基础宽度
+      tableSize = 'small';
+    } else if (isLargeScreen) {
+      // 大屏幕：列数少时使用更紧凑的布局
+      if (columnCount <= 8) {
+        scrollWidth = Math.min(1400, columnCount * 160);
+        tableSize = 'small';
+      } else if (columnCount <= 12) {
+        scrollWidth = Math.min(1800, columnCount * 150);
+        tableSize = 'small';
+      } else {
+        scrollWidth = columnCount * 140;
+        tableSize = 'small';
+      }
+    } else {
+      // 中等屏幕：根据列数调整
+      if (columnCount <= 6) {
+        scrollWidth = Math.min(1200, columnCount * 180);
+        tableSize = 'small';
+      } else if (columnCount <= 10) {
+        scrollWidth = Math.min(1600, columnCount * 160);
+        tableSize = 'small';
+      } else {
+        scrollWidth = columnCount * 140;
+        tableSize = 'small';
+      }
+    }
+    
+    return {
+      scroll: isMobile ? { x: 'max-content' } : { x: scrollWidth },
+      size: tableSize,
+      columnCount
+    };
+  };
+
+  const tableConfig = getTableConfig();
 
   return (
     <div style={{ background: 'transparent' }}>
@@ -1083,8 +1166,8 @@ const DeviceManagement: React.FC = () => {
             showLessItems: !isLargeScreen,
             pageSizeOptions: isLargeScreen ? ['10', '15', '20', '50'] : ['10', '20', '50'],
           }}
-          scroll={isMobile ? { x: 'max-content' } : isLargeScreen ? { x: 1800 } : { x: 1600 }}
-          size="small"
+          scroll={tableConfig.scroll}
+          size={tableConfig.size}
         />
       </Card>
 
