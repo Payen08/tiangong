@@ -1024,11 +1024,19 @@ const ProductManagement: React.FC = () => {
       align: 'left',
       ellipsis: true,
       sorter: (a: Product, b: Product) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
-      render: (time: string) => (
-        <Tooltip title={time}>
-          <span>{time}</span>
-        </Tooltip>
-      ),
+      render: (time: string) => {
+        const date = new Date(time);
+        const dateStr = date.toLocaleDateString('zh-CN');
+        const timeStr = date.toLocaleTimeString('zh-CN', { hour12: false });
+        return (
+          <Tooltip title={time}>
+            <div style={{ lineHeight: '1.2' }}>
+              <div style={{ fontSize: '13px', fontWeight: 500 }}>{dateStr}</div>
+              <div style={{ fontSize: '12px', color: '#666' }}>{timeStr}</div>
+            </div>
+          </Tooltip>
+        );
+      },
     },
     {
       title: '更新人',

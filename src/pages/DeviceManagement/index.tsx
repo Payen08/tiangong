@@ -15,6 +15,7 @@ import {
   Dropdown,
   Tag,
   Badge,
+  Tabs,
 } from 'antd';
 import {
   PlusOutlined,
@@ -38,6 +39,7 @@ interface Device {
   id: string;
   deviceName: string;
   deviceKey: string;
+  deviceType: '机器人设备' | '生产设备' | '电梯设备' | '自动门设备' | '虚拟设备' | '其他设备';
   productName: string;
   isEnabled: boolean;
   currentStatus: '空闲' | '执行中' | '充电中' | '异常' | '交管中' | '避障' | '解包闸' | '急停';
@@ -54,6 +56,7 @@ interface Device {
 const DeviceManagement: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<string | undefined>(undefined);
+  const [selectedDeviceType, setSelectedDeviceType] = useState<string | undefined>(undefined);
   const [selectedStatus, setSelectedStatus] = useState<string | undefined>(undefined);
   const [selectedOnlineStatus, setSelectedOnlineStatus] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
@@ -70,6 +73,7 @@ const DeviceManagement: React.FC = () => {
       id: '1',
       deviceName: 'AGV-001',
       deviceKey: 'agv_001_key',
+      deviceType: '机器人设备',
       productName: 'AGV自动导引车',
       isEnabled: true,
       currentStatus: '执行中',
@@ -86,6 +90,7 @@ const DeviceManagement: React.FC = () => {
       id: '2',
       deviceName: 'AMR-002',
       deviceKey: 'amr_002_key',
+      deviceType: '机器人设备',
       productName: 'AMR自主移动机器人',
       isEnabled: true,
       currentStatus: '充电中',
@@ -102,6 +107,7 @@ const DeviceManagement: React.FC = () => {
       id: '3',
       deviceName: 'MCR-003',
       deviceKey: 'mcr_003_key',
+      deviceType: '机器人设备',
       productName: 'MCR协作机器人',
       isEnabled: false,
       currentStatus: '异常',
@@ -118,6 +124,7 @@ const DeviceManagement: React.FC = () => {
       id: '4',
       deviceName: 'CNC-004',
       deviceKey: 'cnc_004_key',
+      deviceType: '生产设备',
       productName: 'CNC加工中心',
       isEnabled: true,
       currentStatus: '空闲',
@@ -134,6 +141,7 @@ const DeviceManagement: React.FC = () => {
       id: '5',
       deviceName: 'AGV-005',
       deviceKey: 'agv_005_key',
+      deviceType: '机器人设备',
       productName: 'AGV自动导引车',
       isEnabled: true,
       currentStatus: '避障',
@@ -146,9 +154,44 @@ const DeviceManagement: React.FC = () => {
       updateTime: '2024-01-15 10:30:45',
       updatedBy: '孙七',
     },
+    {
+      id: '6',
+      deviceName: 'Virtual-001',
+      deviceKey: 'virtual_001_key',
+      deviceType: '虚拟设备',
+      productName: '虚拟控制器',
+      isEnabled: true,
+      currentStatus: '执行中',
+      isOnline: true,
+      relatedDevices: ['AGV-001', 'AMR-002', 'CNC-004'],
+      currentMap: '虚拟环境',
+      batteryLevel: 100,
+      ipPort: '192.168.1.106:8080',
+      macAddress: '00:1B:44:11:3A:C2',
+      updateTime: '2024-01-15 15:20:30',
+      updatedBy: '系统管理员',
+    },
+    {
+      id: '7',
+      deviceName: 'Virtual-002',
+      deviceKey: 'virtual_002_key',
+      deviceType: '虚拟设备',
+      productName: '虚拟监控系统',
+      isEnabled: true,
+      currentStatus: '空闲',
+      isOnline: true,
+      relatedDevices: ['AGV-005'],
+      currentMap: '监控中心',
+      batteryLevel: 100,
+      ipPort: '192.168.1.107:8080',
+      macAddress: '00:1B:44:11:3A:C3',
+      updateTime: '2024-01-15 14:45:15',
+      updatedBy: '系统管理员',
+    },
   ]);
 
-  const productNames = ['AGV自动导引车', 'AMR自主移动机器人', 'MCR协作机器人', 'CNC加工中心', 'CNC数控车床', 'CNC铣床'];
+  const productNames = ['AGV自动导引车', 'AMR自主移动机器人', 'MCR协作机器人', 'CNC加工中心', 'CNC数控车床', 'CNC铣床', '虚拟控制器', '虚拟监控系统'];
+  const deviceTypeOptions = ['机器人设备', '生产设备', '电梯设备', '自动门设备', '虚拟设备', '其他设备'];
   const statusOptions = ['空闲', '执行中', '充电中', '异常', '交管中', '避障', '解包闸', '急停'];
   const onlineStatusOptions = ['在线', '离线'];
 
@@ -159,10 +202,11 @@ const DeviceManagement: React.FC = () => {
         .toLowerCase()
         .includes(searchText.toLowerCase());
       const matchesProduct = !selectedProduct || device.productName === selectedProduct;
+      const matchesDeviceType = !selectedDeviceType || device.deviceType === selectedDeviceType;
       const matchesStatus = !selectedStatus || device.currentStatus === selectedStatus;
       const matchesOnlineStatus = !selectedOnlineStatus || 
         (selectedOnlineStatus === '在线' ? device.isOnline : !device.isOnline);
-      return matchesSearch && matchesProduct && matchesStatus && matchesOnlineStatus;
+      return matchesSearch && matchesProduct && matchesDeviceType && matchesStatus && matchesOnlineStatus;
     })
     .sort((a, b) => {
       // 按更新时间倒序排序，最新的在前面
@@ -197,6 +241,35 @@ const DeviceManagement: React.FC = () => {
       onOk: () => {
         setDevices(devices.filter((d) => d.id !== record.id));
         message.success('删除成功');
+      },
+    });
+  };
+
+  const handleToggleEnabled = (record: Device) => {
+    const action = record.isEnabled ? '禁用' : '启用';
+    Modal.confirm({
+      title: `确认${action}`,
+      content: `确定要${action}设备 "${record.deviceName}" 吗？`,
+      onOk: () => {
+        setDevices(devices.map((d) => 
+          d.id === record.id 
+            ? { 
+                ...d, 
+                isEnabled: !d.isEnabled,
+                updateTime: new Date().toLocaleString('zh-CN', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false
+                }).replace(/\//g, '-'),
+                updatedBy: '当前用户'
+              }
+            : d
+        ));
+        message.success(`${action}成功`);
       },
     });
   };
@@ -440,23 +513,52 @@ const DeviceManagement: React.FC = () => {
             </span>
           </div>
           <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
-            <span>{record.productName} | </span>
-            {getStatusTag(record.currentStatus)}
+            <span style={{ color: '#000000', fontWeight: '500' }}>{record.deviceType}</span>
+            <span style={{ marginLeft: '8px' }}>{record.productName}</span>
+            {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && (
+              <>
+                <span> | </span>
+                {getStatusTag(record.currentStatus)}
+              </>
+            )}
           </div>
-          <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
-            <ThunderboltOutlined style={{ color: getBatteryColor(record.batteryLevel) }} />
-            <span style={{ marginLeft: '4px' }}>{record.batteryLevel}%</span>
-            <span style={{ marginLeft: '8px' }}>
-              <EnvironmentOutlined /> {record.currentMap}
-            </span>
-          </div>
-          {record.relatedDevices.length > 0 && (
-            <div style={{ fontSize: '12px', color: '#666' }}>
-              <span>关联设备: </span>
-              <span style={{ color: '#000', fontSize: '12px' }}>
-                {record.relatedDevices[0]}
+          {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && (
+            <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+              <ThunderboltOutlined style={{ color: getBatteryColor(record.batteryLevel) }} />
+              <span style={{ marginLeft: '4px' }}>{record.batteryLevel}%</span>
+              <span style={{ marginLeft: '8px' }}>
+                <EnvironmentOutlined /> {record.currentMap}
               </span>
             </div>
+          )}
+          {selectedDeviceType === '生产设备' && (
+            <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+              <span style={{ marginLeft: '8px' }}>
+                <EnvironmentOutlined /> {record.currentMap}
+              </span>
+            </div>
+          )}
+          {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && (
+            record.deviceType === '虚拟设备' ? (
+              record.relatedDevices.length > 0 ? (
+                <div style={{ fontSize: '12px', color: '#666' }}>
+                  <span>关联设备: </span>
+                  <span style={{ color: '#000', fontSize: '12px' }}>
+                    {record.relatedDevices.length === 1 ? record.relatedDevices[0] : `${record.relatedDevices[0]} 等${record.relatedDevices.length}个`}
+                  </span>
+                </div>
+              ) : (
+                <div style={{ fontSize: '12px', color: '#666' }}>
+                  <span>关联设备: </span>
+                  <span style={{ color: '#999', fontSize: '12px' }}>无关联设备</span>
+                </div>
+              )
+            ) : (
+              <div style={{ fontSize: '12px', color: '#666' }}>
+                <span>关联设备: </span>
+                <span style={{ color: '#999', fontSize: '12px' }}>--</span>
+              </div>
+            )
           )}
         </div>
       ),
@@ -501,12 +603,12 @@ const DeviceManagement: React.FC = () => {
   ];
 
   // 桌面端列配置
-  const desktopColumns: ColumnsType<Device> = [
+  const allDesktopColumns: ColumnsType<Device> = [
     {
       title: '设备名称',
       dataIndex: 'deviceName',
       key: 'deviceName',
-      width: isLargeScreen ? 150 : 120,
+      width: isLargeScreen ? 140 : 120,
       align: 'left',
       ellipsis: true,
       fixed: 'left',
@@ -525,7 +627,7 @@ const DeviceManagement: React.FC = () => {
       title: '设备Key',
       dataIndex: 'deviceKey',
       key: 'deviceKey',
-      width: isLargeScreen ? 180 : 150,
+      width: isLargeScreen ? 170 : 140,
       align: 'left',
       ellipsis: true,
       render: (text: string, record: Device) => (
@@ -574,10 +676,20 @@ const DeviceManagement: React.FC = () => {
       ),
     },
     {
+      title: '设备类型',
+      dataIndex: 'deviceType',
+      key: 'deviceType',
+      width: isLargeScreen ? 110 : 100,
+      align: 'left',
+      render: (deviceType: string) => (
+        <span style={{ color: '#000000' }}>{deviceType}</span>
+      ),
+    },
+    {
       title: '所属产品',
       dataIndex: 'productName',
       key: 'productName',
-      width: isLargeScreen ? 140 : 120,
+      width: isLargeScreen ? 130 : 110,
       align: 'left',
       ellipsis: true,
       render: (text: string) => (
@@ -590,7 +702,7 @@ const DeviceManagement: React.FC = () => {
       title: '是否启用',
       dataIndex: 'isEnabled',
       key: 'isEnabled',
-      width: 100,
+      width: 90,
       align: 'left',
       render: (enabled: boolean) => (
         <Tag color={enabled ? 'success' : 'error'}>
@@ -602,7 +714,7 @@ const DeviceManagement: React.FC = () => {
       title: '当前状态',
       dataIndex: 'currentStatus',
       key: 'currentStatus',
-      width: 100,
+      width: 90,
       align: 'left',
       render: (status: string) => getStatusTag(status),
     },
@@ -610,7 +722,7 @@ const DeviceManagement: React.FC = () => {
       title: '是否在线',
       dataIndex: 'isOnline',
       key: 'isOnline',
-      width: 100,
+      width: 110,
       align: 'left',
       render: (online: boolean) => (
         <Space size={4}>
@@ -629,17 +741,23 @@ const DeviceManagement: React.FC = () => {
       title: '关联设备',
       dataIndex: 'relatedDevices',
       key: 'relatedDevices',
-      width: isLargeScreen ? 160 : 140,
+      width: isLargeScreen ? 150 : 130,
       align: 'left',
       ellipsis: true,
-      render: (relatedDevices: string[]) => (
+      render: (relatedDevices: string[], record: Device) => (
         <div>
-          {relatedDevices.length > 0 ? (
-            <span style={{ color: '#000', fontSize: '14px' }}>
-              {relatedDevices[0]}
-            </span>
+          {record.deviceType === '虚拟设备' ? (
+            relatedDevices.length > 0 ? (
+              <Tooltip title={relatedDevices.join(', ')}>
+                <span style={{ color: '#000', fontSize: '14px' }}>
+                  {relatedDevices.length === 1 ? relatedDevices[0] : `${relatedDevices[0]} 等${relatedDevices.length}个`}
+                </span>
+              </Tooltip>
+            ) : (
+              <span style={{ color: '#999' }}>无关联设备</span>
+            )
           ) : (
-            <span style={{ color: '#999' }}>无关联设备</span>
+            <span style={{ color: '#999' }}>--</span>
           )}
         </div>
       ),
@@ -648,7 +766,7 @@ const DeviceManagement: React.FC = () => {
       title: '当前地图',
       dataIndex: 'currentMap',
       key: 'currentMap',
-      width: isLargeScreen ? 120 : 100,
+      width: isLargeScreen ? 110 : 100,
       align: 'left',
       ellipsis: true,
       render: (map: string) => (
@@ -664,7 +782,7 @@ const DeviceManagement: React.FC = () => {
       title: '当前电量',
       dataIndex: 'batteryLevel',
       key: 'batteryLevel',
-      width: 100,
+      width: 90,
       align: 'left',
       sorter: (a: Device, b: Device) => a.batteryLevel - b.batteryLevel,
       render: (level: number) => (
@@ -680,20 +798,23 @@ const DeviceManagement: React.FC = () => {
       title: 'IP/端口',
       dataIndex: 'ipPort',
       key: 'ipPort',
-      width: isLargeScreen ? 160 : 140,
+      width: isLargeScreen ? 140 : 120,
       align: 'left',
-      ellipsis: true,
-      render: (ipPort: string) => (
-        <Tooltip title={ipPort}>
-          <span style={{ fontFamily: 'monospace' }}>{ipPort}</span>
-        </Tooltip>
-      ),
+      render: (ipPort: string) => {
+        const [ip, port] = ipPort.split(':');
+        return (
+          <div style={{ lineHeight: '1.2' }}>
+            <div style={{ fontFamily: 'monospace', fontSize: '13px', fontWeight: '500' }}>{ip}</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: '#666' }}>{port}</div>
+          </div>
+        );
+      },
     },
     {
       title: 'MAC地址',
       dataIndex: 'macAddress',
       key: 'macAddress',
-      width: isLargeScreen ? 160 : 140,
+      width: isLargeScreen ? 150 : 130,
       align: 'left',
       ellipsis: true,
       render: (mac: string) => (
@@ -706,21 +827,26 @@ const DeviceManagement: React.FC = () => {
       title: '更新时间',
       dataIndex: 'updateTime',
       key: 'updateTime',
-      width: isLargeScreen ? 180 : 160,
+      width: isLargeScreen ? 160 : 140,
       align: 'left',
-      ellipsis: true,
       sorter: (a: Device, b: Device) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
-      render: (time: string) => (
-        <Tooltip title={time}>
-          <span>{time}</span>
-        </Tooltip>
-      ),
+      render: (time: string) => {
+        const date = new Date(time);
+        const dateStr = date.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        const timeStr = date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        return (
+          <div style={{ lineHeight: '1.2' }}>
+            <div style={{ fontSize: '13px', fontWeight: '500' }}>{dateStr}</div>
+            <div style={{ fontSize: '12px', color: '#666' }}>{timeStr}</div>
+          </div>
+        );
+      },
     },
     {
       title: '更新人',
       dataIndex: 'updatedBy',
       key: 'updatedBy',
-      width: 100,
+      width: 90,
       align: 'left',
       ellipsis: true,
       render: (user: string) => (
@@ -732,10 +858,26 @@ const DeviceManagement: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: isLargeScreen ? 150 : 120,
+      width: isLargeScreen ? 140 : 110,
       align: 'right',
       fixed: 'right',
       render: (_: any, record: Device) => {
+        const moreMenuItems = [
+          {
+            key: 'toggle',
+            label: record.isEnabled ? '禁用' : '启用',
+            icon: record.isEnabled ? <DisconnectOutlined /> : <ThunderboltOutlined />,
+            onClick: () => handleToggleEnabled(record),
+          },
+          {
+            key: 'delete',
+            label: '删除',
+            icon: <DeleteOutlined />,
+            danger: true,
+            onClick: () => handleDelete(record),
+          },
+        ];
+
         return (
           <Space size={4}>
             <Tooltip title="编辑设备">
@@ -749,22 +891,50 @@ const DeviceManagement: React.FC = () => {
                 编辑
               </Button>
             </Tooltip>
-            <Tooltip title="删除设备">
+            <Dropdown
+              menu={{ items: moreMenuItems }}
+              trigger={['click']}
+              placement="bottomRight"
+            >
               <Button
                 type="link"
-                danger
-                onClick={() => handleDelete(record)}
+                icon={<MoreOutlined />}
                 size="small"
                 style={{ padding: '0 4px' }}
               >
-                删除
+                更多
               </Button>
-            </Tooltip>
+            </Dropdown>
           </Space>
         );
       },
     },
   ];
+
+  // 根据选中的设备类型动态过滤列
+  const desktopColumns = allDesktopColumns.filter((column: any) => {
+    // 如果是机器人设备，隐藏关联设备列
+    if (selectedDeviceType === '机器人设备' && column.key === 'relatedDevices') {
+      return false;
+    }
+    // 如果是生产设备，隐藏当前电量、关联设备和当前状态列
+    if (selectedDeviceType === '生产设备' && (column.key === 'batteryLevel' || column.key === 'relatedDevices' || column.key === 'currentStatus')) {
+      return false;
+    }
+    // 如果是电梯设备，隐藏当前电量、关联设备、当前状态和当前地图列
+    if (selectedDeviceType === '电梯设备' && (column.key === 'batteryLevel' || column.key === 'relatedDevices' || column.key === 'currentStatus' || column.key === 'currentMap')) {
+      return false;
+    }
+    // 如果是自动门设备，隐藏当前电量、关联设备、当前状态和当前地图列
+    if (selectedDeviceType === '自动门设备' && (column.key === 'batteryLevel' || column.key === 'relatedDevices' || column.key === 'currentStatus' || column.key === 'currentMap')) {
+      return false;
+    }
+    // 如果是其他设备，隐藏当前电量、关联设备和当前状态列
+    if (selectedDeviceType === '其他设备' && (column.key === 'batteryLevel' || column.key === 'relatedDevices' || column.key === 'currentStatus')) {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <div style={{ background: 'transparent' }}>
@@ -852,6 +1022,44 @@ const DeviceManagement: React.FC = () => {
             </Button>
           </Col>
         </Row>
+        
+        {/* 设备类型Tab切换 */}
+        <Tabs
+          activeKey={selectedDeviceType || 'all'}
+          onChange={(key) => setSelectedDeviceType(key === 'all' ? '' : key)}
+          style={{ marginBottom: '16px' }}
+          items={[
+            {
+              key: 'all',
+              label: `全部设备 (${devices.length})`,
+            },
+            {
+              key: '机器人设备',
+              label: `机器人设备 (${devices.filter(device => device.deviceType === '机器人设备').length})`,
+            },
+            {
+              key: '生产设备',
+              label: `生产设备 (${devices.filter(device => device.deviceType === '生产设备').length})`,
+            },
+            {
+              key: '电梯设备',
+              label: `电梯设备 (${devices.filter(device => device.deviceType === '电梯设备').length})`,
+            },
+            {
+              key: '自动门设备',
+              label: `自动门设备 (${devices.filter(device => device.deviceType === '自动门设备').length})`,
+            },
+            {
+              key: '虚拟设备',
+              label: `虚拟设备 (${devices.filter(device => device.deviceType === '虚拟设备').length})`,
+            },
+            {
+              key: '其他设备',
+              label: `其他设备 (${devices.filter(device => device.deviceType === '其他设备').length})`,
+            },
+          ]}
+        />
+        
         <Table
           columns={isMobile ? mobileColumns : desktopColumns}
           dataSource={filteredDevices}
