@@ -513,8 +513,7 @@ const DeviceManagement: React.FC = () => {
             </span>
           </div>
           <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
-            <span style={{ color: '#000000', fontWeight: '500' }}>{record.deviceType}</span>
-            <span style={{ marginLeft: '8px' }}>{record.productName}</span>
+            <span style={{ color: '#000000', fontWeight: '500' }}>{record.productName}</span>
             {selectedDeviceType !== '生产设备' && selectedDeviceType !== '电梯设备' && selectedDeviceType !== '自动门设备' && selectedDeviceType !== '其他设备' && selectedDeviceType !== '虚拟设备' && (
               <>
                 <span> | </span>
@@ -913,6 +912,10 @@ const DeviceManagement: React.FC = () => {
 
   // 根据选中的设备类型动态过滤列
   const desktopColumns = allDesktopColumns.filter((column: any) => {
+    // 在所有设备类型tab页中隐藏设备类型列
+    if (selectedDeviceType && column.key === 'deviceType') {
+      return false;
+    }
     // 如果是机器人设备，隐藏关联设备列
     if (selectedDeviceType === '机器人设备' && column.key === 'relatedDevices') {
       return false;
