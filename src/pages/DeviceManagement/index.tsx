@@ -1084,7 +1084,7 @@ const DeviceManagement: React.FC = () => {
             pageSizeOptions: isLargeScreen ? ['10', '15', '20', '50'] : ['10', '20', '50'],
           }}
           scroll={isMobile ? { x: 'max-content' } : isLargeScreen ? { x: 1800 } : { x: 1600 }}
-          size={isMobile ? 'small' : 'middle'}
+          size="small"
         />
       </Card>
 
