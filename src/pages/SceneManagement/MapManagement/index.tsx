@@ -48,6 +48,8 @@ import {
   RobotOutlined,
   WifiOutlined,
   DisconnectOutlined,
+  LeftOutlined,
+  RightOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -119,6 +121,13 @@ const MapManagement: React.FC = () => {
   const [selectedRobotMaps, setSelectedRobotMaps] = useState<string[]>([]);
   const [localImportForm] = Form.useForm();
   const [localImportFile, setLocalImportFile] = useState<any>(null);
+  const [robotSearchText, setRobotSearchText] = useState<string>('');
+  
+  // 机器人卡片滑动相关状态
+  const [robotSlideIndex, setRobotSlideIndex] = useState(0);
+  const [isSliding, setIsSliding] = useState(false);
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
+  const robotCardsPerPage = 8; // 每页显示8个卡片（2行，每行4个）
   
   // 响应式状态管理
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -218,6 +227,150 @@ const MapManagement: React.FC = () => {
         updateTime: '2024-01-15 12:45:15',
         updatedBy: '系统',
         lastConnectTime: '2024-01-15 11:30:45'
+      },
+      {
+        id: 'robot_005',
+        deviceName: 'RGV-005',
+        deviceKey: 'rgv_005_key',
+        deviceType: '机器人设备',
+        productName: 'RGV轨道机器人',
+        isEnabled: true,
+        currentStatus: '空闲',
+        isOnline: true,
+        relatedMap: '四楼平面图',
+        mapPosition: '自动化仓库',
+        ipAddress: '192.168.1.105',
+        port: '8080',
+        batteryLevel: 92,
+        updateTime: '2024-01-15 17:15:40',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 17:13:30'
+      },
+      {
+        id: 'robot_006',
+        deviceName: 'AGV-006',
+        deviceKey: 'agv_006_key',
+        deviceType: '机器人设备',
+        productName: 'AGV自动导引车',
+        isEnabled: true,
+        currentStatus: '执行中',
+        isOnline: true,
+        relatedMap: '一楼平面图',
+        mapPosition: '装配区D',
+        ipAddress: '192.168.1.106',
+        port: '8080',
+        batteryLevel: 68,
+        updateTime: '2024-01-15 18:05:15',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 18:03:10'
+      },
+      {
+        id: 'robot_007',
+        deviceName: 'AMR-007',
+        deviceKey: 'amr_007_key',
+        deviceType: '机器人设备',
+        productName: 'AMR移动机器人',
+        isEnabled: true,
+        currentStatus: '待机',
+        isOnline: true,
+        relatedMap: '二楼平面图',
+        mapPosition: '质检区E',
+        ipAddress: '192.168.1.107',
+        port: '8080',
+        batteryLevel: 78,
+        updateTime: '2024-01-15 18:20:35',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 18:18:25'
+      },
+      {
+        id: 'robot_008',
+        deviceName: 'SCR-008',
+        deviceKey: 'scr_008_key',
+        deviceType: '机器人设备',
+        productName: 'SCR安防机器人',
+        isEnabled: true,
+        currentStatus: '巡检中',
+        isOnline: true,
+        relatedMap: '五楼平面图',
+        mapPosition: '安防巡逻区',
+        ipAddress: '192.168.1.108',
+        port: '8080',
+        batteryLevel: 55,
+        updateTime: '2024-01-15 18:45:20',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 18:43:15'
+      },
+      {
+        id: 'robot_009',
+        deviceName: 'AGV-009',
+        deviceKey: 'agv_009_key',
+        deviceType: '机器人设备',
+        productName: 'AGV自动导引车',
+        isEnabled: true,
+        currentStatus: '充电中',
+        isOnline: true,
+        relatedMap: '一楼平面图',
+        mapPosition: '充电站F',
+        ipAddress: '192.168.1.109',
+        port: '8080',
+        batteryLevel: 35,
+        updateTime: '2024-01-15 19:10:45',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 19:08:40'
+      },
+      {
+        id: 'robot_010',
+        deviceName: 'MCR-010',
+        deviceKey: 'mcr_010_key',
+        deviceType: '机器人设备',
+        productName: 'MCR清洁机器人',
+        isEnabled: false,
+        currentStatus: '维护中',
+        isOnline: false,
+        relatedMap: '三楼平面图',
+        mapPosition: '维修车间',
+        ipAddress: '192.168.1.110',
+        port: '8080',
+        batteryLevel: 8,
+        updateTime: '2024-01-15 10:30:15',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 09:45:30'
+      },
+      {
+        id: 'robot_011',
+        deviceName: 'AMR-011',
+        deviceKey: 'amr_011_key',
+        deviceType: '机器人设备',
+        productName: 'AMR移动机器人',
+        isEnabled: true,
+        currentStatus: '空闲',
+        isOnline: true,
+        relatedMap: '二楼平面图',
+        mapPosition: '包装区G',
+        ipAddress: '192.168.1.111',
+        port: '8080',
+        batteryLevel: 89,
+        updateTime: '2024-01-15 19:35:50',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 19:33:45'
+      },
+      {
+        id: 'robot_012',
+        deviceName: 'RGV-012',
+        deviceKey: 'rgv_012_key',
+        deviceType: '机器人设备',
+        productName: 'RGV轨道机器人',
+        isEnabled: true,
+        currentStatus: '执行中',
+        isOnline: true,
+        relatedMap: '四楼平面图',
+        mapPosition: '立体仓库H',
+        ipAddress: '192.168.1.112',
+        port: '8080',
+        batteryLevel: 76,
+        updateTime: '2024-01-15 20:00:25',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 19:58:20'
       }
     ];
     setRobotDevices(mockRobotDevices);
@@ -256,6 +409,54 @@ const MapManagement: React.FC = () => {
           '维修区域图_v1.0',
           '一楼维护通道_v1.4',
           '设备检修图_v2.1'
+        ],
+        'robot_005': [
+          '自动化仓库地图_v1.5',
+          '四楼轨道布局_v2.3',
+          'RGV运行路径_v1.9',
+          '立体货架图_v1.6'
+        ],
+        'robot_006': [
+          '装配区D地图_v1.4',
+          '一楼装配线_v2.0',
+          '工位布局图_v1.7',
+          '物料配送路径_v1.2'
+        ],
+        'robot_007': [
+          '质检区E地图_v1.8',
+          '二楼质检线_v2.1',
+          '检测设备布局_v1.5',
+          '样品传输路径_v1.3'
+        ],
+        'robot_008': [
+          '安防巡逻区地图_v1.6',
+          '五楼安防路径_v2.2',
+          '监控点位图_v1.4',
+          '应急通道图_v1.1'
+        ],
+        'robot_009': [
+          '充电站F地图_v1.3',
+          '一楼充电区_v1.9',
+          '电力设施图_v1.5',
+          '维护通道图_v1.2'
+        ],
+        'robot_010': [
+          '维修车间地图_v1.7',
+          '三楼维修区_v2.0',
+          '设备维护图_v1.8',
+          '工具存放图_v1.4'
+        ],
+        'robot_011': [
+          '包装区G地图_v1.5',
+          '二楼包装线_v2.1',
+          '包装设备布局_v1.6',
+          '成品存储图_v1.3'
+        ],
+        'robot_012': [
+          '立体仓库H地图_v1.9',
+          '四楼存储区_v2.4',
+          'RGV作业路径_v1.7',
+          '货位管理图_v1.8'
         ]
       };
       
@@ -265,6 +466,45 @@ const MapManagement: React.FC = () => {
       setRobotMaps([]);
     }
   }, [selectedRobot]);
+
+  // 监听搜索文本变化，重置滑动索引
+  useEffect(() => {
+    setRobotSlideIndex(0);
+  }, [robotSearchText]);
+
+  // 处理机器人卡片滑动
+  const handleRobotSlide = (direction: 'left' | 'right') => {
+    if (isSliding) return; // 防止重复点击
+    
+    const filteredRobots = robotDevices.filter(robot => 
+      robot.isOnline && 
+      robot.isEnabled && 
+      robot.deviceName.toLowerCase().includes(robotSearchText.toLowerCase())
+    );
+    
+    const maxIndex = Math.ceil(filteredRobots.length / robotCardsPerPage) - 1;
+    
+    let newIndex = robotSlideIndex;
+    if (direction === 'left' && robotSlideIndex > 0) {
+      newIndex = robotSlideIndex - 1;
+    } else if (direction === 'right' && robotSlideIndex < maxIndex) {
+      newIndex = robotSlideIndex + 1;
+    } else {
+      return; // 无需切换
+    }
+    
+    setIsSliding(true);
+    setSlideDirection(direction);
+    
+    // 先让当前内容滑出
+    setTimeout(() => {
+      setRobotSlideIndex(newIndex);
+      // 然后让新内容滑入
+      setTimeout(() => {
+        setIsSliding(false);
+      }, 400); // 增加动画持续时间
+    }, 100);
+  };
 
   // 动态列宽计算函数
   const getColumnWidth = (baseWidth: number): number => {
@@ -1674,84 +1914,213 @@ const MapManagement: React.FC = () => {
        >
          <div>
            <div style={{ marginBottom: 24 }}>
-             <Title level={5} style={{ margin: 0, marginBottom: 8 }}>选择在线机器人设备</Title>
-             <div style={{ color: '#666', fontSize: '14px' }}>
-               仅显示在线且已启用的机器人设备
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+               <div>
+                 <Title level={5} style={{ margin: 0, marginBottom: 8 }}>选择在线机器人设备</Title>
+                 <div style={{ color: '#666', fontSize: '14px' }}>
+                   仅显示在线且已启用的机器人设备
+                 </div>
+               </div>
+               <div style={{ width: '300px' }}>
+                 <Input.Search
+                    placeholder="搜索机器人设备名称..."
+                    value={robotSearchText}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRobotSearchText(e.target.value)}
+                    allowClear
+                    style={{ width: '100%' }}
+                  />
+               </div>
              </div>
            </div>
            
-           <Row gutter={[16, 16]}>
-             {robotDevices
-               .filter(robot => robot.isOnline && robot.isEnabled)
-               .map(robot => (
-                 <Col key={robot.id} xs={24} sm={12} md={8} lg={8} xl={8}>
-                   <Card 
-                     size="small" 
-                     style={{ 
-                       width: '100%',
-                       border: selectedRobot === robot.id ? '2px solid #1890ff' : '1px solid #e8e8e8',
-                       backgroundColor: selectedRobot === robot.id ? '#f0f9ff' : '#fff',
-                       borderRadius: '8px',
-                       cursor: 'pointer',
-                       transition: 'all 0.3s ease',
-                       position: 'relative'
-                     }}
-                     bodyStyle={{ padding: '16px' }}
-                     hoverable
-                     onClick={() => setSelectedRobot(robot.id)}
-                   >
-                     {/* 选择按钮放在卡片内右上角 */}
-                     <Radio 
-                       checked={selectedRobot === robot.id}
-                       style={{ 
-                         position: 'absolute',
-                         top: '12px',
-                         right: '12px',
-                         zIndex: 1
-                       }}
-                       onClick={(e) => {
-                         e.stopPropagation();
-                         setSelectedRobot(robot.id);
-                       }}
-                     />
-                     
-                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', paddingTop: '8px' }}>
-                       <Avatar 
-                         icon={<RobotOutlined />} 
+           {/* 机器人卡片滑动区域 */}
+           <div style={{ position: 'relative' }}>
+             {/* 左滑动按钮 */}
+             <Button
+               type="text"
+               icon={<LeftOutlined />}
+               style={{
+                 position: 'absolute',
+                 left: '-20px',
+                 top: '50%',
+                 transform: 'translateY(-50%)',
+                 zIndex: 10,
+                 backgroundColor: '#fff',
+                 border: '1px solid #d9d9d9',
+                 borderRadius: '50%',
+                 width: '32px',
+                 height: '32px',
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                 transition: 'all 0.2s ease',
+                 opacity: isSliding ? 0.6 : 1
+               }}
+               disabled={robotSlideIndex === 0 || isSliding}
+               onClick={() => handleRobotSlide('left')}
+             />
+             
+             {/* 右滑动按钮 */}
+             <Button
+               type="text"
+               icon={<RightOutlined />}
+               style={{
+                 position: 'absolute',
+                 right: '-20px',
+                 top: '50%',
+                 transform: 'translateY(-50%)',
+                 zIndex: 10,
+                 backgroundColor: '#fff',
+                 border: '1px solid #d9d9d9',
+                 borderRadius: '50%',
+                 width: '32px',
+                 height: '32px',
+                 display: 'flex',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                 transition: 'all 0.2s ease',
+                 opacity: isSliding ? 0.6 : 1
+               }}
+               disabled={robotSlideIndex >= Math.ceil(robotDevices.filter(robot => 
+                 robot.isOnline && 
+                 robot.isEnabled && 
+                 robot.deviceName.toLowerCase().includes(robotSearchText.toLowerCase())
+               ).length / robotCardsPerPage) - 1 || isSliding}
+               onClick={() => handleRobotSlide('right')}
+             />
+             
+             {/* 机器人卡片网格 */}
+             <div style={{ 
+               overflow: 'hidden',
+               paddingBottom: '8px'
+             }}>
+               <Row 
+                 gutter={[12, 12]}
+                 style={{
+                   transform: isSliding ? 
+                     (slideDirection === 'right' ? 'translateX(-30px)' : 'translateX(30px)') : 
+                     'translateX(0)',
+                   opacity: isSliding ? 0.3 : 1,
+                   transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                   filter: isSliding ? 'blur(1px)' : 'blur(0px)'
+                 }}
+               >
+                 {robotDevices
+                   .filter(robot => 
+                     robot.isOnline && 
+                     robot.isEnabled && 
+                     robot.deviceName.toLowerCase().includes(robotSearchText.toLowerCase())
+                   )
+                   .slice(robotSlideIndex * robotCardsPerPage, (robotSlideIndex + 1) * robotCardsPerPage)
+                   .map(robot => (
+                     <Col key={robot.id} xs={24} sm={12} md={12} lg={6} xl={6}>
+                       <Card 
+                         size="small" 
                          style={{ 
-                           backgroundColor: '#1890ff',
-                           border: '2px solid #e6f7ff',
-                           flexShrink: 0
+                           width: '100%',
+                           height: '110px',
+                           border: selectedRobot === robot.id ? '2px solid #1890ff' : '1px solid #e8e8e8',
+                           backgroundColor: selectedRobot === robot.id ? '#f0f9ff' : '#fff',
+                           borderRadius: '8px',
+                           cursor: 'pointer',
+                           transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                           position: 'relative',
+                           transform: isSliding ? 
+                             `scale(0.95) translateX(${slideDirection === 'right' ? '-10px' : '10px'})` : 
+                             'scale(1) translateX(0)',
+                           boxShadow: isSliding ? 
+                             '0 1px 4px rgba(0,0,0,0.04)' : 
+                             (selectedRobot === robot.id ? '0 4px 12px rgba(24,144,255,0.15)' : '0 2px 8px rgba(0,0,0,0.1)'),
+                           filter: isSliding ? 'brightness(0.95)' : 'brightness(1)'
                          }}
-                         size={24}
-                       />
-                       <div style={{ flex: 1, textAlign: 'left' }}>
-                         <div style={{ fontWeight: 600, fontSize: '16px', marginBottom: '8px', color: '#262626' }}>
-                           {robot.deviceName}
-                         </div>
-                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-                           <Badge 
-                             status={robot.isOnline ? 'success' : 'error'} 
-                             text={
-                               <span style={{ fontSize: '13px', fontWeight: 500 }}>
-                                 {robot.isOnline ? '在线' : '离线'}
-                               </span>
-                             }
+                         bodyStyle={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}
+                         hoverable
+                         onClick={() => setSelectedRobot(robot.id)}
+                         onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                           if (!isSliding) {
+                             e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                             e.currentTarget.style.boxShadow = selectedRobot === robot.id ? 
+                               '0 8px 20px rgba(24,144,255,0.25)' : 
+                               '0 8px 20px rgba(0,0,0,0.15)';
+                           }
+                         }}
+                         onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                           if (!isSliding) {
+                             e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                             e.currentTarget.style.boxShadow = selectedRobot === robot.id ? 
+                               '0 4px 12px rgba(24,144,255,0.15)' : 
+                               '0 2px 8px rgba(0,0,0,0.1)';
+                           }
+                         }}
+                       >
+                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                           <Avatar 
+                             icon={<RobotOutlined />} 
+                             style={{ 
+                               backgroundColor: '#1890ff',
+                               border: '2px solid #e6f7ff',
+                               flexShrink: 0
+                             }}
+                             size={18}
                            />
-                           <span style={{ color: '#666', fontSize: '12px' }}>
-                             {robot.ipAddress}:{robot.port}
-                           </span>
-                           <span style={{ color: '#999', fontSize: '12px' }}>
-                             最近连接: {robot.lastConnectTime}
-                           </span>
+                           <div style={{ flex: 1, textAlign: 'left', overflow: 'hidden' }}>
+                             <div style={{ 
+                               fontWeight: 600, 
+                               fontSize: '13px', 
+                               marginBottom: '4px', 
+                               color: '#262626',
+                               overflow: 'hidden',
+                               textOverflow: 'ellipsis',
+                               whiteSpace: 'nowrap'
+                             }}>
+                               {robot.deviceName}
+                             </div>
+                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                               <Badge 
+                                 status={robot.isOnline ? 'success' : 'error'} 
+                                 text={
+                                   <span style={{ fontSize: '11px', fontWeight: 500 }}>
+                                     {robot.isOnline ? '在线' : '离线'}
+                                   </span>
+                                 }
+                               />
+                               <span style={{ color: '#666', fontSize: '10px' }}>
+                                 {robot.ipAddress}:{robot.port}
+                               </span>
+                               <span style={{ 
+                                 color: '#999', 
+                                 fontSize: '10px',
+                                 overflow: 'hidden',
+                                 textOverflow: 'ellipsis',
+                                 whiteSpace: 'nowrap',
+                                 width: '100%'
+                               }}>
+                                 最近连接: {robot.lastConnectTime}
+                               </span>
+                             </div>
+                           </div>
+                           
+                           {/* 选择按钮放在右侧，与图标纵向对齐 */}
+                           <Radio 
+                             checked={selectedRobot === robot.id}
+                             style={{ 
+                               flexShrink: 0
+                             }}
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               setSelectedRobot(robot.id);
+                             }}
+                           />
                          </div>
-                       </div>
-                     </div>
-                   </Card>
-                 </Col>
-               ))
-             }
-           </Row>
+                       </Card>
+                     </Col>
+                   ))
+                 }
+               </Row>
+             </div>
+           </div>
            
            {/* 机器人地图列表 */}
            {selectedRobot && robotMaps.length > 0 && (
@@ -1802,32 +2171,14 @@ const MapManagement: React.FC = () => {
                              setSelectedRobotMaps(newSelected);
                            }}
                          >
-                           {/* 多选框放在卡片内右上角 */}
-                           <Checkbox 
-                             checked={selectedRobotMaps.includes(mapName)}
-                             style={{ 
-                               position: 'absolute',
-                               top: '12px',
-                               right: '12px',
-                               zIndex: 1
-                             }}
-                             onClick={(e) => {
-                               e.stopPropagation();
-                               const newSelected = selectedRobotMaps.includes(mapName)
-                                 ? selectedRobotMaps.filter(m => m !== mapName)
-                                 : [...selectedRobotMaps, mapName];
-                               setSelectedRobotMaps(newSelected);
-                             }}
-                           />
-                           
                            <div style={{ 
                              display: 'flex', 
-                             flexDirection: 'column', 
-                             justifyContent: 'center',
+                             alignItems: 'center',
                              height: '100%',
-                             paddingTop: '8px'
+                             gap: '12px'
                            }}>
                              <div style={{ 
+                               flex: 1,
                                display: 'flex', 
                                flexDirection: 'column',
                                gap: '4px'
@@ -1859,6 +2210,21 @@ const MapManagement: React.FC = () => {
                                  </span>
                                </div>
                              </div>
+                             
+                             {/* 多选框放在右侧，上下居中 */}
+                             <Checkbox 
+                               checked={selectedRobotMaps.includes(mapName)}
+                               style={{ 
+                                 flexShrink: 0
+                               }}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 const newSelected = selectedRobotMaps.includes(mapName)
+                                   ? selectedRobotMaps.filter(m => m !== mapName)
+                                   : [...selectedRobotMaps, mapName];
+                                 setSelectedRobotMaps(newSelected);
+                               }}
+                             />
                            </div>
                          </Card>
                        </Col>
