@@ -22,6 +22,10 @@ import {
   message,
   Tabs,
   Modal,
+  Popover,
+  Radio,
+  Tooltip,
+  Checkbox,
 } from 'antd';
 import {
   EditOutlined,
@@ -38,6 +42,12 @@ import {
   PlusOutlined,
   UploadOutlined,
   ExclamationCircleOutlined,
+  ImportOutlined,
+  CloudDownloadOutlined,
+  FolderOpenOutlined,
+  RobotOutlined,
+  WifiOutlined,
+  DisconnectOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -65,6 +75,26 @@ interface MapFile {
   format: string;
 }
 
+// 机器人设备类型
+interface RobotDevice {
+  id: string;
+  deviceName: string;
+  deviceKey: string;
+  deviceType: string;
+  productName: string;
+  isEnabled: boolean;
+  currentStatus: string;
+  isOnline: boolean;
+  relatedMap: string;
+  mapPosition: string;
+  ipAddress: string;
+  port: string;
+  batteryLevel: number;
+  updateTime: string;
+  updatedBy: string;
+  lastConnectTime: string;
+}
+
 const MapManagement: React.FC = () => {
   const navigate = useNavigate();
   const [selectedMap, setSelectedMap] = useState<MapData | null>(null);
@@ -78,6 +108,17 @@ const MapManagement: React.FC = () => {
   const [uploadedFile, setUploadedFile] = useState<any>(null);
   const [editUploadedFile, setEditUploadedFile] = useState<any>(null);
   const [previewMode, setPreviewMode] = useState<'front' | 'top' | 'side'>('front');
+  
+  // 导入功能相关状态
+  const [importPopoverVisible, setImportPopoverVisible] = useState(false);
+  const [robotDrawerVisible, setRobotDrawerVisible] = useState(false);
+  const [localImportDrawerVisible, setLocalImportDrawerVisible] = useState(false);
+  const [selectedRobot, setSelectedRobot] = useState<string>('');
+  const [robotDevices, setRobotDevices] = useState<RobotDevice[]>([]);
+  const [robotMaps, setRobotMaps] = useState<string[]>([]);
+  const [selectedRobotMaps, setSelectedRobotMaps] = useState<string[]>([]);
+  const [localImportForm] = Form.useForm();
+  const [localImportFile, setLocalImportFile] = useState<any>(null);
   
   // 响应式状态管理
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -102,6 +143,128 @@ const MapManagement: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // 初始化机器人设备数据
+  useEffect(() => {
+    const mockRobotDevices: RobotDevice[] = [
+      {
+        id: 'robot_001',
+        deviceName: 'AGV-001',
+        deviceKey: 'agv_001_key',
+        deviceType: '机器人设备',
+        productName: 'AGV自动导引车',
+        isEnabled: true,
+        currentStatus: '空闲',
+        isOnline: true,
+        relatedMap: '一楼平面图',
+        mapPosition: '仓库A区',
+        ipAddress: '192.168.1.101',
+        port: '8080',
+        batteryLevel: 85,
+        updateTime: '2024-01-15 14:30:25',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 14:28:15'
+      },
+      {
+        id: 'robot_002',
+        deviceName: 'AMR-002',
+        deviceKey: 'amr_002_key',
+        deviceType: '机器人设备',
+        productName: 'AMR移动机器人',
+        isEnabled: true,
+        currentStatus: '执行中',
+        isOnline: true,
+        relatedMap: '二楼平面图',
+        mapPosition: '生产线B',
+        ipAddress: '192.168.1.102',
+        port: '8080',
+        batteryLevel: 72,
+        updateTime: '2024-01-15 15:20:10',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 15:18:05'
+      },
+      {
+        id: 'robot_003',
+        deviceName: 'MCR-003',
+        deviceKey: 'mcr_003_key',
+        deviceType: '机器人设备',
+        productName: 'MCR清洁机器人',
+        isEnabled: true,
+        currentStatus: '充电中',
+        isOnline: true,
+        relatedMap: '三楼平面图',
+        mapPosition: '办公区C',
+        ipAddress: '192.168.1.103',
+        port: '8080',
+        batteryLevel: 45,
+        updateTime: '2024-01-15 16:10:30',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 16:08:20'
+      },
+      {
+        id: 'robot_004',
+        deviceName: 'AGV-004',
+        deviceKey: 'agv_004_key',
+        deviceType: '机器人设备',
+        productName: 'AGV自动导引车',
+        isEnabled: false,
+        currentStatus: '异常',
+        isOnline: false,
+        relatedMap: '一楼平面图',
+        mapPosition: '维修区',
+        ipAddress: '192.168.1.104',
+        port: '8080',
+        batteryLevel: 15,
+        updateTime: '2024-01-15 12:45:15',
+        updatedBy: '系统',
+        lastConnectTime: '2024-01-15 11:30:45'
+      }
+    ];
+    setRobotDevices(mockRobotDevices);
+    // 默认选中第一台在线机器人
+    const onlineRobots = mockRobotDevices.filter(robot => robot.isOnline && robot.isEnabled);
+    if (onlineRobots.length > 0) {
+      setSelectedRobot(onlineRobots[0].id);
+    }
+  }, []);
+
+  // 监听选中机器人变化，获取机器人地图列表
+  useEffect(() => {
+    if (selectedRobot) {
+      // 根据不同机器人配置不同的地图列表
+      const robotMapConfig: Record<string, string[]> = {
+        'robot_001': [
+          '仓库A区地图_v1.3',
+          '仓库A区导航图_v2.1',
+          '一楼物流通道_v1.0',
+          '货架布局图_v1.8'
+        ],
+        'robot_002': [
+          '生产线B区地图_v2.2',
+          '二楼作业区_v1.5',
+          '设备布局图_v1.9',
+          '安全通道图_v1.1',
+          '质检区域图_v1.0'
+        ],
+        'robot_003': [
+          '办公区C清洁路径_v1.7',
+          '三楼办公区_v2.0',
+          '会议室布局_v1.3',
+          '休息区地图_v1.2'
+        ],
+        'robot_004': [
+          '维修区域图_v1.0',
+          '一楼维护通道_v1.4',
+          '设备检修图_v2.1'
+        ]
+      };
+      
+      const maps = robotMapConfig[selectedRobot] || [];
+      setRobotMaps(maps);
+    } else {
+      setRobotMaps([]);
+    }
+  }, [selectedRobot]);
 
   // 动态列宽计算函数
   const getColumnWidth = (baseWidth: number): number => {
@@ -637,6 +800,86 @@ const MapManagement: React.FC = () => {
     );
   };
 
+  // 处理本地导入地图
+  const handleLocalImport = async (values: any) => {
+    try {
+      setLoading(true);
+      // 模拟API调用
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const newMap: MapData = {
+        id: `map_${Date.now()}`,
+        name: values.mapName,
+        version: '1.0.0',
+        status: 'inactive',
+        thumbnail: '/api/placeholder/150/100',
+        description: values.description || '',
+        createTime: new Date().toISOString().split('T')[0],
+        updateTime: new Date().toISOString().split('T')[0],
+        updateUser: '当前用户'
+      };
+      
+      // 将新地图添加到地图列表中
+      const updatedMapData = [newMap, ...mapData];
+      setMapData(updatedMapData);
+      
+      // 更新localStorage
+      localStorage.setItem('mapData', JSON.stringify(updatedMapData));
+      
+      setLocalImportDrawerVisible(false);
+      localImportForm.resetFields();
+      setLocalImportFile(null);
+      message.success('地图导入成功！');
+    } catch (error) {
+      message.error('导入失败，请重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 处理机器人地图导入
+  const handleRobotImport = async () => {
+    if (!selectedRobot || selectedRobotMaps.length === 0) {
+      message.warning('请选择机器人和地图');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      // 模拟API调用
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const newMaps: MapData[] = selectedRobotMaps.map((mapName, index) => ({
+        id: `map_${Date.now()}_${index}`,
+        name: mapName,
+        version: '1.0.0',
+        status: 'inactive',
+        thumbnail: '/api/placeholder/150/100',
+        description: `从机器人${selectedRobot}导入的地图`,
+        createTime: new Date().toISOString().split('T')[0],
+        updateTime: new Date().toISOString().split('T')[0],
+        updateUser: '当前用户'
+      }));
+      
+      // 将新地图添加到地图列表中
+      const updatedMapData = [...newMaps, ...mapData];
+      setMapData(updatedMapData);
+      
+      // 更新localStorage
+      localStorage.setItem('mapData', JSON.stringify(updatedMapData));
+      
+      setRobotDrawerVisible(false);
+      setSelectedRobot('');
+      setSelectedRobotMaps([]);
+      setRobotMaps([]);
+      message.success(`成功导入${selectedRobotMaps.length}张地图！`);
+    } catch (error) {
+      message.error('导入失败，请重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 处理新增地图表单提交
   const handleAddMap = async (values: any) => {
     try {
@@ -895,15 +1138,79 @@ const MapManagement: React.FC = () => {
                 height: '32px'
               }}>
                 <Title level={5} style={{ margin: 0, color: '#666', fontSize: '16px', fontWeight: 500, lineHeight: '32px' }}>地图列表</Title>
-                <Button 
-                  type="primary" 
-                  size={isMobile ? 'large' : 'small'}
-                  style={{ minWidth: isMobile ? 'auto' : '60px' }}
-                  onClick={() => setDrawerVisible(true)}
-                  icon={<PlusOutlined />}
-                >
-                  {isMobile ? '新增' : '新增'}
-                </Button>
+                <Space size={8}>
+                  <Popover
+                    content={
+                      <div style={{ width: 200 }}>
+                        <div 
+                          style={{ 
+                            padding: '8px 12px', 
+                            cursor: 'pointer',
+                            borderRadius: '4px',
+                            transition: 'background-color 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          onClick={() => {
+                            setImportPopoverVisible(false);
+                            setLocalImportDrawerVisible(true);
+                          }}
+                        >
+                          <Space>
+                            <FolderOpenOutlined style={{ color: '#1890ff' }} />
+                            <span>从本地导入</span>
+                          </Space>
+                        </div>
+                        <div 
+                          style={{ 
+                            padding: '8px 12px', 
+                            cursor: 'pointer',
+                            borderRadius: '4px',
+                            transition: 'background-color 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f5f5f5'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                          onClick={() => {
+                            setImportPopoverVisible(false);
+                            // 打开抽屉时自动选择第一个在线机器人
+                            const onlineRobots = robotDevices.filter(robot => robot.isOnline && robot.isEnabled);
+                            if (onlineRobots.length > 0 && !selectedRobot) {
+                              setSelectedRobot(onlineRobots[0].id);
+                            }
+                            setRobotDrawerVisible(true);
+                          }}
+                        >
+                          <Space>
+                            <RobotOutlined style={{ color: '#52c41a' }} />
+                            <span>从机器人拉取</span>
+                          </Space>
+                        </div>
+                      </div>
+                    }
+                    title="导入地图"
+                    trigger="click"
+                    open={importPopoverVisible}
+                    onOpenChange={setImportPopoverVisible}
+                    placement="bottomRight"
+                  >
+                    <Button 
+                      size={isMobile ? 'large' : 'small'}
+                      icon={<ImportOutlined />}
+                      style={{ minWidth: isMobile ? 'auto' : '60px' }}
+                    >
+                      {isMobile ? '导入' : '导入'}
+                    </Button>
+                  </Popover>
+                  <Button 
+                    type="primary" 
+                    size={isMobile ? 'large' : 'small'}
+                    style={{ minWidth: isMobile ? 'auto' : '60px' }}
+                    onClick={() => setDrawerVisible(true)}
+                    icon={<PlusOutlined />}
+                  >
+                    {isMobile ? '新增' : '新增'}
+                  </Button>
+                </Space>
               </div>
               <Card
                 size="small"
@@ -1332,8 +1639,379 @@ const MapManagement: React.FC = () => {
            )}
          </Form>
        </Drawer>
-     </div>
-   );
+
+       {/* 从机器人拉取地图侧滑抽屉 */}
+       <Drawer
+         title="从机器人拉取地图"
+         width={`${Math.floor(window.innerWidth * 2 / 3)}px`}
+         placement="right"
+         onClose={() => {
+           setRobotDrawerVisible(false);
+           // 不清空选中的机器人，保持选中状态
+         }}
+         open={robotDrawerVisible}
+         bodyStyle={{ padding: '24px' }}
+         footer={
+           <div style={{ textAlign: 'center' }}>
+             <Button 
+               onClick={() => {
+                 setRobotDrawerVisible(false);
+               }} 
+               style={{ marginRight: 8 }}
+             >
+               取消
+             </Button>
+             <Button 
+               type="primary" 
+               disabled={!selectedRobot || selectedRobotMaps.length === 0}
+               onClick={() => handleRobotImport()}
+               loading={loading}
+             >
+               确认导入 ({selectedRobotMaps.length})
+             </Button>
+           </div>
+         }
+       >
+         <div>
+           <div style={{ marginBottom: 24 }}>
+             <Title level={5} style={{ margin: 0, marginBottom: 8 }}>选择在线机器人设备</Title>
+             <div style={{ color: '#666', fontSize: '14px' }}>
+               仅显示在线且已启用的机器人设备
+             </div>
+           </div>
+           
+           <Row gutter={[16, 16]}>
+             {robotDevices
+               .filter(robot => robot.isOnline && robot.isEnabled)
+               .map(robot => (
+                 <Col key={robot.id} xs={24} sm={12} md={8} lg={8} xl={8}>
+                   <Card 
+                     size="small" 
+                     style={{ 
+                       width: '100%',
+                       border: selectedRobot === robot.id ? '2px solid #1890ff' : '1px solid #e8e8e8',
+                       backgroundColor: selectedRobot === robot.id ? '#f0f9ff' : '#fff',
+                       borderRadius: '8px',
+                       cursor: 'pointer',
+                       transition: 'all 0.3s ease',
+                       position: 'relative'
+                     }}
+                     bodyStyle={{ padding: '16px' }}
+                     hoverable
+                     onClick={() => setSelectedRobot(robot.id)}
+                   >
+                     {/* 选择按钮放在卡片内右上角 */}
+                     <Radio 
+                       checked={selectedRobot === robot.id}
+                       style={{ 
+                         position: 'absolute',
+                         top: '12px',
+                         right: '12px',
+                         zIndex: 1
+                       }}
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         setSelectedRobot(robot.id);
+                       }}
+                     />
+                     
+                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', paddingTop: '8px' }}>
+                       <Avatar 
+                         icon={<RobotOutlined />} 
+                         style={{ 
+                           backgroundColor: '#1890ff',
+                           border: '2px solid #e6f7ff',
+                           flexShrink: 0
+                         }}
+                         size={24}
+                       />
+                       <div style={{ flex: 1, textAlign: 'left' }}>
+                         <div style={{ fontWeight: 600, fontSize: '16px', marginBottom: '8px', color: '#262626' }}>
+                           {robot.deviceName}
+                         </div>
+                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                           <Badge 
+                             status={robot.isOnline ? 'success' : 'error'} 
+                             text={
+                               <span style={{ fontSize: '13px', fontWeight: 500 }}>
+                                 {robot.isOnline ? '在线' : '离线'}
+                               </span>
+                             }
+                           />
+                           <span style={{ color: '#666', fontSize: '12px' }}>
+                             {robot.ipAddress}:{robot.port}
+                           </span>
+                           <span style={{ color: '#999', fontSize: '12px' }}>
+                             最近连接: {robot.lastConnectTime}
+                           </span>
+                         </div>
+                       </div>
+                     </div>
+                   </Card>
+                 </Col>
+               ))
+             }
+           </Row>
+           
+           {/* 机器人地图列表 */}
+           {selectedRobot && robotMaps.length > 0 && (
+             <div style={{ marginTop: 32 }}>
+               <Divider orientation="left">
+                 <Title level={5} style={{ margin: 0 }}>可拉取的地图列表</Title>
+               </Divider>
+               <div style={{ 
+                 backgroundColor: '#fafafa', 
+                 borderRadius: '8px', 
+                 padding: '16px',
+                 border: '1px solid #f0f0f0'
+               }}>
+                 <Row gutter={[8, 8]}>
+                   {robotMaps.map((mapName, index) => {
+                     // 模拟地图数据
+                     const mapData = {
+                       name: mapName,
+                       size: `${(Math.random() * 50 + 10).toFixed(1)}MB`,
+                       updateTime: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toLocaleString('zh-CN', {
+                         year: 'numeric',
+                         month: '2-digit',
+                         day: '2-digit',
+                         hour: '2-digit',
+                         minute: '2-digit'
+                       })
+                     };
+                     
+                     return (
+                       <Col key={index} xs={24} sm={12} md={8} lg={6} xl={6}>
+                         <Card 
+                           size="small"
+                           style={{ 
+                             borderRadius: '8px',
+                             border: selectedRobotMaps.includes(mapName) ? '2px solid #1890ff' : '1px solid #e8e8e8',
+                             backgroundColor: selectedRobotMaps.includes(mapName) ? '#f0f9ff' : '#fff',
+                             cursor: 'pointer',
+                             transition: 'all 0.3s ease',
+                             position: 'relative',
+                             height: '100px'
+                           }}
+                           bodyStyle={{ padding: '16px', height: '100%', display: 'flex', flexDirection: 'column' }}
+                           hoverable
+                           onClick={() => {
+                             const newSelected = selectedRobotMaps.includes(mapName)
+                               ? selectedRobotMaps.filter(m => m !== mapName)
+                               : [...selectedRobotMaps, mapName];
+                             setSelectedRobotMaps(newSelected);
+                           }}
+                         >
+                           {/* 多选框放在卡片内右上角 */}
+                           <Checkbox 
+                             checked={selectedRobotMaps.includes(mapName)}
+                             style={{ 
+                               position: 'absolute',
+                               top: '12px',
+                               right: '12px',
+                               zIndex: 1
+                             }}
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               const newSelected = selectedRobotMaps.includes(mapName)
+                                 ? selectedRobotMaps.filter(m => m !== mapName)
+                                 : [...selectedRobotMaps, mapName];
+                               setSelectedRobotMaps(newSelected);
+                             }}
+                           />
+                           
+                           <div style={{ 
+                             display: 'flex', 
+                             flexDirection: 'column', 
+                             justifyContent: 'center',
+                             height: '100%',
+                             paddingTop: '8px'
+                           }}>
+                             <div style={{ 
+                               display: 'flex', 
+                               flexDirection: 'column',
+                               gap: '4px'
+                             }}>
+                               <span style={{ 
+                                 fontSize: '14px', 
+                                 fontWeight: 600, 
+                                 color: '#262626'
+                               }}>
+                                 {mapData.name}
+                               </span>
+                               <div style={{ 
+                                 display: 'flex', 
+                                 alignItems: 'center', 
+                                 gap: '8px',
+                                 flexWrap: 'wrap'
+                               }}>
+                                 <span style={{ 
+                                   fontSize: '12px', 
+                                   color: '#666'
+                                 }}>
+                                   大小: {mapData.size}
+                                 </span>
+                                 <span style={{ 
+                                   fontSize: '12px', 
+                                   color: '#999'
+                                 }}>
+                                   更新: {mapData.updateTime}
+                                 </span>
+                               </div>
+                             </div>
+                           </div>
+                         </Card>
+                       </Col>
+                     );
+                   })}
+                 </Row>
+               </div>
+             </div>
+           )}
+           
+           {robotDevices.filter(robot => robot.isOnline && robot.isEnabled).length === 0 && (
+             <div style={{ 
+               textAlign: 'center', 
+               padding: '60px 20px',
+               color: '#999',
+               backgroundColor: '#fafafa',
+               borderRadius: '8px',
+               border: '1px dashed #d9d9d9'
+             }}>
+               <RobotOutlined style={{ fontSize: '48px', color: '#d9d9d9', marginBottom: '16px' }} />
+               <div style={{ fontSize: '16px', marginBottom: '8px' }}>暂无可用的机器人设备</div>
+               <div style={{ fontSize: '14px' }}>请确保机器人设备已上线并启用</div>
+             </div>
+           )}
+         </div>
+       </Drawer>
+
+       {/* 本地导入地图侧滑弹窗 */}
+       <Drawer
+         title="本地导入地图"
+         width={window.innerWidth * 2 / 3}
+         onClose={() => {
+           setLocalImportDrawerVisible(false);
+           localImportForm.resetFields();
+           setLocalImportFile(null);
+         }}
+         open={localImportDrawerVisible}
+         bodyStyle={{ paddingBottom: 80 }}
+         footer={
+           <div style={{ textAlign: 'center' }}>
+             <Button 
+               onClick={() => {
+                 setLocalImportDrawerVisible(false);
+                 localImportForm.resetFields();
+                 setLocalImportFile(null);
+               }} 
+               style={{ marginRight: 8 }}
+             >
+               取消
+             </Button>
+             <Button 
+               onClick={() => localImportForm.submit()} 
+               type="primary" 
+               loading={loading}
+             >
+               确认导入
+             </Button>
+           </div>
+         }
+       >
+         <Form
+           form={localImportForm}
+           layout="vertical"
+           onFinish={handleLocalImport}
+           requiredMark={true}
+         >
+           <Form.Item
+             name="mapName"
+             label="地图名称"
+             rules={[
+               { required: true, message: '请输入地图名称' },
+               { max: 50, message: '地图名称不能超过50个字符' },
+               { 
+                  validator: (_: any, value: string) => {
+                    if (value && value.trim() === '') {
+                      return Promise.reject(new Error('地图名称不能为空格'));
+                    }
+                    return Promise.resolve();
+                  }
+                }
+             ]}
+           >
+             <Input 
+               placeholder="请输入地图名称" 
+               size="large"
+             />
+           </Form.Item>
+
+           <Form.Item
+             name="description"
+             label="地图描述"
+             rules={[
+               { max: 200, message: '描述不能超过200个字符' }
+             ]}
+           >
+             <Input.TextArea 
+               placeholder="请输入地图描述（可选）" 
+               rows={3}
+               size="large"
+             />
+           </Form.Item>
+
+           <Form.Item
+             label="地图文件"
+             required
+           >
+             <Upload.Dragger
+               name="mapFile"
+               customRequest={({ onSuccess }) => {
+                 setTimeout(() => {
+                   onSuccess && onSuccess('ok');
+                 }, 0);
+               }}
+               onChange={(info) => {
+                 if (info.file.status === 'done') {
+                   setLocalImportFile(info.file);
+                   message.success(`${info.file.name} 文件上传成功`);
+                 } else if (info.file.status === 'error') {
+                   message.error(`${info.file.name} 文件上传失败`);
+                 }
+               }}
+               showUploadList={false}
+               accept=".map,.pgm,.yaml,.yml,.json"
+               style={{ marginBottom: 16 }}
+             >
+               <p className="ant-upload-drag-icon">
+                 <UploadOutlined style={{ fontSize: 48, color: '#1890ff' }} />
+               </p>
+               <p className="ant-upload-text" style={{ fontSize: 16, marginBottom: 8 }}>
+                 点击或拖拽文件到此区域上传
+               </p>
+               <p className="ant-upload-hint" style={{ color: '#999' }}>
+                 支持 .map, .pgm, .yaml, .yml, .json 等地图格式
+               </p>
+               {localImportFile && (
+                 <div style={{ 
+                   marginTop: 12, 
+                   padding: '8px 16px', 
+                   background: '#f6ffed', 
+                   border: '1px solid #b7eb8f',
+                   borderRadius: 6,
+                   color: '#52c41a'
+                 }}>
+                   <FileImageOutlined style={{ marginRight: 8 }} />
+                   已上传: {localImportFile.name}
+                 </div>
+               )}
+             </Upload.Dragger>
+           </Form.Item>
+         </Form>
+       </Drawer>
+    </div>
+  );
 };
 
 export default MapManagement;
