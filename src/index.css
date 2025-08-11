@@ -13,3 +13,76 @@ body {
 #root {
   height: 100vh;
 }
+
+/* 移动端分页器优化样式 */
+.mobile-pagination {
+  font-size: 12px !important;
+}
+
+.mobile-pagination .ant-pagination-item {
+  min-width: 28px !important;
+  height: 28px !important;
+  line-height: 26px !important;
+  margin-right: 4px !important;
+}
+
+.mobile-pagination .ant-pagination-item a {
+  font-size: 12px !important;
+}
+
+.mobile-pagination .ant-pagination-prev,
+.mobile-pagination .ant-pagination-next {
+  min-width: 28px !important;
+  height: 28px !important;
+  line-height: 26px !important;
+}
+
+.mobile-pagination .ant-pagination-prev .ant-pagination-item-link,
+.mobile-pagination .ant-pagination-next .ant-pagination-item-link {
+  font-size: 10px !important;
+}
+
+.mobile-pagination .ant-pagination-total-text {
+  font-size: 11px !important;
+  margin-right: 8px !important;
+}
+
+/* 响应式分页器容器 */
+@media (max-width: 768px) {
+  .mobile-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+/* 地图列表行选择状态优化 */
+.ant-table-tbody > tr.ant-table-row:hover > td {
+  background-color: #f5f5f5 !important;
+}
+
+.ant-table-tbody > tr.ant-table-row[style*="background-color: rgb(240, 248, 255)"] > td {
+  background-color: #f0f8ff !important;
+}
+
+.ant-table-tbody > tr.ant-table-row[style*="background-color: rgb(240, 248, 255)"] > td.ant-table-cell-fix-left {
+  background-color: #f0f8ff !important;
+}
+
+.ant-table-tbody > tr.ant-table-row[style*="background-color: rgb(240, 248, 255)"] > td.ant-table-cell-fix-right {
+  background-color: #f0f8ff !important;
+}
+
+/* 确保选中行的所有单元格都有统一的背景色 */
+.ant-table-tbody > tr.ant-table-row[style*="background-color: rgb(240, 248, 255)"] {
+  background-color: #f0f8ff !important;
+}
+
+/* 移动端分页器总数文本样式 */
+@media (max-width: 768px) {
+  .ant-pagination-total-text {
+    order: -1;
+    width: 100%;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+}
