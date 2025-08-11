@@ -54,18 +54,54 @@ interface MapFile {
 
 const MapManagement: React.FC = () => {
   const [selectedMap, setSelectedMap] = useState<MapData | null>(null);
+  const [loading, setLoading] = useState(false);
+  
+  // 响应式状态管理
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1600);
   const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < 992);
 
   // 监听窗口大小变化
   useEffect(() => {
     const handleResize = () => {
-      setIsSmallScreen(window.innerWidth < 992);
+      const width = window.innerWidth;
+      setIsMobile(width < 768);
+      setIsLargeScreen(width >= 1600);
+      setIsSmallScreen(width < 992);
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
-  const [loading, setLoading] = useState(false);
+
+  // 动态列宽计算函数
+  const getColumnWidth = (baseWidth: number): number => {
+    if (isMobile) return Math.max(baseWidth * 0.8, 80);
+    if (isLargeScreen) return baseWidth * 1.2;
+    return baseWidth;
+  };
+
+  // 表格配置函数
+  const getTableConfig = (mobile: boolean, large: boolean, columnCount: number) => {
+    if (mobile) {
+      return {
+        scroll: { x: Math.max(columnCount * 120, 600) },
+        size: 'small' as const,
+      };
+    }
+    return {
+      scroll: large ? { x: 'max-content' } : undefined,
+      size: 'middle' as const,
+    };
+  };
+
+  // 列宽调整函数
+  const adjustColumnWidths = (columns: ColumnsType<MapData>, mobile: boolean) => {
+    return columns.map((col: any) => ({
+      ...col,
+      width: col.width ? getColumnWidth(col.width as number) : undefined,
+    }));
+  };
 
   // 模拟地图数据
   const mapData: MapData[] = [
@@ -173,19 +209,19 @@ const MapManagement: React.FC = () => {
     return fileSets[mapId] || [];
   };
 
-  // 表格列配置
-  const columns: ColumnsType<MapData> = [
+  // 基础表格列配置
+  const baseColumns: ColumnsType<MapData> = [
     {
       title: '地图名称',
       dataIndex: 'name',
       key: 'name',
+      width: getColumnWidth(150),
       align: 'left',
-      onHeaderCell: () => ({
-          style: { paddingLeft: 18 }
-        }),
+      fixed: 'left',
+      ellipsis: true,
       render: (text: string, record: MapData) => (
-        <div style={{ paddingLeft: 14 }}>
-          <div style={{ color: 'rgba(0, 0, 0, 0.88)' }}>{text}</div>
+        <div style={{ textAlign: 'left' }}>
+          <div style={{ color: 'rgba(0, 0, 0, 0.88)', fontWeight: 500 }}>{text}</div>
           <div style={{ fontSize: '12px', color: '#1890ff', fontWeight: 500, marginTop: 4 }}>{record.version}</div>
         </div>
       ),
@@ -194,11 +230,13 @@ const MapManagement: React.FC = () => {
       title: '更新时间',
       dataIndex: 'updateTime',
       key: 'updateTime',
+      width: getColumnWidth(160),
       align: 'left',
+      sorter: (a: MapData, b: MapData) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
       render: (updateTime: string) => {
         const [date, time] = updateTime.split(' ');
         return (
-          <div>
+          <div style={{ textAlign: 'left' }}>
             <div style={{ color: 'rgba(0, 0, 0, 0.88)' }}>{date}</div>
             <div style={{ fontSize: '12px', color: '#999', marginTop: 2 }}>{time}</div>
           </div>
@@ -209,21 +247,21 @@ const MapManagement: React.FC = () => {
       title: '更新人',
       dataIndex: 'updateUser',
       key: 'updateUser',
+      width: getColumnWidth(100),
       align: 'left',
+      ellipsis: true,
       render: (updateUser: string) => (
-        <span style={{ color: 'rgba(0, 0, 0, 0.88)' }}>{updateUser}</span>
+        <span style={{ color: 'rgba(0, 0, 0, 0.88)', fontWeight: 500 }}>{updateUser}</span>
       ),
     },
     {
       title: '操作',
       key: 'action',
-      width: 60,
-      align: 'right',
-      onHeaderCell: () => ({
-        style: { paddingRight: 14 }
-      }),
+      width: getColumnWidth(80),
+      align: 'center',
+      fixed: 'right',
       render: (_: any, record: MapData) => (
-        <div style={{ paddingRight: 10 }}>
+        <Space size={4}>
           <Dropdown
             menu={{
               items: [
@@ -253,15 +291,106 @@ const MapManagement: React.FC = () => {
             <Button
               type="link"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              style={{ padding: 0 }}
+              size="small"
+              style={{ padding: '0 4px' }}
             >
               更多
             </Button>
           </Dropdown>
-        </div>
+        </Space>
       ),
     },
   ];
+
+  // 移动端简化列配置
+   const mobileColumns: ColumnsType<MapData> = [
+     {
+       title: '地图信息',
+       key: 'mapInfo',
+       render: (_: any, record: MapData) => {
+        const [date, time] = record.updateTime.split(' ');
+        return (
+          <div style={{ padding: '8px 0' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'flex-start',
+              marginBottom: 8 
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ 
+                  color: 'rgba(0, 0, 0, 0.88)', 
+                  fontWeight: 500, 
+                  fontSize: '14px',
+                  marginBottom: 4 
+                }}>
+                  {record.name}
+                </div>
+                <div style={{ 
+                  fontSize: '12px', 
+                  color: '#1890ff', 
+                  fontWeight: 500 
+                }}>
+                  {record.version}
+                </div>
+              </div>
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: 'edit',
+                      icon: <EditOutlined />,
+                      label: '编辑',
+                      onClick: () => handleEdit(record),
+                    },
+                    {
+                      key: 'settings',
+                      icon: <SettingOutlined />,
+                      label: '设置',
+                      onClick: () => handleSettings(record),
+                    },
+                    {
+                      key: 'delete',
+                      icon: <DeleteOutlined />,
+                      label: '删除',
+                      danger: true,
+                      onClick: () => handleDelete(record),
+                    },
+                  ],
+                }}
+                trigger={['click']}
+              >
+                <Button
+                  type="link"
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                  size="small"
+                  icon={<MoreOutlined />}
+                />
+              </Dropdown>
+            </div>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              fontSize: '12px', 
+              color: '#666' 
+            }}>
+              <span>{date} {time}</span>
+              <span>更新人: {record.updateUser}</span>
+            </div>
+          </div>
+        );
+      },
+    },
+  ].filter((col: any) => col);
+
+  // 根据屏幕大小选择列配置
+  const filteredColumns = isMobile ? mobileColumns : baseColumns;
+  
+  // 应用动态列宽调整
+  const desktopColumns = adjustColumnWidths(filteredColumns, isMobile);
+
+  // 获取表格配置
+  const tableConfig = getTableConfig(isMobile, isLargeScreen, desktopColumns.length);
 
   // 处理行点击
   const handleRowClick = (record: MapData) => {
@@ -406,7 +535,21 @@ const MapManagement: React.FC = () => {
               display: 'flex', 
               flexDirection: 'column' 
             }}>
-              <Title level={5} style={{ margin: '0 0 12px 0', color: '#666' }}>地图列表</Title>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: 12 
+              }}>
+                <Title level={5} style={{ margin: 0, color: '#666' }}>地图列表</Title>
+                <Button 
+                  type="primary" 
+                  size={isMobile ? 'large' : 'small'}
+                  style={{ minWidth: isMobile ? 'auto' : '60px' }}
+                >
+                  {isMobile ? '新增' : '新增'}
+                </Button>
+              </div>
               <Card
                 size="small"
                 bodyStyle={{ 
@@ -417,69 +560,66 @@ const MapManagement: React.FC = () => {
                 style={{ flex: isSmallScreen ? 'none' : 1 }}
               >
                 <Table
-                  columns={columns}
+                  columns={isMobile ? mobileColumns : desktopColumns}
                   dataSource={mapData}
                   rowKey="id"
                   pagination={{
-                    pageSize: 5, // 小屏模式下减少每页显示数量
-                    showSizeChanger: true,
-                    showQuickJumper: true,
-                    showTotal: (total: number, range: [number, number]) =>
+                    total: mapData.length,
+                    pageSize: isMobile ? 5 : isLargeScreen ? 15 : 10,
+                    showSizeChanger: !isMobile,
+                    showQuickJumper: !isMobile,
+                    showTotal: isMobile ? undefined : (total: number, range: [number, number]) =>
                       `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
-                    style: {
-                      marginLeft: '16px',
-                      marginRight: '16px',
-                    },
+                    simple: isMobile,
+                    size: isMobile ? 'small' : 'default',
+                    showLessItems: !isLargeScreen,
+                    pageSizeOptions: isLargeScreen ? ['10', '15', '20', '50'] : ['10', '20', '50'],
                   }}
                   expandable={{
-                      // 小屏模式下启用展开功能
-                      expandedRowRender: isSmallScreen ? renderExpandedRow : undefined,
-                      expandRowByClick: isSmallScreen,
-                      expandedRowKeys: isSmallScreen && selectedMap ? [selectedMap.id] : [],
-                      onExpand: (expanded: boolean, record: MapData) => {
-                        if (isSmallScreen) {
-                          setSelectedMap(expanded ? record : null);
-                        }
-                      },
-                      showExpandColumn: isSmallScreen,
-                    }}
+                    // 小屏模式下启用展开功能
+                    expandedRowRender: isSmallScreen ? renderExpandedRow : undefined,
+                    expandRowByClick: isSmallScreen,
+                    expandedRowKeys: isSmallScreen && selectedMap ? [selectedMap.id] : [],
+                    onExpand: (expanded: boolean, record: MapData) => {
+                      if (isSmallScreen) {
+                        setSelectedMap(expanded ? record : null);
+                      }
+                    },
+                    showExpandColumn: isSmallScreen,
+                  }}
                   onRow={(record: MapData) => ({
-                     onClick: () => {
-                       if (!isSmallScreen) {
-                         handleRowClick(record);
-                       }
-                     },
+                    onClick: () => {
+                      if (!isSmallScreen) {
+                        handleRowClick(record);
+                      }
+                    },
                     style: {
                       cursor: 'pointer',
                       backgroundColor:
                         selectedMap?.id === record.id ? '#f0f8ff' : 'transparent',
                     },
                   })}
-                  size="small"
-                  style={{
-                    '--ant-table-padding-horizontal': '8px',
-                  } as React.CSSProperties}
+                  scroll={tableConfig.scroll}
+                  size={tableConfig.size}
                 />
               </Card>
             </div>
-
           </Col>
 
-          {/* 大屏幕下的右侧地图文件 */}
+          {/* 右侧地图文件 - 大屏幕显示 */}
           <Col xs={0} lg={16} style={{ height: '100%' }}>
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <Title level={5} style={{ margin: '0 0 12px 0', color: '#666' }}>地图文件</Title>
               {selectedMap ? (
+        <Card 
+          title={`地图文件 - ${selectedMap.name}`}
+          style={{ marginBottom: 16 }}
+        >
+          <Row gutter={[16, 16]}>
+            {getMapFiles(selectedMap.id).map((file) => (
+              <Col xs={24} sm={12} lg={8} xl={6} key={file.id}>
                 <Card
                   size="small"
-                  bodyStyle={{ padding: 16, flex: 1, overflow: 'auto' }}
-                  style={{ flex: 1 }}
-                >
-                  <Row gutter={[16, 16]}>
-                    {getMapFiles(selectedMap.id).map((file) => (
-                      <Col xs={24} sm={12} lg={8} xl={6} key={file.id}>
-                        <Card
-                          size="small"
                           hoverable
                           cover={
                             <img
@@ -529,36 +669,36 @@ const MapManagement: React.FC = () => {
                             description={null}
                           />
                         </Card>
-                      </Col>
-                    ))}
-                  </Row>
-                </Card>
-              ) : (
-                <Card
-                  size="small"
-                  bodyStyle={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flex: 1,
-                    minHeight: '200px'
-                  }}
-                  style={{ flex: 1 }}
-                >
-                  <div style={{ textAlign: 'center' }}>
-                    <FileImageOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
-                    <div style={{ marginTop: 16, color: '#999' }}>
-                      请从左侧列表选择一个地图查看文件
-                    </div>
-                  </div>
-                </Card>
-              )}
-            </div>
-          </Col>
-        </Row>
-      </Card>
-    </div>
-  );
+                       </Col>
+                     ))}
+                   </Row>
+                 </Card>
+               ) : (
+                 <Card
+                   size="small"
+                   bodyStyle={{
+                     display: 'flex',
+                     alignItems: 'center',
+                     justifyContent: 'center',
+                     flex: 1,
+                     minHeight: '200px'
+                   }}
+                   style={{ flex: 1 }}
+                 >
+                   <div style={{ textAlign: 'center' }}>
+                     <FileImageOutlined style={{ fontSize: 48, color: '#d9d9d9' }} />
+                     <div style={{ marginTop: 16, color: '#999' }}>
+                       请从左侧列表选择一个地图查看文件
+                     </div>
+                   </div>
+                 </Card>
+               )}
+             </div>
+           </Col>
+         </Row>
+       </Card>
+     </div>
+   );
 };
 
 export default MapManagement;
