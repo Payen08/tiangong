@@ -145,6 +145,8 @@ const MapManagement: React.FC = () => {
   const [robotDevices, setRobotDevices] = useState<RobotDevice[]>([]);
   const [robotMaps, setRobotMaps] = useState<string[]>([]);
   const [selectedRobotMaps, setSelectedRobotMaps] = useState<string[]>([]);
+  const [selectedRobotMapFiles, setSelectedRobotMapFiles] = useState<Record<string, MapFile[]>>({});
+  const [selectedMapFiles, setSelectedMapFiles] = useState<string[]>([]); // 地图文件多选状态
   const [localImportForm] = Form.useForm();
   const [localImportFile, setLocalImportFile] = useState<any>(null);
   const [robotSearchText, setRobotSearchText] = useState<string>('');
@@ -425,6 +427,23 @@ const MapManagement: React.FC = () => {
     }
   }, []);
 
+  // 生成机器人地图文件数据
+  const generateRobotMapFiles = (mapName: string): MapFile[] => {
+    const fileTypes = ['dwg', 'pdf', 'jpg', 'svg', 'png'];
+    const fileCount = Math.floor(Math.random() * 3) + 2; // 2-4个文件
+    
+    return Array.from({ length: fileCount }, (_, index) => {
+      const fileType = fileTypes[Math.floor(Math.random() * fileTypes.length)];
+      return {
+        id: `robot_file_${mapName}_${index}`,
+        name: `${mapName}_${index + 1}.${fileType}`,
+        thumbnail: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
+        status: index === 0 ? 'active' : 'inactive',
+        format: fileType.toUpperCase(),
+      };
+    });
+  };
+
   // 监听选中机器人变化，获取机器人地图列表
   useEffect(() => {
     if (selectedRobot) {
@@ -506,8 +525,16 @@ const MapManagement: React.FC = () => {
       
       const maps = robotMapConfig[selectedRobot] || [];
       setRobotMaps(maps);
+      
+      // 生成每个地图对应的文件列表
+      const mapFilesData: Record<string, MapFile[]> = {};
+      maps.forEach(mapName => {
+        mapFilesData[mapName] = generateRobotMapFiles(mapName);
+      });
+      setSelectedRobotMapFiles(mapFilesData);
     } else {
       setRobotMaps([]);
+      setSelectedRobotMapFiles({});
     }
   }, [selectedRobot]);
 
@@ -1350,8 +1377,8 @@ const MapManagement: React.FC = () => {
 
   // 处理机器人地图导入
   const handleRobotImport = async () => {
-    if (!selectedRobot || selectedRobotMaps.length === 0) {
-      message.warning('请选择机器人和地图');
+    if (!selectedRobot || selectedMapFiles.length === 0) {
+      message.warning('请选择机器人和地图文件');
       return;
     }
     
@@ -1360,8 +1387,25 @@ const MapManagement: React.FC = () => {
       // 模拟API调用
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      // 根据选中的文件创建地图数据
+      const selectedFiles: MapFile[] = [];
+      const mapsByName: Record<string, string> = {};
+      
+      // 收集选中的文件并按地图分组
+      selectedRobotMaps.forEach(mapName => {
+        const mapFiles = selectedRobotMapFiles[mapName] || [];
+        mapFiles.forEach(file => {
+          if (selectedMapFiles.includes(file.id)) {
+            selectedFiles.push(file);
+            mapsByName[file.id] = mapName;
+          }
+        });
+      });
+      
+      // 按地图名称分组创建地图数据
+      const uniqueMapNames = Array.from(new Set(Object.values(mapsByName)));
       const now = new Date();
-      const newMaps: MapData[] = selectedRobotMaps.map((mapName, index) => ({
+      const newMaps: MapData[] = uniqueMapNames.map((mapName, index) => ({
         id: `map_${Date.now()}_${index}`,
         name: mapName,
         version: '1.0.0',
@@ -1383,8 +1427,9 @@ const MapManagement: React.FC = () => {
       setRobotDrawerVisible(false);
       setSelectedRobot('');
       setSelectedRobotMaps([]);
+      setSelectedMapFiles([]);
       setRobotMaps([]);
-      message.success(`成功导入${selectedRobotMaps.length}张地图！`);
+      message.success(`成功导入${selectedMapFiles.length}个文件，创建了${uniqueMapNames.length}张地图！`);
     } catch (error) {
       message.error('导入失败，请重试');
     } finally {
@@ -2192,11 +2237,11 @@ const MapManagement: React.FC = () => {
              </Button>
              <Button 
                type="primary" 
-               disabled={!selectedRobot || selectedRobotMaps.length === 0}
+               disabled={!selectedRobot || selectedMapFiles.length === 0}
                onClick={() => handleRobotImport()}
                loading={loading}
              >
-               确认导入 ({selectedRobotMaps.length})
+               确认导入 ({selectedMapFiles.length} 个文件)
              </Button>
            </div>
          }
@@ -2415,8 +2460,29 @@ const MapManagement: React.FC = () => {
            {selectedRobot && robotMaps.length > 0 && (
              <div style={{ marginTop: 32 }}>
                <Divider orientation="left">
-                 <Title level={5} style={{ margin: 0 }}>可拉取的地图列表</Title>
+                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                   <Title level={5} style={{ margin: 0 }}>可拉取的地图列表</Title>
+                   <Space>
+                     <Button 
+                       size="small" 
+                       onClick={() => {
+                         setSelectedRobotMaps([...robotMaps]);
+                       }}
+                     >
+                       全选
+                     </Button>
+                     <Button 
+                       size="small" 
+                       onClick={() => setSelectedRobotMaps([])}
+                     >
+                       清空选择
+                     </Button>
+                   </Space>
+                 </div>
                </Divider>
+               <div style={{ color: '#666', fontSize: '14px', marginBottom: 16 }}>
+                 选择要拉取的地图，支持多选。已选择 {selectedRobotMaps.length} 个地图
+               </div>
                <div style={{ 
                  backgroundColor: '#fafafa', 
                  borderRadius: '8px', 
@@ -2521,6 +2587,149 @@ const MapManagement: React.FC = () => {
                    })}
                  </Row>
                </div>
+             </div>
+           )}
+           
+           {/* 选中地图的文件列表 */}
+           {selectedRobot && (
+             <div style={{ marginTop: 32 }}>
+               <Divider orientation="left">
+                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                   <Title level={5} style={{ margin: 0 }}>选中地图的文件列表</Title>
+                   <Space>
+                     <Button 
+                       size="small" 
+                       onClick={() => {
+                         // 获取所有地图文件的ID
+                         const allFileIds: string[] = [];
+                         selectedRobotMaps.forEach(mapName => {
+                           const mapFiles = selectedRobotMapFiles[mapName] || [];
+                           mapFiles.forEach(file => allFileIds.push(file.id));
+                         });
+                         setSelectedMapFiles(allFileIds);
+                       }}
+                     >
+                       全选
+                     </Button>
+                     <Button 
+                       size="small" 
+                       onClick={() => setSelectedMapFiles([])}
+                     >
+                       清空选择
+                     </Button>
+                   </Space>
+                 </div>
+               </Divider>
+               <div style={{ color: '#666', fontSize: '14px', marginBottom: 16 }}>
+                 展示所选地图包含的文件，让您了解将要拉取的具体内容。已选择 {selectedMapFiles.length} 个文件
+               </div>
+               
+               {selectedRobotMaps.length > 0 ? (
+                 selectedRobotMaps.map((mapName, mapIndex) => {
+                   const mapFiles = selectedRobotMapFiles[mapName] || [];
+                   return (
+                     <div key={mapIndex} style={{ marginBottom: 24 }}>
+                       <div style={{ 
+                         fontSize: '14px', 
+                         fontWeight: 600, 
+                         color: '#262626',
+                         marginBottom: 12,
+                         padding: '8px 12px',
+                         backgroundColor: '#f0f9ff',
+                         borderRadius: '6px',
+                         border: '1px solid #e6f7ff'
+                       }}>
+                         📁 {mapName} ({mapFiles.length} 个文件)
+                       </div>
+                       
+                       <Row gutter={[12, 12]}>
+                         {mapFiles.map((file) => (
+                           <Col xs={12} sm={8} md={6} lg={6} xl={4} key={file.id}>
+                             <Card
+                               size="small"
+                               hoverable
+                               cover={
+                                 <img
+                                   alt={file.name}
+                                   src={file.thumbnail}
+                                   style={{
+                                     height: 80,
+                                     objectFit: 'cover',
+                                     backgroundColor: '#f5f5f5',
+                                   }}
+                                 />
+                               }
+                               style={{
+                                 border: '1px solid #d9d9d9',
+                                 backgroundColor: '#fff',
+                                 cursor: 'default'
+                               }}
+                             >
+                               <Card.Meta
+                                 title={
+                                   <div style={{ position: 'relative' }}>
+                                     <div 
+                                       style={{ 
+                                         fontSize: '12px',
+                                         fontWeight: 500,
+                                         overflow: 'hidden',
+                                         textOverflow: 'ellipsis',
+                                         whiteSpace: 'nowrap'
+                                       }}
+                                       title={file.name}
+                                     >
+                                       {file.name}
+                                     </div>
+
+                                     <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                       <Tag 
+                                         size="small" 
+                                         color={file.status === 'active' ? 'blue' : 'default'}
+                                         style={{ fontSize: '10px' }}
+                                       >
+                                         {file.status === 'active' ? '当前使用' : '当前使用'}
+                                       </Tag>
+                                       
+                                       {/* 多选复选框，与"当前使用"标签水平对齐且靠右对齐 */}
+                                       <Checkbox 
+                                         checked={selectedMapFiles.includes(file.id)}
+                                         style={{ 
+                                           flexShrink: 0
+                                         }}
+                                         onClick={(e) => {
+                                           e.stopPropagation();
+                                           setSelectedMapFiles(prev => 
+                                             prev.includes(file.id) 
+                                               ? prev.filter(id => id !== file.id)
+                                               : [...prev, file.id]
+                                           );
+                                         }}
+                                       />
+                                     </div>
+                                   </div>
+                                 }
+                               />
+                             </Card>
+                           </Col>
+                         ))}
+                       </Row>
+                     </div>
+                   );
+                 })
+               ) : (
+                 <div style={{
+                   textAlign: 'center',
+                   padding: '60px 20px',
+                   color: '#999',
+                   backgroundColor: '#fafafa',
+                   borderRadius: '8px',
+                   border: '1px dashed #d9d9d9'
+                 }}>
+                   <FileImageOutlined style={{ fontSize: '48px', color: '#d9d9d9', marginBottom: '16px' }} />
+                   <div style={{ fontSize: '16px', marginBottom: '8px' }}>暂无地图文件数据</div>
+                   <div style={{ fontSize: '14px' }}>请先选择要拉取的地图</div>
+                 </div>
+               )}
              </div>
            )}
            
@@ -2708,11 +2917,34 @@ const MapManagement: React.FC = () => {
            <div style={{ marginBottom: 32 }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                <div>
-                 <Title level={5} style={{ margin: 0, marginBottom: 8 }}>选择在线机器人设备</Title>
-                 <div style={{ color: '#666', fontSize: '14px' }}>
-                   仅显示在线且已启用的机器人设备，支持多选
+                   <div style={{ marginBottom: 8 }}>
+                     <Title level={5} style={{ margin: 0, display: 'inline-block', marginRight: 16 }}>选择在线机器人设备</Title>
+                     <Space size={8}>
+                       <Button 
+                         size="small" 
+                         onClick={() => {
+                           const onlineRobots = robotDevices.filter(robot => 
+                             robot.isOnline && 
+                             robot.isEnabled && 
+                             robot.deviceName.toLowerCase().includes(robotSearchText.toLowerCase())
+                           );
+                           setSelectedSyncRobots(onlineRobots.map(robot => robot.id));
+                         }}
+                       >
+                         全选
+                       </Button>
+                       <Button 
+                         size="small" 
+                         onClick={() => setSelectedSyncRobots([])}
+                       >
+                         清空选择
+                       </Button>
+                     </Space>
+                   </div>
+                   <div style={{ color: '#666', fontSize: '14px' }}>
+                     仅显示在线且已启用的机器人设备，支持多选。已选择 {selectedSyncRobots.length} 个机器人
+                   </div>
                  </div>
-               </div>
                <div style={{ width: '300px' }}>
                  <Input.Search
                     placeholder="搜索机器人设备名称..."
@@ -2927,9 +3159,28 @@ const MapManagement: React.FC = () => {
            {/* 选择地图文件部分 */}
            {syncingMap && (
              <div>
-               <Title level={5} style={{ margin: '0 0 16px 0' }}>选择地图文件</Title>
+               <div style={{ marginBottom: 16 }}>
+                 <Title level={5} style={{ margin: 0, display: 'inline-block', marginRight: 16 }}>选择地图文件</Title>
+                 <Space size={8}>
+                   <Button 
+                     size="small" 
+                     onClick={() => {
+                       const allMapFiles = getMapFiles(syncingMap.id);
+                       setSelectedSyncMapFiles(allMapFiles.map(file => file.id));
+                     }}
+                   >
+                     全选
+                   </Button>
+                   <Button 
+                     size="small" 
+                     onClick={() => setSelectedSyncMapFiles([])}
+                   >
+                     清空选择
+                   </Button>
+                 </Space>
+               </div>
                <div style={{ color: '#666', fontSize: '14px', marginBottom: 16 }}>
-                 选择要同步的地图文件，支持多选，默认选择当前使用的地图文件
+                 选择要同步的地图文件，支持多选，默认选择当前使用的地图文件。已选择 {selectedSyncMapFiles.length} 个文件
                </div>
                
                <Row gutter={[16, 16]}>
