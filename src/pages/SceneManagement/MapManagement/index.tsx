@@ -2459,9 +2459,9 @@ const MapManagement: React.FC = () => {
            {/* 机器人地图列表 */}
            {selectedRobot && robotMaps.length > 0 && (
              <div style={{ marginTop: 32 }}>
-               <Divider orientation="left">
-                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                   <Title level={5} style={{ margin: 0 }}>可拉取的地图列表</Title>
+               <div style={{ marginBottom: 16 }}>
+                 <div style={{ display: 'inline-block' }}>
+                   <Title level={5} style={{ margin: 0, display: 'inline-block', marginRight: 12 }}>可拉取的地图列表</Title>
                    <Space>
                      <Button 
                        size="small" 
@@ -2479,7 +2479,7 @@ const MapManagement: React.FC = () => {
                      </Button>
                    </Space>
                  </div>
-               </Divider>
+               </div>
                <div style={{ color: '#666', fontSize: '14px', marginBottom: 16 }}>
                  选择要拉取的地图，支持多选。已选择 {selectedRobotMaps.length} 个地图
                </div>
@@ -2593,9 +2593,9 @@ const MapManagement: React.FC = () => {
            {/* 选中地图的文件列表 */}
            {selectedRobot && (
              <div style={{ marginTop: 32 }}>
-               <Divider orientation="left">
-                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                   <Title level={5} style={{ margin: 0 }}>选中地图的文件列表</Title>
+               <div style={{ marginBottom: 16 }}>
+                 <div style={{ display: 'inline-block' }}>
+                   <Title level={5} style={{ margin: 0, display: 'inline-block', marginRight: 12 }}>选中地图的文件列表</Title>
                    <Space>
                      <Button 
                        size="small" 
@@ -2619,7 +2619,7 @@ const MapManagement: React.FC = () => {
                      </Button>
                    </Space>
                  </div>
-               </Divider>
+               </div>
                <div style={{ color: '#666', fontSize: '14px', marginBottom: 16 }}>
                  展示所选地图包含的文件，让您了解将要拉取的具体内容。已选择 {selectedMapFiles.length} 个文件
                </div>
