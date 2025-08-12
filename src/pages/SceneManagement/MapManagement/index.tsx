@@ -129,6 +129,12 @@ const MapManagement: React.FC = () => {
   const [slideDirection, setSlideDirection] = useState<'left' | 'right'>('right');
   const robotCardsPerPage = 8; // 每页显示8个卡片（2行，每行4个）
   
+  // 地图同步相关状态
+  const [mapSyncDrawerVisible, setMapSyncDrawerVisible] = useState(false);
+  const [syncingMap, setSyncingMap] = useState<MapData | null>(null);
+  const [selectedSyncRobots, setSelectedSyncRobots] = useState<string[]>([]);
+  const [selectedSyncMapFiles, setSelectedSyncMapFiles] = useState<string[]>([]);
+  
   // 响应式状态管理
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1600);
@@ -677,7 +683,16 @@ const MapManagement: React.FC = () => {
       ellipsis: true,
       render: (text: string, record: MapData) => (
         <div style={{ textAlign: 'left' }}>
-          <div style={{ color: 'rgba(0, 0, 0, 0.88)', fontWeight: 500 }}>{text}</div>
+          <div 
+            style={{ 
+              color: 'rgba(0, 0, 0, 0.88)', 
+              fontWeight: 500,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+            title={text}
+          >{text}</div>
           <div style={{ fontSize: '12px', color: '#1890ff', fontWeight: 500, marginTop: 4 }}>{record.version}</div>
         </div>
       ),
@@ -725,6 +740,12 @@ const MapManagement: React.FC = () => {
                 icon: <EditOutlined />,
                 label: '编辑',
                 onClick: () => handleEdit(record),
+              },
+              {
+                key: 'sync',
+                icon: <SyncOutlined />,
+                label: '同步',
+                onClick: () => handleMapSync(record),
               },
               {
                 key: 'settings',
@@ -793,29 +814,35 @@ const MapManagement: React.FC = () => {
 
               </div>
               <Dropdown
-                menu={{
-                  items: [
-                    {
-                      key: 'edit',
-                      icon: <EditOutlined />,
-                      label: '编辑',
-                      onClick: () => handleEdit(record),
-                    },
-                    {
-                      key: 'settings',
-                      icon: <SettingOutlined />,
-                      label: '设置',
-                      onClick: () => handleSettings(record),
-                    },
-                    {
-                      key: 'delete',
-                      icon: <DeleteOutlined />,
-                      label: '删除',
-                      danger: true,
-                      onClick: () => handleDelete(record),
-                    },
-                  ],
-                }}
+                  menu={{
+                    items: [
+                      {
+                        key: 'edit',
+                        icon: <EditOutlined />,
+                        label: '编辑',
+                        onClick: () => handleEdit(record),
+                      },
+                      {
+                        key: 'sync',
+                        icon: <SyncOutlined />,
+                        label: '同步',
+                        onClick: () => handleMapSync(record),
+                      },
+                      {
+                        key: 'settings',
+                        icon: <SettingOutlined />,
+                        label: '设置',
+                        onClick: () => handleSettings(record),
+                      },
+                      {
+                        key: 'delete',
+                        icon: <DeleteOutlined />,
+                        label: '删除',
+                        danger: true,
+                        onClick: () => handleDelete(record),
+                      },
+                    ],
+                  }}
                 trigger={['click']}
               >
                 <Button
@@ -921,6 +948,41 @@ const MapManagement: React.FC = () => {
     console.log('地图设置:', record);
   };
 
+  const handleMapSync = (record: MapData) => {
+    setSyncingMap(record);
+    setSelectedSyncRobots([]);
+    // 默认选择当前使用的地图文件
+    const currentMapFiles = getMapFiles(record.id);
+    const activeFiles = currentMapFiles.filter(file => file.status === 'active').map(file => file.id);
+    setSelectedSyncMapFiles(activeFiles);
+    setMapSyncDrawerVisible(true);
+  };
+
+  const handleConfirmSync = async () => {
+    if (!syncingMap || selectedSyncRobots.length === 0 || selectedSyncMapFiles.length === 0) {
+      message.warning('请选择机器人和地图文件');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      // 模拟同步API调用
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      message.success(`成功将地图 "${syncingMap.name}" 同步到 ${selectedSyncRobots.length} 个机器人`);
+      
+      // 关闭弹窗并重置状态
+      setMapSyncDrawerVisible(false);
+      setSyncingMap(null);
+      setSelectedSyncRobots([]);
+      setSelectedSyncMapFiles([]);
+    } catch (error) {
+      message.error('同步失败，请重试');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEnable = (record: MapData) => {
     console.log('启用地图:', record);
   };
@@ -997,37 +1059,33 @@ const MapManagement: React.FC = () => {
                   />
                 }
                 actions={[
-                  <DownloadOutlined
-                    key="download"
-                    onClick={() => handleDownload(file)}
-                    title="下载"
-                  />,
+
                   <DeleteOutlined
                     key="delete"
                     onClick={() => handleDeleteFile(file)}
                     title="删除"
                   />,
-                  <PlayCircleOutlined
-                    key="enable"
-                    onClick={() => handleEnableFile(file, record.id)}
-                    title="启用"
-                  />,
-                  <SyncOutlined
-                    key="sync"
-                    onClick={() => handleSyncFile(file)}
-                    title="同步"
-                  />,
+
+
                   <EyeOutlined
                     key="details"
                     onClick={() => handleViewDetails(file)}
-                    title="详情"
+                    title="编辑"
                   />,
                 ]}
               >
                 <Card.Meta
                   title={
                     <div>
-                      <div style={{ marginBottom: 4 }}>{file.name}</div>
+                      <div 
+                        style={{ 
+                          marginBottom: 4,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}
+                        title={file.name}
+                      >{file.name}</div>
                     </div>
                   }
                   description={null}
@@ -1047,6 +1105,7 @@ const MapManagement: React.FC = () => {
       // 模拟API调用
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      const now = new Date();
       const newMap: MapData = {
         id: `map_${Date.now()}`,
         name: values.mapName,
@@ -1054,8 +1113,8 @@ const MapManagement: React.FC = () => {
         status: 'inactive',
         thumbnail: '/api/placeholder/150/100',
         description: values.description || '',
-        createTime: new Date().toISOString().split('T')[0],
-        updateTime: new Date().toISOString().split('T')[0],
+        createTime: now.toISOString().split('T')[0],
+        updateTime: now.toISOString().split('T')[0] + ' ' + now.toTimeString().split(' ')[0],
         updateUser: '当前用户'
       };
       
@@ -1089,6 +1148,7 @@ const MapManagement: React.FC = () => {
       // 模拟API调用
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      const now = new Date();
       const newMaps: MapData[] = selectedRobotMaps.map((mapName, index) => ({
         id: `map_${Date.now()}_${index}`,
         name: mapName,
@@ -1096,8 +1156,8 @@ const MapManagement: React.FC = () => {
         status: 'inactive',
         thumbnail: '/api/placeholder/150/100',
         description: `从机器人${selectedRobot}导入的地图`,
-        createTime: new Date().toISOString().split('T')[0],
-        updateTime: new Date().toISOString().split('T')[0],
+        createTime: now.toISOString().split('T')[0] + ' ' + now.toTimeString().split(' ')[0],
+        updateTime: now.toISOString().split('T')[0] + ' ' + now.toTimeString().split(' ')[0],
         updateUser: '当前用户'
       }));
       
@@ -1127,6 +1187,7 @@ const MapManagement: React.FC = () => {
       // 模拟API调用
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      const now = new Date();
       const newMap: MapData = {
         id: `map_${Date.now()}`,
         name: values.mapName,
@@ -1134,8 +1195,8 @@ const MapManagement: React.FC = () => {
         status: 'inactive',
         thumbnail: '/api/placeholder/150/100',
         description: values.description || '',
-        createTime: new Date().toISOString().split('T')[0],
-        updateTime: new Date().toISOString().split('T')[0],
+        createTime: now.toISOString().split('T')[0] + ' ' + now.toTimeString().split(' ')[0],
+        updateTime: now.toISOString().split('T')[0] + ' ' + now.toTimeString().split(' ')[0],
         updateUser: '当前用户'
       };
       
@@ -1504,7 +1565,7 @@ const MapManagement: React.FC = () => {
                   padding: isMobile ? '12px 8px' : '16px 24px',
                   backgroundColor: '#fff',
                   display: 'flex',
-                  justifyContent: 'center',
+                  justifyContent: 'flex-end',
                   alignItems: 'center',
                   minHeight: isMobile ? '56px' : '64px'
                 }}>
@@ -1547,72 +1608,85 @@ const MapManagement: React.FC = () => {
           title={`地图文件 - ${selectedMap.name}`}
           style={{ marginBottom: 16 }}
         >
-          <Row gutter={[16, 16]}>
-            {getMapFiles(selectedMap.id).map((file) => (
-              <Col xs={12} sm={8} md={6} lg={8} xl={6} key={file.id}>
-                <Card
-                  size="small"
-                          hoverable
-                          cover={
-                            <img
-                              alt={file.name}
-                              src={file.thumbnail}
-                              style={{
-                                height: 120,
-                                objectFit: 'cover',
-                                backgroundColor: '#f5f5f5',
-                              }}
-                            />
-                          }
-                          actions={[
-                            <DownloadOutlined
-                              key="download"
-                              onClick={() => handleDownload(file)}
-                              title="下载"
-                            />,
-                            <DeleteOutlined
-                              key="delete"
-                              onClick={() => handleDeleteFile(file)}
-                              title="删除"
-                            />,
-                            <SyncOutlined
-                              key="sync"
-                              onClick={() => handleSync(selectedMap)}
-                              title="同步"
-                            />,
-                            <EyeOutlined
-                              key="detail"
-                              onClick={() => handleDetail(file)}
-                              title="详情"
-                            />,
-                          ]}
-                        >
-                          <Card.Meta
-                            title={
-                              <div>
-                                <div style={{ marginBottom: 4 }}>{file.name}</div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                                  <Switch
-                                    size="small"
-                                    checked={file.status === 'active'}
-                                    onChange={(checked) => {
-                                      if (checked) {
-                                        handleEnableFile(file, selectedMap.id);
-                                      }
-                                    }}
-                                  />
-                                  <span style={{ fontSize: '12px', color: '#666' }}>
-                                    {file.status === 'active' ? '启用' : '禁用'}
-                                  </span>
-                                </div>
-                              </div>
+          {getMapFiles(selectedMap.id).length > 0 ? (
+            <Row gutter={[16, 16]}>
+              {getMapFiles(selectedMap.id).map((file) => (
+                <Col xs={12} sm={8} md={6} lg={8} xl={6} key={file.id}>
+                  <Card
+                    size="small"
+                            hoverable
+                            cover={
+                              <img
+                                alt={file.name}
+                                src={file.thumbnail}
+                                style={{
+                                  height: 120,
+                                  objectFit: 'cover',
+                                  backgroundColor: '#f5f5f5',
+                                }}
+                              />
                             }
-                            description={null}
-                          />
-                        </Card>
-                       </Col>
-                     ))}
-                   </Row>
+                            actions={[
+                              <DeleteOutlined
+                                key="delete"
+                                onClick={() => handleDeleteFile(file)}
+                                title="删除"
+                              />,
+                              <EyeOutlined
+                                key="detail"
+                                onClick={() => handleDetail(file)}
+                                title="编辑"
+                              />,
+                            ]}
+                          >
+                            <Card.Meta
+                              title={
+                                <div>
+                                  <div 
+                                    style={{ 
+                                      marginBottom: 4,
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap'
+                                    }}
+                                    title={file.name}
+                                  >{file.name}</div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                                    <Switch
+                                      size="small"
+                                      checked={file.status === 'active'}
+                                      onChange={(checked) => {
+                                        if (checked) {
+                                          handleEnableFile(file, selectedMap.id);
+                                        }
+                                      }}
+                                    />
+                                    <span style={{ fontSize: '12px', color: '#666' }}>
+                      当前使用
+                    </span>
+                                  </div>
+                                </div>
+                              }
+                              description={null}
+                            />
+                          </Card>
+                         </Col>
+                       ))}
+                     </Row>
+                   ) : (
+                     <div style={{
+                       display: 'flex',
+                       flexDirection: 'column',
+                       alignItems: 'center',
+                       justifyContent: 'center',
+                       minHeight: '200px',
+                       color: '#999'
+                     }}>
+                       <FileImageOutlined style={{ fontSize: 48, color: '#d9d9d9', marginBottom: 16 }} />
+                       <div style={{ fontSize: '14px' }}>暂无地图文件数据</div>
+                       <div style={{ fontSize: '12px', marginTop: 8 }}>请上传地图文件或从机器人同步</div>
+                     </div>
+                   )}
                  </Card>
                ) : (
                  <Card
@@ -2376,8 +2450,363 @@ const MapManagement: React.FC = () => {
            </Form.Item>
          </Form>
        </Drawer>
-    </div>
-  );
-};
+
+       {/* 地图同步侧滑弹窗 */}
+       <Drawer
+         title={`地图同步 - ${syncingMap?.name || ''}`}
+         width={`${Math.floor(window.innerWidth * 2 / 3)}px`}
+         placement="right"
+         onClose={() => {
+           setMapSyncDrawerVisible(false);
+           setSyncingMap(null);
+           setSelectedSyncRobots([]);
+           setSelectedSyncMapFiles([]);
+         }}
+         open={mapSyncDrawerVisible}
+         bodyStyle={{ padding: '24px' }}
+         footer={
+           <div style={{ textAlign: 'center' }}>
+             <Button 
+               onClick={() => {
+                 setMapSyncDrawerVisible(false);
+                 setSyncingMap(null);
+                 setSelectedSyncRobots([]);
+                 setSelectedSyncMapFiles([]);
+               }} 
+               style={{ marginRight: 8 }}
+             >
+               取消
+             </Button>
+             <Button 
+               type="primary" 
+               disabled={selectedSyncRobots.length === 0 || selectedSyncMapFiles.length === 0}
+               onClick={() => handleConfirmSync()}
+               loading={loading}
+             >
+               确认同步 (机器人:{selectedSyncRobots.length}, 文件:{selectedSyncMapFiles.length})
+             </Button>
+           </div>
+         }
+       >
+         <div>
+           {/* 选择机器人部分 */}
+           <div style={{ marginBottom: 32 }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+               <div>
+                 <Title level={5} style={{ margin: 0, marginBottom: 8 }}>选择在线机器人设备</Title>
+                 <div style={{ color: '#666', fontSize: '14px' }}>
+                   仅显示在线且已启用的机器人设备，支持多选
+                 </div>
+               </div>
+               <div style={{ width: '300px' }}>
+                 <Input.Search
+                    placeholder="搜索机器人设备名称..."
+                    value={robotSearchText}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRobotSearchText(e.target.value)}
+                    allowClear
+                    style={{ width: '100%' }}
+                  />
+               </div>
+             </div>
+           
+             {/* 机器人卡片滑动区域 */}
+             <div style={{ position: 'relative' }}>
+               {/* 左滑动按钮 */}
+               <Button
+                 type="text"
+                 icon={<LeftOutlined />}
+                 style={{
+                   position: 'absolute',
+                   left: '-20px',
+                   top: '50%',
+                   transform: 'translateY(-50%)',
+                   zIndex: 10,
+                   backgroundColor: '#fff',
+                   border: '1px solid #d9d9d9',
+                   borderRadius: '50%',
+                   width: '32px',
+                   height: '32px',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                   transition: 'all 0.2s ease',
+                   opacity: isSliding ? 0.6 : 1
+                 }}
+                 disabled={robotSlideIndex === 0 || isSliding}
+                 onClick={() => handleRobotSlide('left')}
+               />
+               
+               {/* 右滑动按钮 */}
+               <Button
+                 type="text"
+                 icon={<RightOutlined />}
+                 style={{
+                   position: 'absolute',
+                   right: '-20px',
+                   top: '50%',
+                   transform: 'translateY(-50%)',
+                   zIndex: 10,
+                   backgroundColor: '#fff',
+                   border: '1px solid #d9d9d9',
+                   borderRadius: '50%',
+                   width: '32px',
+                   height: '32px',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                   transition: 'all 0.2s ease',
+                   opacity: isSliding ? 0.6 : 1
+                 }}
+                 disabled={robotSlideIndex >= Math.ceil(robotDevices.filter(robot => 
+                   robot.isOnline && 
+                   robot.isEnabled && 
+                   robot.deviceName.toLowerCase().includes(robotSearchText.toLowerCase())
+                 ).length / robotCardsPerPage) - 1 || isSliding}
+                 onClick={() => handleRobotSlide('right')}
+               />
+               
+               {/* 机器人卡片网格 */}
+               <div style={{ 
+                 overflow: 'hidden',
+                 paddingBottom: '8px'
+               }}>
+                 <Row 
+                   gutter={[12, 12]}
+                   style={{
+                     transform: isSliding ? 
+                       (slideDirection === 'right' ? 'translateX(-30px)' : 'translateX(30px)') : 
+                       'translateX(0)',
+                     opacity: isSliding ? 0.3 : 1,
+                     transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                     filter: isSliding ? 'blur(1px)' : 'blur(0px)'
+                   }}
+                 >
+                   {robotDevices
+                     .filter(robot => 
+                       robot.isOnline && 
+                       robot.isEnabled && 
+                       robot.deviceName.toLowerCase().includes(robotSearchText.toLowerCase())
+                     )
+                     .slice(robotSlideIndex * robotCardsPerPage, (robotSlideIndex + 1) * robotCardsPerPage)
+                     .map(robot => (
+                       <Col key={robot.id} xs={24} sm={12} md={12} lg={6} xl={6}>
+                         <Card 
+                           size="small" 
+                           style={{ 
+                             width: '100%',
+                             height: '110px',
+                             border: selectedSyncRobots.includes(robot.id) ? '2px solid #1890ff' : '1px solid #e8e8e8',
+                             backgroundColor: selectedSyncRobots.includes(robot.id) ? '#f0f9ff' : '#fff',
+                             borderRadius: '8px',
+                             cursor: 'pointer',
+                             transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                             position: 'relative',
+                             transform: isSliding ? 
+                               `scale(0.95) translateX(${slideDirection === 'right' ? '-10px' : '10px'})` : 
+                               'scale(1) translateX(0)',
+                             boxShadow: isSliding ? 
+                               '0 1px 4px rgba(0,0,0,0.04)' : 
+                               (selectedSyncRobots.includes(robot.id) ? '0 4px 12px rgba(24,144,255,0.15)' : '0 2px 8px rgba(0,0,0,0.1)'),
+                             filter: isSliding ? 'brightness(0.95)' : 'brightness(1)'
+                           }}
+                           bodyStyle={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}
+                           hoverable
+                           onClick={() => {
+                             setSelectedSyncRobots(prev => 
+                               prev.includes(robot.id) 
+                                 ? prev.filter(id => id !== robot.id)
+                                 : [...prev, robot.id]
+                             );
+                           }}
+                           onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                             if (!isSliding) {
+                               e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                               e.currentTarget.style.boxShadow = selectedSyncRobots.includes(robot.id) ? 
+                                 '0 8px 20px rgba(24,144,255,0.25)' : 
+                                 '0 8px 20px rgba(0,0,0,0.15)';
+                             }
+                           }}
+                           onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                             if (!isSliding) {
+                               e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                               e.currentTarget.style.boxShadow = selectedSyncRobots.includes(robot.id) ? 
+                                 '0 4px 12px rgba(24,144,255,0.15)' : 
+                                 '0 2px 8px rgba(0,0,0,0.1)';
+                             }
+                           }}
+                         >
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                             <Avatar 
+                               icon={<RobotOutlined />} 
+                               style={{ 
+                                 backgroundColor: '#1890ff',
+                                 border: '2px solid #e6f7ff',
+                                 flexShrink: 0
+                               }}
+                               size={18}
+                             />
+                             <div style={{ flex: 1, textAlign: 'left', overflow: 'hidden' }}>
+                               <div style={{ 
+                                 fontWeight: 600, 
+                                 fontSize: '13px', 
+                                 marginBottom: '4px', 
+                                 color: '#262626',
+                                 overflow: 'hidden',
+                                 textOverflow: 'ellipsis',
+                                 whiteSpace: 'nowrap'
+                               }}>
+                                 {robot.deviceName}
+                               </div>
+                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                                 <Badge 
+                                   status={robot.isOnline ? 'success' : 'error'} 
+                                   text={
+                                     <span style={{ fontSize: '11px', fontWeight: 500 }}>
+                                       {robot.isOnline ? '在线' : '离线'}
+                                     </span>
+                                   }
+                                 />
+                                 <span style={{ color: '#666', fontSize: '10px' }}>
+                                   {robot.ipAddress}:{robot.port}
+                                 </span>
+                                 <span style={{ 
+                                   color: '#999', 
+                                   fontSize: '10px',
+                                   overflow: 'hidden',
+                                   textOverflow: 'ellipsis',
+                                   whiteSpace: 'nowrap',
+                                   width: '100%'
+                                 }}>
+                                   最近连接: {robot.lastConnectTime}
+                                 </span>
+                               </div>
+                             </div>
+                             
+                             {/* 选择按钮放在右侧，与图标纵向对齐 */}
+                             <Checkbox 
+                               checked={selectedSyncRobots.includes(robot.id)}
+                               style={{ 
+                                 flexShrink: 0
+                               }}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 setSelectedSyncRobots(prev => 
+                                   prev.includes(robot.id) 
+                                     ? prev.filter(id => id !== robot.id)
+                                     : [...prev, robot.id]
+                                 );
+                               }}
+                             />
+                           </div>
+                         </Card>
+                         </Col>
+                       ))
+                     }
+                   </Row>
+                 </div>
+               </div>
+             </div>
+
+           {/* 选择地图文件部分 */}
+           {syncingMap && (
+             <div>
+               <Title level={5} style={{ margin: '0 0 16px 0' }}>选择地图文件</Title>
+               <div style={{ color: '#666', fontSize: '14px', marginBottom: 16 }}>
+                 选择要同步的地图文件，支持多选，默认选择当前使用的地图文件
+               </div>
+               
+               <Row gutter={[16, 16]}>
+                 {getMapFiles(syncingMap.id).map((file) => (
+                   <Col xs={12} sm={8} md={6} lg={6} xl={4} key={file.id}>
+                     <Card
+                       size="small"
+                       hoverable
+                       cover={
+                         <img
+                           alt={file.name}
+                           src={file.thumbnail}
+                           style={{
+                             height: 80,
+                             objectFit: 'cover',
+                             backgroundColor: '#f5f5f5',
+                           }}
+                         />
+                       }
+                       style={{
+                         border: selectedSyncMapFiles.includes(file.id) ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                         backgroundColor: selectedSyncMapFiles.includes(file.id) ? '#f6ffed' : '#fff',
+                         cursor: 'pointer'
+                       }}
+                       onClick={() => {
+                         setSelectedSyncMapFiles(prev => 
+                           prev.includes(file.id) 
+                             ? prev.filter(id => id !== file.id)
+                             : [...prev, file.id]
+                         );
+                       }}
+                     >
+                       <Card.Meta
+                         title={
+                           <div style={{ position: 'relative' }}>
+                             <div 
+                               style={{ 
+                                 fontSize: '12px',
+                                 fontWeight: 500,
+                                 overflow: 'hidden',
+                                 textOverflow: 'ellipsis',
+                                 whiteSpace: 'nowrap'
+                               }}
+                               title={file.name}
+                             >
+                               {file.name}
+                             </div>
+                             <div style={{ 
+                               fontSize: '10px', 
+                               color: '#666',
+                               marginTop: 2
+                             }}>
+                               {file.format}
+                             </div>
+                             <div style={{ marginTop: 4 }}>
+                               <Tag 
+                                 size="small" 
+                                 color={file.status === 'active' ? 'success' : 'default'}
+                                 style={{ fontSize: '10px' }}
+                               >
+                                 {file.status === 'active' ? '当前使用' : '当前使用'}
+                               </Tag>
+                             </div>
+                             {selectedSyncMapFiles.includes(file.id) && (
+                               <div style={{ 
+                                 position: 'absolute', 
+                                 top: -4, 
+                                 right: -4, 
+                                 background: '#52c41a', 
+                                 borderRadius: '50%', 
+                                 width: 16, 
+                                 height: 16, 
+                                 display: 'flex', 
+                                 alignItems: 'center', 
+                                 justifyContent: 'center' 
+                               }}>
+                                 <span style={{ color: '#fff', fontSize: '10px' }}>✓</span>
+                               </div>
+                             )}
+                           </div>
+                         }
+                       />
+                     </Card>
+                   </Col>
+                 ))}
+               </Row>
+             </div>
+           )}
+         </div>
+       </Drawer>
+     </div>
+   );
+ };
 
 export default MapManagement;
