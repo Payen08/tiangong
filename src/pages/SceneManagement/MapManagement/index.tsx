@@ -26,6 +26,9 @@ import {
   Radio,
   Tooltip,
   Checkbox,
+  Progress,
+  Alert,
+  List,
 } from 'antd';
 import {
   EditOutlined,
@@ -50,6 +53,10 @@ import {
   DisconnectOutlined,
   LeftOutlined,
   RightOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  LoadingOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -97,6 +104,25 @@ interface RobotDevice {
   lastConnectTime: string;
 }
 
+// 同步状态接口
+interface SyncStatus {
+  robotId: string;
+  robotName: string;
+  status: 'pending' | 'syncing' | 'success' | 'failed';
+  progress: number;
+  errorMessage?: string;
+  startTime?: string;
+  endTime?: string;
+}
+
+// 同步结果接口
+interface SyncResult {
+  robotId: string;
+  success: boolean;
+  errorMessage?: string;
+  duration: number;
+}
+
 const MapManagement: React.FC = () => {
   const navigate = useNavigate();
   const [selectedMap, setSelectedMap] = useState<MapData | null>(null);
@@ -134,6 +160,13 @@ const MapManagement: React.FC = () => {
   const [syncingMap, setSyncingMap] = useState<MapData | null>(null);
   const [selectedSyncRobots, setSelectedSyncRobots] = useState<string[]>([]);
   const [selectedSyncMapFiles, setSelectedSyncMapFiles] = useState<string[]>([]);
+  
+  // 同步进度相关状态
+  const [syncProgressModalVisible, setSyncProgressModalVisible] = useState(false);
+  const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
+  const [showSyncProgress, setShowSyncProgress] = useState(false);
+  const [syncResults, setSyncResults] = useState<SyncResult[]>([]);
+  const [allSyncCompleted, setAllSyncCompleted] = useState(false);
   
   // 地图名称搜索相关状态
   const [searchMapName, setSearchMapName] = useState<string>('');
@@ -750,7 +783,6 @@ const MapManagement: React.FC = () => {
           <div 
             style={{ 
               color: 'rgba(0, 0, 0, 0.88)', 
-              fontWeight: 500,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap'
@@ -786,7 +818,7 @@ const MapManagement: React.FC = () => {
       align: 'left',
       ellipsis: true,
       render: (updateUser: string) => (
-        <span style={{ color: 'rgba(0, 0, 0, 0.88)', fontWeight: 500 }}>{updateUser}</span>
+        <span style={{ color: 'rgba(0, 0, 0, 0.88)' }}>{updateUser}</span>
       ),
     },
     {
@@ -1028,23 +1060,139 @@ const MapManagement: React.FC = () => {
       return;
     }
 
-    try {
-      setLoading(true);
-      // 模拟同步API调用
-      await new Promise(resolve => setTimeout(resolve, 2000));
+    // 关闭同步选择抽屉，打开同步进度弹窗
+    setMapSyncDrawerVisible(false);
+    setSyncProgressModalVisible(true);
+    setShowSyncProgress(true);
+    
+    // 初始化同步状态
+    const initialStatuses: SyncStatus[] = selectedSyncRobots.map(robotId => {
+      const robot = robotDevices.find(r => r.id === robotId);
+      return {
+        robotId,
+        robotName: robot?.deviceName || `机器人-${robotId}`,
+        status: 'pending',
+        progress: 0
+      };
+    });
+    
+    setSyncStatuses(initialStatuses);
+    setSyncResults([]);
+    setAllSyncCompleted(false);
+    
+    // 开始同步过程
+    await performSync(initialStatuses);
+  };
+  
+  // 执行同步过程
+  const performSync = async (statuses: SyncStatus[]) => {
+    const results: SyncResult[] = [];
+    
+    // 模拟并发同步
+    const syncPromises = statuses.map(async (status, index) => {
+      // 设置开始时间和状态
+      const startTime = new Date().toLocaleTimeString();
+      setSyncStatuses(prev => prev.map(s => 
+        s.robotId === status.robotId 
+          ? { ...s, status: 'syncing', startTime, progress: 0 }
+          : s
+      ));
       
-      message.success(`成功将地图 "${syncingMap.name}" 同步到 ${selectedSyncRobots.length} 个机器人`);
+      const syncStartTime = Date.now();
       
-      // 关闭弹窗并重置状态
-      setMapSyncDrawerVisible(false);
-      setSyncingMap(null);
-      setSelectedSyncRobots([]);
-      setSelectedSyncMapFiles([]);
-    } catch (error) {
-      message.error('同步失败，请重试');
-    } finally {
-      setLoading(false);
+      try {
+        // 模拟同步进度
+        for (let progress = 0; progress <= 100; progress += 10) {
+          await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
+          setSyncStatuses(prev => prev.map(s => 
+            s.robotId === status.robotId 
+              ? { ...s, progress }
+              : s
+          ));
+        }
+        
+        // 模拟成功/失败（90%成功率）
+        const isSuccess = Math.random() > 0.1;
+        const endTime = new Date().toLocaleTimeString();
+        const duration = Date.now() - syncStartTime;
+        
+        if (isSuccess) {
+          setSyncStatuses(prev => prev.map(s => 
+            s.robotId === status.robotId 
+              ? { ...s, status: 'success', progress: 100, endTime }
+              : s
+          ));
+          results.push({ robotId: status.robotId, success: true, duration });
+        } else {
+          const errorMessage = '网络连接超时，请检查机器人连接状态';
+          setSyncStatuses(prev => prev.map(s => 
+            s.robotId === status.robotId 
+              ? { ...s, status: 'failed', errorMessage, endTime }
+              : s
+          ));
+          results.push({ robotId: status.robotId, success: false, errorMessage, duration });
+        }
+      } catch (error) {
+        const endTime = new Date().toLocaleTimeString();
+        const duration = Date.now() - syncStartTime;
+        const errorMessage = '同步过程中发生未知错误';
+        setSyncStatuses(prev => prev.map(s => 
+          s.robotId === status.robotId 
+            ? { ...s, status: 'failed', errorMessage, endTime }
+            : s
+        ));
+        results.push({ robotId: status.robotId, success: false, errorMessage, duration });
+      }
+    });
+    
+    // 等待所有同步完成
+    await Promise.all(syncPromises);
+    
+    // 设置同步结果
+    setSyncResults(results);
+    setAllSyncCompleted(true);
+    
+    // 显示汇总消息
+    const successCount = results.filter(r => r.success).length;
+    const failedCount = results.length - successCount;
+    
+    if (failedCount === 0) {
+      message.success(`同步完成！成功同步到 ${successCount} 个机器人`);
+    } else if (successCount === 0) {
+      message.error(`同步失败！${failedCount} 个机器人同步失败`);
+    } else {
+      message.warning(`同步完成！${successCount} 个成功，${failedCount} 个失败`);
     }
+  };
+  
+  // 重试失败的同步任务
+  const handleRetryFailedSync = async () => {
+    const failedStatuses = syncStatuses.filter(s => s.status === 'failed');
+    if (failedStatuses.length === 0) return;
+    
+    // 重置失败的状态
+    setSyncStatuses(prev => prev.map(s => 
+      s.status === 'failed' 
+        ? { ...s, status: 'pending', progress: 0, errorMessage: undefined }
+        : s
+    ));
+    
+    // 重新执行失败的同步
+    await performSync(failedStatuses);
+  };
+  
+  // 关闭同步进度弹窗
+  const handleCloseSyncProgress = () => {
+    setSyncProgressModalVisible(false);
+    setShowSyncProgress(false);
+    setSyncStatuses([]);
+    setSyncResults([]);
+    setAllSyncCompleted(false);
+    
+    // 重置同步相关状态
+    setSyncingMap(null);
+    setSelectedSyncRobots([]);
+    setSelectedSyncMapFiles([]);
   };
 
   const handleEnable = (record: MapData) => {
@@ -2858,6 +3006,138 @@ const MapManagement: React.FC = () => {
                    </Col>
                  ))}
                </Row>
+             </div>
+           )}
+         </div>
+       </Drawer>
+
+       {/* 同步进度侧滑弹窗 */}
+       <Drawer
+         title="地图同步进度"
+         placement="right"
+         open={syncProgressModalVisible}
+         onClose={handleCloseSyncProgress}
+         width="66.67vw"
+         maskClosable={false}
+         closable={allSyncCompleted}
+         footer={
+            <div style={{ textAlign: 'center' }}>
+              <Button 
+                onClick={handleCloseSyncProgress}
+                disabled={!allSyncCompleted}
+                type="primary"
+              >
+                关闭
+              </Button>
+            </div>
+          }
+       >
+         <div style={{ padding: '16px 0' }}>
+           {/* 总体进度 */}
+           <div style={{ marginBottom: '24px' }}>
+             <div style={{ marginBottom: '8px', fontWeight: 500 }}>总体进度</div>
+             <Progress 
+               percent={Math.round((syncStatuses.filter(s => s.status === 'success' || s.status === 'failed').length / syncStatuses.length) * 100)}
+               status={allSyncCompleted ? (syncStatuses.every(s => s.status === 'success') ? 'success' : 'exception') : 'active'}
+               strokeColor={{
+                 '0%': '#108ee9',
+                 '100%': '#87d068',
+               }}
+             />
+           </div>
+
+           {/* 机器人同步状态列表 */}
+           <List
+              dataSource={syncStatuses}
+              renderItem={(item: SyncStatus) => (
+               <List.Item
+                 style={{
+                   padding: '12px 16px',
+                   border: '1px solid #f0f0f0',
+                   borderRadius: '6px',
+                   marginBottom: '8px',
+                   backgroundColor: item.status === 'failed' ? '#fff2f0' : '#fff'
+                 }}
+               >
+                 <List.Item.Meta
+                   avatar={
+                     <div style={{ display: 'flex', alignItems: 'center' }}>
+                       {item.status === 'pending' && <LoadingOutlined style={{ color: '#1890ff' }} />}
+                       {item.status === 'syncing' && <LoadingOutlined spin style={{ color: '#1890ff' }} />}
+                       {item.status === 'success' && <CheckCircleOutlined style={{ color: '#52c41a' }} />}
+                       {item.status === 'failed' && <CloseCircleOutlined style={{ color: '#ff4d4f' }} />}
+                     </div>
+                   }
+                   title={
+                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                       <span>{item.robotName}</span>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                         {item.status === 'syncing' && (
+                           <Progress 
+                             type="circle" 
+                             size={24} 
+                             percent={item.progress}
+                             showInfo={false}
+                           />
+                         )}
+                         {item.status === 'failed' && (
+                           <Button 
+                              type="link" 
+                              size="small" 
+                              icon={<ReloadOutlined />}
+                              onClick={() => handleRetryFailedSync()}
+                            >
+                              重试
+                            </Button>
+                         )}
+                       </div>
+                     </div>
+                   }
+                   description={
+                     <div>
+                       <div style={{ marginBottom: '4px' }}>
+                         状态: <Tag color={
+                           item.status === 'pending' ? 'default' :
+                           item.status === 'syncing' ? 'processing' :
+                           item.status === 'success' ? 'success' : 'error'
+                         }>
+                           {item.status === 'pending' ? '等待中' :
+                            item.status === 'syncing' ? '同步中' :
+                            item.status === 'success' ? '成功' : '失败'}
+                         </Tag>
+                       </div>
+                       {item.status === 'syncing' && (
+                         <div style={{ marginBottom: '4px' }}>进度: {item.progress}%</div>
+                       )}
+                       {item.errorMessage && (
+                         <Alert 
+                            message={item.errorMessage} 
+                            type="error" 
+                            style={{ marginTop: '8px' }}
+                          />
+                       )}
+                       {item.startTime && (
+                         <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                           开始时间: {item.startTime}
+                           {item.endTime && ` | 结束时间: ${item.endTime}`}
+                         </div>
+                       )}
+                     </div>
+                   }
+                 />
+               </List.Item>
+             )}
+           />
+
+           {/* 汇总信息 */}
+           {allSyncCompleted && (
+             <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f6ffed', borderRadius: '6px' }}>
+               <div style={{ fontWeight: 500, marginBottom: '8px' }}>同步完成汇总</div>
+               <div>
+                 成功: {syncStatuses.filter(s => s.status === 'success').length} 台 | 
+                 失败: {syncStatuses.filter(s => s.status === 'failed').length} 台 | 
+                 总计: {syncStatuses.length} 台
+               </div>
              </div>
            )}
          </div>
