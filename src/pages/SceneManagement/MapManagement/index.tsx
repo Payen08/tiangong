@@ -175,6 +175,13 @@ const MapManagement: React.FC = () => {
   const [searchedMapFiles, setSearchedMapFiles] = useState<MapFile[]>([]);
   const [isSearchMode, setIsSearchMode] = useState(false);
   
+  // 新增地图文件相关状态
+  const [addMapFileDrawerVisible, setAddMapFileDrawerVisible] = useState(false);
+  const [addMapFileStep, setAddMapFileStep] = useState(1); // 1: 基本信息, 2: 地图编辑
+  const [addMapFileForm] = Form.useForm();
+  const [mapFileUploadedImage, setMapFileUploadedImage] = useState<any>(null);
+  const [addMapFileLoading, setAddMapFileLoading] = useState(false);
+  
   // 响应式状态管理
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1600);
@@ -1273,6 +1280,92 @@ const MapManagement: React.FC = () => {
     console.log('查看详情:', file);
   };
 
+  // 新增地图文件相关处理函数
+  const handleAddMapFile = () => {
+    if (!selectedMap) {
+      message.warning('请先选择一个地图');
+      return;
+    }
+    setAddMapFileStep(1);
+    setAddMapFileDrawerVisible(true);
+    addMapFileForm.resetFields();
+    setMapFileUploadedImage(null);
+  };
+
+  const handleAddMapFileNext = async () => {
+    try {
+      await addMapFileForm.validateFields();
+      setAddMapFileStep(2);
+    } catch (error) {
+      console.log('表单验证失败:', error);
+    }
+  };
+
+  const handleAddMapFilePrev = () => {
+    setAddMapFileStep(1);
+  };
+
+  const handleAddMapFileSubmit = async (values: any) => {
+    try {
+      setAddMapFileLoading(true);
+      // 模拟API调用
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const now = new Date();
+      const newMapFile: MapFile = {
+        id: `file_${Date.now()}`,
+        name: values.mapFileName,
+        thumbnail: mapFileUploadedImage?.url || 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
+        status: 'inactive',
+        format: 'PNG',
+      };
+      
+      // 将新地图文件添加到对应地图的文件列表中
+      if (selectedMap) {
+        setMapFiles(prev => {
+          const updatedFiles = { ...prev };
+          const currentMapFiles = updatedFiles[selectedMap.id] || [];
+          updatedFiles[selectedMap.id] = [newMapFile, ...currentMapFiles];
+          return updatedFiles;
+        });
+      }
+      
+      setAddMapFileDrawerVisible(false);
+      addMapFileForm.resetFields();
+      setMapFileUploadedImage(null);
+      setAddMapFileStep(1);
+      message.success('地图文件添加成功！');
+    } catch (error) {
+      message.error('添加失败，请重试');
+    } finally {
+      setAddMapFileLoading(false);
+    }
+  };
+
+  const handleMapFileImageUpload = (info: any) => {
+    if (info.file.status === 'uploading') {
+      return;
+    }
+    if (info.file.status === 'done') {
+      // 模拟上传成功
+      const reader = new FileReader();
+      reader.addEventListener('load', () => {
+        setMapFileUploadedImage({
+          url: reader.result,
+          name: info.file.name
+        });
+      });
+      reader.readAsDataURL(info.file.originFileObj);
+    }
+  };
+
+  const handleCloseAddMapFileDrawer = () => {
+    setAddMapFileDrawerVisible(false);
+    addMapFileForm.resetFields();
+    setMapFileUploadedImage(null);
+    setAddMapFileStep(1);
+  };
+
 
 
   // 渲染展开的地图文件内容
@@ -1859,7 +1952,24 @@ const MapManagement: React.FC = () => {
           {/* 右侧地图文件 - 大屏幕显示，小屏时也显示 */}
           <Col xs={0} lg={14} style={{ height: isSmallScreen ? 'auto' : '100%' }}>
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-              <Title level={5} style={{ margin: '0 0 12px 0', color: '#666', fontSize: '16px', fontWeight: 500, lineHeight: '32px', height: '32px', display: 'flex', alignItems: 'center' }}>地图文件</Title>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '12px',
+                height: '32px'
+              }}>
+                <Title level={5} style={{ margin: 0, color: '#666', fontSize: '16px', fontWeight: 500, lineHeight: '32px' }}>地图文件</Title>
+                <Button 
+                  type="primary" 
+                  icon={<PlusOutlined />} 
+                  size="small"
+                  onClick={handleAddMapFile}
+                  disabled={!selectedMap}
+                >
+                  新增
+                </Button>
+              </div>
               
 
               {(selectedMap || isSearchMode) ? (
@@ -3393,8 +3503,146 @@ const MapManagement: React.FC = () => {
            )}
          </div>
        </Drawer>
-     </div>
-   );
- };
+
+      {/* 新增地图文件侧滑抽屉 */}
+      <Drawer
+        title="新增地图文件"
+        placement="right"
+        width="100vw"
+        open={addMapFileDrawerVisible}
+        onClose={handleCloseAddMapFileDrawer}
+        destroyOnClose
+        styles={{
+          body: { padding: 0 },
+          header: { borderBottom: '1px solid #f0f0f0' }
+        }}
+        extra={
+          <Space>
+            {addMapFileStep === 2 && (
+              <Button onClick={handleAddMapFilePrev}>
+                上一步
+              </Button>
+            )}
+            {addMapFileStep === 1 ? (
+              <Button type="primary" onClick={handleAddMapFileNext}>
+                下一步
+              </Button>
+            ) : (
+              <Button 
+                type="primary" 
+                loading={addMapFileLoading}
+                onClick={() => addMapFileForm.submit()}
+              >
+                完成
+              </Button>
+            )}
+          </Space>
+        }
+      >
+        <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+          {/* 表单内容 */}
+          <div style={{ flex: 1, padding: '24px', overflow: 'auto' }}>
+            {addMapFileStep === 1 && (
+              <Form
+                form={addMapFileForm}
+                layout="vertical"
+                onFinish={handleAddMapFileSubmit}
+                style={{ maxWidth: 600, margin: '0 auto' }}
+              >
+                <Form.Item
+                  label="地图名称"
+                  name="mapFileName"
+                  rules={[
+                    { required: true, message: '请输入地图名称' },
+                    { min: 2, message: '地图名称至少2个字符' },
+                    { max: 50, message: '地图名称不能超过50个字符' }
+                  ]}
+                >
+                  <Input 
+                    placeholder="请输入地图名称" 
+                    size="large"
+                  />
+                </Form.Item>
+
+                <Form.Item
+                  label="上传PNG图片"
+                  name="mapImage"
+                  rules={[
+                    { required: true, message: '请上传地图图片' }
+                  ]}
+                >
+                  <Upload.Dragger
+                    name="file"
+                    multiple={false}
+                    accept=".png,.jpg,.jpeg"
+                    beforeUpload={() => false}
+                    onChange={handleMapFileImageUpload}
+                    showUploadList={false}
+                    style={{ background: '#fafafa' }}
+                  >
+                    {mapFileUploadedImage ? (
+                      <div style={{ padding: '20px' }}>
+                        <img 
+                          src={mapFileUploadedImage.url} 
+                          alt="预览" 
+                          style={{ 
+                            maxWidth: '100%', 
+                            maxHeight: '300px',
+                            borderRadius: '8px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                          }} 
+                        />
+                        <div style={{ marginTop: '12px', color: '#666' }}>
+                          {mapFileUploadedImage.name}
+                        </div>
+                        <div style={{ marginTop: '8px', color: '#1890ff' }}>
+                          点击或拖拽文件到此区域重新上传
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ padding: '40px 20px' }}>
+                        <p className="ant-upload-drag-icon">
+                          <FileImageOutlined style={{ fontSize: '48px', color: '#1890ff' }} />
+                        </p>
+                        <p className="ant-upload-text" style={{ fontSize: '16px', marginBottom: '8px' }}>
+                          点击或拖拽文件到此区域上传
+                        </p>
+                        <p className="ant-upload-hint" style={{ color: '#999' }}>
+                          支持 PNG、JPG、JPEG 格式，文件大小不超过 10MB
+                        </p>
+                      </div>
+                    )}
+                  </Upload.Dragger>
+                </Form.Item>
+              </Form>
+            )}
+
+            {addMapFileStep === 2 && (
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                height: '400px',
+                background: '#f5f5f5',
+                borderRadius: '8px',
+                border: '2px dashed #d9d9d9'
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <EditOutlined style={{ fontSize: '64px', color: '#d9d9d9', marginBottom: '16px' }} />
+                  <div style={{ fontSize: '18px', color: '#999', marginBottom: '8px' }}>
+                    地图编辑器
+                  </div>
+                  <div style={{ fontSize: '14px', color: '#bbb' }}>
+                    此处将集成地图编辑功能
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </Drawer>
+    </div>
+  );
+};
 
 export default MapManagement;
