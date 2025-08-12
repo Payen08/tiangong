@@ -135,6 +135,11 @@ const MapManagement: React.FC = () => {
   const [selectedSyncRobots, setSelectedSyncRobots] = useState<string[]>([]);
   const [selectedSyncMapFiles, setSelectedSyncMapFiles] = useState<string[]>([]);
   
+  // 地图名称搜索相关状态
+  const [searchMapName, setSearchMapName] = useState<string>('');
+  const [searchedMapFiles, setSearchedMapFiles] = useState<MapFile[]>([]);
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  
   // 响应式状态管理
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1600);
@@ -666,9 +671,68 @@ const MapManagement: React.FC = () => {
     setMapFiles(initialFileSets);
   }, []);
 
-  // 获取地图文件数据
+  // 获取地图文件数据（根据地图ID）
   const getMapFiles = (mapId: string): MapFile[] => {
     return mapFiles[mapId] || [];
+  };
+
+  // 根据地图名称获取地图文件数据
+  const getMapFilesByName = (mapName: string): MapFile[] => {
+    // 首先根据地图名称找到对应的地图数据
+    const targetMap = mapData.find(map => map.name === mapName);
+    if (!targetMap) {
+      console.warn(`未找到名称为 "${mapName}" 的地图`);
+      return [];
+    }
+    
+    // 根据地图ID获取地图文件
+    return getMapFiles(targetMap.id);
+  };
+
+  // 加载地图文件数据（根据地图名称）
+  const loadMapFilesByName = async (mapName: string): Promise<MapFile[]> => {
+    try {
+      setLoading(true);
+      
+      // 模拟API调用延迟
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 获取地图文件数据
+      const files = getMapFilesByName(mapName);
+      
+      if (files.length === 0) {
+        message.info(`地图 "${mapName}" 暂无文件数据`);
+      } else {
+        message.success(`成功加载地图 "${mapName}" 的 ${files.length} 个文件`);
+      }
+      
+      return files;
+    } catch (error) {
+      console.error('加载地图文件失败:', error);
+      message.error('加载地图文件失败，请重试');
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 处理地图名称搜索
+  const handleSearchMapFiles = async () => {
+    if (!searchMapName.trim()) {
+      message.warning('请输入地图名称');
+      return;
+    }
+    
+    const files = await loadMapFilesByName(searchMapName.trim());
+    setSearchedMapFiles(files);
+    setIsSearchMode(true);
+  };
+
+  // 清除搜索结果
+  const handleClearSearch = () => {
+    setSearchMapName('');
+    setSearchedMapFiles([]);
+    setIsSearchMode(false);
   };
 
   // 基础表格列配置
@@ -1482,7 +1546,7 @@ const MapManagement: React.FC = () => {
                           }}
                         >
                           <Space>
-                            <RobotOutlined style={{ color: '#52c41a' }} />
+                            <RobotOutlined style={{ color: '#1890ff' }} />
                             <span>从机器人拉取</span>
                           </Space>
                         </div>
@@ -1603,14 +1667,16 @@ const MapManagement: React.FC = () => {
           <Col xs={0} lg={14} style={{ height: isSmallScreen ? 'auto' : '100%' }}>
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <Title level={5} style={{ margin: '0 0 12px 0', color: '#666', fontSize: '16px', fontWeight: 500, lineHeight: '32px', height: '32px', display: 'flex', alignItems: 'center' }}>地图文件</Title>
-              {selectedMap ? (
+              
+
+              {(selectedMap || isSearchMode) ? (
         <Card 
-          title={`地图文件 - ${selectedMap.name}`}
+          title={isSearchMode ? `搜索结果 - ${searchMapName}` : `地图文件 - ${selectedMap?.name}`}
           style={{ marginBottom: 16 }}
         >
-          {getMapFiles(selectedMap.id).length > 0 ? (
+          {(isSearchMode ? searchedMapFiles : getMapFiles(selectedMap?.id || '')).length > 0 ? (
             <Row gutter={[16, 16]}>
-              {getMapFiles(selectedMap.id).map((file) => (
+              {(isSearchMode ? searchedMapFiles : getMapFiles(selectedMap?.id || '')).map((file) => (
                 <Col xs={12} sm={8} md={6} lg={8} xl={6} key={file.id}>
                   <Card
                     size="small"
@@ -1655,8 +1721,9 @@ const MapManagement: React.FC = () => {
                                     <Switch
                                       size="small"
                                       checked={file.status === 'active'}
+                                      disabled={isSearchMode}
                                       onChange={(checked) => {
-                                        if (checked) {
+                                        if (checked && selectedMap) {
                                           handleEnableFile(file, selectedMap.id);
                                         }
                                       }}
@@ -1812,10 +1879,10 @@ const MapManagement: React.FC = () => {
                  <div style={{ 
                    marginTop: 12, 
                    padding: '8px 16px', 
-                   background: '#f6ffed', 
-                   border: '1px solid #b7eb8f',
+                   background: '#f0f9ff', 
+                   border: '1px solid #91d5ff',
                    borderRadius: 6,
-                   color: '#52c41a'
+                   color: '#1890ff'
                  }}>
                    <FileImageOutlined style={{ marginRight: 8 }} />
                    已上传: {uploadedFile.name}
@@ -1934,10 +2001,10 @@ const MapManagement: React.FC = () => {
                  <div style={{ 
                    marginTop: 12, 
                    padding: '8px 16px', 
-                   background: '#f6ffed', 
-                   border: '1px solid #b7eb8f',
+                   background: '#f0f9ff', 
+                   border: '1px solid #91d5ff',
                    borderRadius: 6,
-                   color: '#52c41a'
+                   color: '#1890ff'
                  }}>
                    <FileImageOutlined style={{ marginRight: 8 }} />
                    已上传: {editUploadedFile.name}
@@ -2437,10 +2504,10 @@ const MapManagement: React.FC = () => {
                  <div style={{ 
                    marginTop: 12, 
                    padding: '8px 16px', 
-                   background: '#f6ffed', 
-                   border: '1px solid #b7eb8f',
+                   background: '#f0f9ff', 
+                   border: '1px solid #91d5ff',
                    borderRadius: 6,
-                   color: '#52c41a'
+                   color: '#1890ff'
                  }}>
                    <FileImageOutlined style={{ marginRight: 8 }} />
                    已上传: {localImportFile.name}
@@ -2736,7 +2803,7 @@ const MapManagement: React.FC = () => {
                        }
                        style={{
                          border: selectedSyncMapFiles.includes(file.id) ? '2px solid #1890ff' : '1px solid #d9d9d9',
-                         backgroundColor: selectedSyncMapFiles.includes(file.id) ? '#f6ffed' : '#fff',
+                         backgroundColor: selectedSyncMapFiles.includes(file.id) ? '#f0f9ff' : '#fff',
                          cursor: 'pointer'
                        }}
                        onClick={() => {
@@ -2762,38 +2829,28 @@ const MapManagement: React.FC = () => {
                              >
                                {file.name}
                              </div>
-                             <div style={{ 
-                               fontSize: '10px', 
-                               color: '#666',
-                               marginTop: 2
-                             }}>
-                               {file.format}
-                             </div>
-                             <div style={{ marginTop: 4 }}>
+
+                             <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                <Tag 
                                  size="small" 
-                                 color={file.status === 'active' ? 'success' : 'default'}
+                                 color={file.status === 'active' ? 'blue' : 'default'}
                                  style={{ fontSize: '10px' }}
                                >
                                  {file.status === 'active' ? '当前使用' : '当前使用'}
                                </Tag>
+                               <Checkbox 
+                                 checked={selectedSyncMapFiles.includes(file.id)}
+                                 onChange={(e) => {
+                                   e.stopPropagation();
+                                   setSelectedSyncMapFiles(prev => 
+                                     prev.includes(file.id) 
+                                       ? prev.filter(id => id !== file.id)
+                                       : [...prev, file.id]
+                                   );
+                                 }}
+                                 onClick={(e) => e.stopPropagation()}
+                               />
                              </div>
-                             {selectedSyncMapFiles.includes(file.id) && (
-                               <div style={{ 
-                                 position: 'absolute', 
-                                 top: -4, 
-                                 right: -4, 
-                                 background: '#52c41a', 
-                                 borderRadius: '50%', 
-                                 width: 16, 
-                                 height: 16, 
-                                 display: 'flex', 
-                                 alignItems: 'center', 
-                                 justifyContent: 'center' 
-                               }}>
-                                 <span style={{ color: '#fff', fontSize: '10px' }}>✓</span>
-                               </div>
-                             )}
                            </div>
                          }
                        />
