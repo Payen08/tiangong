@@ -2285,19 +2285,18 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
               {!isComposite && (
                 <Col xs={24} sm={24} md={12} lg={12} xl={12}>
                   <Form.Item
-                    label="引脚类型"
-                    name="moyingPinType"
-                    rules={[{ required: true, message: '请选择引脚类型' }]}
+                    label="引脚编号"
+                    name="moyingPinNumber"
+                    rules={[{ required: true, message: '请输入引脚编号' }]}
                   >
-                    <Select 
-                      value={moyingPinType}
-                      onChange={(value: 'input' | 'output') => setMoyingPinType(value)}
-                      placeholder="请选择引脚类型"
-                      defaultValue="input"
-                    >
-                      <Option value="input">输入类型</Option>
-                      <Option value="output">输出类型</Option>
-                    </Select>
+                    <Input 
+                      placeholder="请输入引脚编号（自然数）"
+                      value={moyingPinNumber}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        const value = e.target.value.replace(/[^0-9]/g, '');
+                        setMoyingPinNumber(value);
+                      }}
+                    />
                   </Form.Item>
                 </Col>
               )}
@@ -2404,36 +2403,21 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             {!isComposite && (
               <>
                 <Row gutter={[16, 16]}>
-                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                  <Col xs={24} sm={24} md={24} lg={24} xl={24}>
                     <Form.Item
-                      label="引脚编号"
-                      name="moyingPinNumber"
-                      rules={[{ required: true, message: '请输入引脚编号' }]}
+                      label="引脚类型"
+                      name="moyingPinType"
+                      rules={[{ required: true, message: '请选择引脚类型' }]}
                     >
-                      <Input 
-                        placeholder="请输入引脚编号（自然数）"
-                        value={moyingPinNumber}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const value = e.target.value.replace(/[^0-9]/g, '');
-                          setMoyingPinNumber(value);
-                        }}
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                    <Form.Item
-                      label="引脚值"
-                      name="moyingPinValue"
-                      rules={[{ required: true, message: '请输入引脚值' }]}
-                    >
-                      <Input 
-                        placeholder="请输入引脚值（自然数）"
-                        value={moyingPinValue}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          const value = e.target.value.replace(/[^0-9]/g, '');
-                          setMoyingPinValue(value);
-                        }}
-                      />
+                      <Select 
+                        value={moyingPinType}
+                        onChange={(value: 'input' | 'output') => setMoyingPinType(value)}
+                        placeholder="请选择引脚类型"
+                        defaultValue="input"
+                      >
+                        <Option value="input">输入类型</Option>
+                        <Option value="output">输出类型</Option>
+                      </Select>
                     </Form.Item>
                   </Col>
                 </Row>
