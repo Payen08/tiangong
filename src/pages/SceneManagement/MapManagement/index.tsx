@@ -220,85 +220,14 @@ const MapManagement: React.FC = () => {
 
   // 地图编辑器状态
   const [selectedTool, setSelectedTool] = useState<string>(''); // 当前选中的工具
-  // 预设节点数据
-  const defaultMapPoints = [
-    {
-      id: 'preset_point_1',
-      name: 'n1',
-      type: '起始点',
-      description: '站点',
-      x: 150,
-      y: 100,
-      isPreset: true // 标记为预设节点，不可移除
-    },
-    {
-      id: 'preset_point_2', 
-      name: 'n2',
-      type: '中转点',
-      description: '电梯',
-      x: 300,
-      y: 200,
-      isPreset: true
-    },
-    {
-      id: 'preset_point_3',
-      name: 'n3', 
-      type: '终点',
-      description: '站点',
-      x: 450,
-      y: 150,
-      isPreset: true
-    },
-    {
-      id: 'preset_point_4',
-      name: 'n4',
-      type: '充电点',
-      description: '充电桩',
-      x: 200,
-      y: 300,
-      isPreset: true
-    }
-  ];
+  const [mapType, setMapType] = useState<'topology' | 'grayscale'>('topology'); // 地图类型：拓扑地图或黑白底图
+  const [currentMode, setCurrentMode] = useState<'edit' | 'view'>('edit'); // 当前模式：编辑模式或阅览模式
+  const [exitEditModalVisible, setExitEditModalVisible] = useState(false); // 退出编辑模式确认弹窗
+  // 预设节点数据 - 已清空测试数据
+  const defaultMapPoints: any[] = [];
   
-  // 默认路径数据
-  const defaultMapLines: MapLine[] = [
-    {
-      id: 'line_1',
-      name: 'e1',
-      startPointId: 'preset_point_1',
-      endPointId: 'preset_point_2',
-      type: 'single-line',
-      color: '#1890ff',
-      length: 150
-    },
-    {
-      id: 'line_2',
-      name: 'e2',
-      startPointId: 'preset_point_2',
-      endPointId: 'preset_point_3',
-      type: 'double-line',
-      color: '#52c41a',
-      length: 200
-    },
-    {
-      id: 'line_3',
-      name: 'e3',
-      startPointId: 'preset_point_3',
-      endPointId: 'preset_point_4',
-      type: 'single-bezier',
-      color: '#fa541c',
-      length: 180
-    },
-    {
-      id: 'line_4',
-      name: 'e4',
-      startPointId: 'preset_point_4',
-      endPointId: 'preset_point_1',
-      type: 'double-bezier',
-      color: '#722ed1',
-      length: 220
-    }
-  ];
+  // 默认路径数据 - 已清空测试数据
+  const defaultMapLines: MapLine[] = [];
 
   const [mapPoints, setMapPoints] = useState<any[]>(defaultMapPoints); // 地图上的点
   const [mapLines, setMapLines] = useState<MapLine[]>(defaultMapLines); // 地图上的连线
@@ -1865,6 +1794,8 @@ const MapManagement: React.FC = () => {
     setCurrentMapFileName(''); // 重置地图文件名称
     // 重置地图编辑器状态
     setSelectedTool('');
+    setMapType('topology'); // 重置为默认的拓扑地图
+    setCurrentMode('edit'); // 重置为编辑模式
     setMapPoints(defaultMapPoints);
     setPointCounter(1);
     setSelectedPoints([]);
@@ -1907,6 +1838,27 @@ const MapManagement: React.FC = () => {
     setTimeout(() => {
       handleCloseAddMapFileDrawer();
     }, 1000);
+  };
+
+  // 模式切换处理函数
+  const handleExitEditMode = () => {
+    setExitEditModalVisible(true);
+  };
+
+  const handleEnterEditMode = () => {
+    setCurrentMode('edit');
+    message.success('已进入编辑模式');
+  };
+
+  const handleConfirmExitEdit = () => {
+    // 这里可以添加提交地图编辑数据的逻辑
+    setCurrentMode('view');
+    setExitEditModalVisible(false);
+    message.success('已退出编辑模式，地图数据已提交');
+  };
+
+  const handleCancelExitEdit = () => {
+    setExitEditModalVisible(false);
   };
 
   // 搜索处理函数
@@ -5303,157 +5255,146 @@ const MapManagement: React.FC = () => {
                   flexDirection: 'column',
                   boxShadow: '2px 0 8px rgba(0,0,0,0.1)'
                 }}>
-                  <Title level={5} style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600 }}>绘图工具</Title>
+                  {/* 当前模式 */}
+                  <Title level={5} style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 600 }}>当前模式</Title>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>                    
+                    {currentMode === 'edit' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{
+                          padding: '8px 12px',
+                          background: '#f6ffed',
+                          border: '1px solid #b7eb8f',
+                          borderRadius: '6px',
+                          fontSize: '13px',
+                          color: '#52c41a',
+                          textAlign: 'center',
+                          fontWeight: 500
+                        }}>
+                          <EditOutlined style={{ marginRight: '6px' }} />
+                          编辑模式
+                        </div>
+                        <Button 
+                          type="default"
+                          onClick={handleExitEditMode}
+                          style={{
+                            height: '32px',
+                            fontSize: '12px',
+                            borderColor: '#ff7875',
+                            color: '#ff7875'
+                          }}
+                        >
+                          退出编辑模式
+                        </Button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{
+                          padding: '8px 12px',
+                          background: '#f0f5ff',
+                          border: '1px solid #adc6ff',
+                          borderRadius: '6px',
+                          fontSize: '13px',
+                          color: '#1890ff',
+                          textAlign: 'center',
+                          fontWeight: 500
+                        }}>
+                          <EyeOutlined style={{ marginRight: '6px' }} />
+                          阅览模式
+                        </div>
+                        <Button 
+                          type="primary"
+                          onClick={handleEnterEditMode}
+                          style={{
+                            height: '32px',
+                            fontSize: '12px'
+                          }}
+                        >
+                          进入编辑模式
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <Divider style={{ margin: '0 0 16px 0' }} />
+                  
+                  {/* 地图类型切换 */}
+                  <Title level={5} style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: 600 }}>地图类型</Title>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+                    <Button 
+                      type={mapType === 'topology' ? 'primary' : 'text'}
+                      onClick={() => setMapType('topology')}
+                      style={{
+                        height: '36px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: mapType === 'topology' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                        borderRadius: '6px',
+                        background: mapType === 'topology' ? '#e6f7ff' : '#fff',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <div style={{
+                        width: '14px',
+                        height: '14px',
+                        marginRight: '6px',
+                        background: 'linear-gradient(45deg, #1890ff 25%, transparent 25%, transparent 75%, #1890ff 75%), linear-gradient(45deg, #1890ff 25%, transparent 25%, transparent 75%, #1890ff 75%)',
+                        backgroundSize: '4px 4px',
+                        backgroundPosition: '0 0, 2px 2px',
+                        border: '1px solid #1890ff',
+                        borderRadius: '2px'
+                      }}></div>
+                      拓扑地图
+                    </Button>
+                    
+                    <Button 
+                      type={mapType === 'grayscale' ? 'primary' : 'text'}
+                      onClick={() => setMapType('grayscale')}
+                      style={{
+                        height: '36px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: mapType === 'grayscale' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                        borderRadius: '6px',
+                        background: mapType === 'grayscale' ? '#e6f7ff' : '#fff',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <div style={{
+                        width: '14px',
+                        height: '14px',
+                        marginRight: '6px',
+                        background: 'linear-gradient(to right, #666 0%, #999 50%, #ccc 100%)',
+                        border: '1px solid #666',
+                        borderRadius: '2px'
+                      }}></div>
+                      黑白底图
+                    </Button>
+                  </div>
+                  
+                  <Divider style={{ margin: '0 0 16px 0' }} />
+                  
+                  <Title level={5} style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600 }}>基本信息</Title>
                   
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <Button 
-                      type={selectedTool === 'select' ? 'primary' : 'text'}
-                      onClick={() => handleToolSelect('select')}
-                      style={{
-                        height: '40px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-start',
-                        padding: '0 12px',
-                        border: selectedTool === 'select' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                        borderRadius: '6px',
-                        background: selectedTool === 'select' ? '#e6f7ff' : '#fff'
-                      }}
-                    >
-                      <div style={{ 
-                        width: '16px', 
-                        height: '16px', 
-                        border: '2px solid #1890ff', 
-                        borderRadius: '2px',
-                        marginRight: '8px',
-                        position: 'relative'
-                      }}>
-                        <div style={{
-                          position: 'absolute',
-                          top: '2px',
-                          right: '-2px',
-                          width: '0',
-                          height: '0',
-                          borderLeft: '4px solid #1890ff',
-                          borderTop: '2px solid transparent',
-                          borderBottom: '2px solid transparent'
-                        }}></div>
-                      </div>
-                      选择工具
-                    </Button>
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图名称</div>
+                      <div style={{ fontSize: '14px', fontWeight: 500 }}>{currentMapFileName || '新建地图文件'}</div>
+                    </div>
                     
-                    <Button 
-                      type={selectedTool === 'point' ? 'primary' : 'text'}
-                      onClick={() => handleToolSelect('point')}
-                      style={{
-                        height: '40px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-start',
-                        padding: '0 12px',
-                        border: selectedTool === 'point' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                        borderRadius: '6px',
-                        background: selectedTool === 'point' ? '#e6f7ff' : '#fff'
-                      }}
-                    >
-                      <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#1890ff', marginRight: '8px' }}></div>
-                      点
-                    </Button>
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>画布尺寸</div>
+                      <div style={{ fontSize: '14px' }}>1920 × 1080 px</div>
+                    </div>
                     
-                    <Button 
-                      type={selectedTool === 'double-line' ? 'primary' : 'text'}
-                      onClick={() => handleToolSelect('double-line')}
-                      style={{
-                        height: '40px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-start',
-                        padding: '0 12px',
-                        border: selectedTool === 'double-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                        borderRadius: '6px',
-                        background: selectedTool === 'double-line' ? '#e6f7ff' : '#fff'
-                      }}
-                    >
-                      <div style={{ display: 'flex', flexDirection: 'column', marginRight: '8px' }}>
-                        <div style={{ width: '16px', height: '1px', background: '#1890ff', marginBottom: '2px' }}></div>
-                        <div style={{ width: '16px', height: '1px', background: '#1890ff' }}></div>
-                      </div>
-                      双向直线
-                    </Button>
-                    
-                    <Button 
-                      type={selectedTool === 'single-line' ? 'primary' : 'text'}
-                      onClick={() => handleToolSelect('single-line')}
-                      style={{
-                        height: '40px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-start',
-                        padding: '0 12px',
-                        border: selectedTool === 'single-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                        borderRadius: '6px',
-                        background: selectedTool === 'single-line' ? '#e6f7ff' : '#fff'
-                      }}
-                    >
-                      <div style={{ width: '16px', height: '1px', background: '#1890ff', marginRight: '8px' }}></div>
-                      单向直线
-                    </Button>
-                    
-                    <Button 
-                      type={selectedTool === 'double-bezier' ? 'primary' : 'text'}
-                      onClick={() => handleToolSelect('double-bezier')}
-                      style={{
-                        height: '40px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-start',
-                        padding: '0 12px',
-                        border: selectedTool === 'double-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                        borderRadius: '6px',
-                        background: selectedTool === 'double-bezier' ? '#e6f7ff' : '#fff'
-                      }}
-                    >
-                      <div style={{ 
-                        width: '16px', 
-                        height: '8px', 
-                        border: '1px solid #1890ff',
-                        borderRadius: '8px 8px 0 0',
-                        marginRight: '8px'
-                      }}></div>
-                      双向贝塞尔曲线
-                    </Button>
-                    
-                    <Button 
-                      type={selectedTool === 'single-bezier' ? 'primary' : 'text'}
-                      onClick={() => handleToolSelect('single-bezier')}
-                      style={{
-                        height: '40px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-start',
-                        padding: '0 12px',
-                        border: selectedTool === 'single-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                        borderRadius: '6px',
-                        background: selectedTool === 'single-bezier' ? '#e6f7ff' : '#fff'
-                      }}
-                    >
-                      <div style={{ 
-                        width: '16px', 
-                        height: '8px', 
-                        border: '1px solid #1890ff',
-                        borderRadius: '8px 0 0 0',
-                        marginRight: '8px'
-                      }}></div>
-                      单向贝塞尔曲线
-                    </Button>
+                    <div style={{ marginBottom: '8px' }}>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>网格大小</div>
+                      <div style={{ fontSize: '14px' }}>20 × 20 px</div>
+                    </div>
                   </div>
                   
-                  <Divider style={{ margin: '16px 0' }} />
-                  
-                  <Title level={5} style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600 }}>图层管理</Title>
-                  <div style={{ fontSize: '12px', color: '#666' }}>
-                    图层功能开发中...
-                  </div>
+
                 </div>
                 
                 {/* 中间画布区域 - 最大化绘图区域 */}
@@ -5881,60 +5822,151 @@ const MapManagement: React.FC = () => {
                     }}
                     items={[
                       {
-                        key: 'basic',
-                        label: '基本信息',
+                        key: 'tools',
+                        label: '绘图工具',
                         children: (
-                          <div style={{ padding: '0 12px 12px 12px', flex: 1, overflow: 'auto' }}>
-                            <div style={{ marginBottom: '16px' }}>
-                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图名称</div>
-                              <div style={{ fontSize: '14px', fontWeight: 500 }}>{currentMapFileName || '新建地图文件'}</div>
-                            </div>
-                            
-                            <div style={{ marginBottom: '16px' }}>
-                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>文件格式</div>
-                              <Tag color="blue">PNG</Tag>
-                            </div>
-                            
-                            <div style={{ marginBottom: '16px' }}>
-                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>画布尺寸</div>
-                              <div style={{ fontSize: '14px' }}>1920 × 1080 px</div>
-                            </div>
-                            
-                            <div style={{ marginBottom: '16px' }}>
-                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>网格大小</div>
-                              <div style={{ fontSize: '14px' }}>20 × 20 px</div>
-                            </div>
-                            
-                            <Divider style={{ margin: '16px 0' }} />
-                            
-                            <Title level={5} style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600 }}>属性设置</Title>
-                            
-                            <div style={{ marginBottom: '12px' }}>
-                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>线条颜色</div>
-                              <div style={{ display: 'flex', gap: '8px' }}>
-                                <div style={{ width: '20px', height: '20px', background: '#1890ff', borderRadius: '4px', border: '1px solid #d9d9d9' }}></div>
-                                <div style={{ width: '20px', height: '20px', background: '#52c41a', borderRadius: '4px', border: '1px solid #d9d9d9' }}></div>
-                                <div style={{ width: '20px', height: '20px', background: '#fa541c', borderRadius: '4px', border: '1px solid #d9d9d9' }}></div>
-                                <div style={{ width: '20px', height: '20px', background: '#722ed1', borderRadius: '4px', border: '1px solid #d9d9d9' }}></div>
-                              </div>
-                            </div>
-                            
-                            <div style={{ marginBottom: '12px' }}>
-                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>线条粗细</div>
-                              <div style={{ fontSize: '14px' }}>2px</div>
-                            </div>
-                            
-                            <div style={{ marginBottom: '16px' }}>
-                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>填充颜色</div>
-                              <div style={{ fontSize: '14px', color: '#999' }}>无填充</div>
-                            </div>
-                            
-                            <Divider style={{ margin: '16px 0' }} />
-                            
-                            <Title level={5} style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600 }}>操作历史</Title>
-                            
-                            <div style={{ fontSize: '12px', color: '#999', textAlign: 'center', padding: '20px 0' }}>
-                              暂无操作记录
+                          <div style={{ padding: '12px 12px 12px 12px', flex: 1, overflow: 'auto' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                              <Button 
+                                type={selectedTool === 'select' ? 'primary' : 'text'}
+                                onClick={() => handleToolSelect('select')}
+                                style={{
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-start',
+                                  padding: '0 12px',
+                                  border: selectedTool === 'select' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                  borderRadius: '6px',
+                                  background: selectedTool === 'select' ? '#e6f7ff' : '#fff'
+                                }}
+                              >
+                                <div style={{ 
+                                  width: '16px', 
+                                  height: '16px', 
+                                  border: '2px solid #1890ff', 
+                                  borderRadius: '2px',
+                                  marginRight: '8px',
+                                  position: 'relative'
+                                }}>
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '2px',
+                                    right: '-2px',
+                                    width: '0',
+                                    height: '0',
+                                    borderLeft: '4px solid #1890ff',
+                                    borderTop: '2px solid transparent',
+                                    borderBottom: '2px solid transparent'
+                                  }}></div>
+                                </div>
+                                选择工具
+                              </Button>
+                              
+                              <Button 
+                                type={selectedTool === 'point' ? 'primary' : 'text'}
+                                onClick={() => handleToolSelect('point')}
+                                style={{
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-start',
+                                  padding: '0 12px',
+                                  border: selectedTool === 'point' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                  borderRadius: '6px',
+                                  background: selectedTool === 'point' ? '#e6f7ff' : '#fff'
+                                }}
+                              >
+                                <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#1890ff', marginRight: '8px' }}></div>
+                                点
+                              </Button>
+                              
+                              <Button 
+                                type={selectedTool === 'double-line' ? 'primary' : 'text'}
+                                onClick={() => handleToolSelect('double-line')}
+                                style={{
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-start',
+                                  padding: '0 12px',
+                                  border: selectedTool === 'double-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                  borderRadius: '6px',
+                                  background: selectedTool === 'double-line' ? '#e6f7ff' : '#fff'
+                                }}
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', marginRight: '8px' }}>
+                                  <div style={{ width: '16px', height: '1px', background: '#1890ff', marginBottom: '2px' }}></div>
+                                  <div style={{ width: '16px', height: '1px', background: '#1890ff' }}></div>
+                                </div>
+                                双向直线
+                              </Button>
+                              
+                              <Button 
+                                type={selectedTool === 'single-line' ? 'primary' : 'text'}
+                                onClick={() => handleToolSelect('single-line')}
+                                style={{
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-start',
+                                  padding: '0 12px',
+                                  border: selectedTool === 'single-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                  borderRadius: '6px',
+                                  background: selectedTool === 'single-line' ? '#e6f7ff' : '#fff'
+                                }}
+                              >
+                                <div style={{ width: '16px', height: '1px', background: '#1890ff', marginRight: '8px' }}></div>
+                                单向直线
+                              </Button>
+                              
+                              <Button 
+                                type={selectedTool === 'double-bezier' ? 'primary' : 'text'}
+                                onClick={() => handleToolSelect('double-bezier')}
+                                style={{
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-start',
+                                  padding: '0 12px',
+                                  border: selectedTool === 'double-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                  borderRadius: '6px',
+                                  background: selectedTool === 'double-bezier' ? '#e6f7ff' : '#fff'
+                                }}
+                              >
+                                <div style={{ 
+                                  width: '16px', 
+                                  height: '8px', 
+                                  border: '1px solid #1890ff',
+                                  borderRadius: '8px 8px 0 0',
+                                  marginRight: '8px'
+                                }}></div>
+                                双向贝塞尔曲线
+                              </Button>
+                              
+                              <Button 
+                                type={selectedTool === 'single-bezier' ? 'primary' : 'text'}
+                                onClick={() => handleToolSelect('single-bezier')}
+                                style={{
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-start',
+                                  padding: '0 12px',
+                                  border: selectedTool === 'single-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                  borderRadius: '6px',
+                                  background: selectedTool === 'single-bezier' ? '#e6f7ff' : '#fff'
+                                }}
+                              >
+                                <div style={{ 
+                                  width: '16px', 
+                                  height: '8px', 
+                                  border: '1px solid #1890ff',
+                                  borderRadius: '8px 0 0 0',
+                                  marginRight: '8px'
+                                }}></div>
+                                单向贝塞尔曲线
+                              </Button>
                             </div>
                           </div>
                         )
@@ -5943,7 +5975,7 @@ const MapManagement: React.FC = () => {
                         key: 'elements',
                         label: '地图元素',
                         children: (
-                          <div style={{ padding: '0 12px 12px 12px', flex: 1, overflow: 'auto' }}>
+                          <div style={{ padding: '12px 12px 12px 12px', flex: 1, overflow: 'auto' }}>
                             <Collapse
                               activeKey={mapElementActiveKey}
                               onChange={setMapElementActiveKey}
@@ -6539,7 +6571,7 @@ const MapManagement: React.FC = () => {
                                         style={{ 
                                           opacity: 0, 
                                           transition: 'opacity 0.2s',
-                                          fontSize: '10px',
+                                          fontSize: '12px',
                                           height: '20px',
                                           padding: '0 4px',
                                           marginLeft: '4px'
@@ -6593,7 +6625,7 @@ const MapManagement: React.FC = () => {
                                                   size="small" 
                                                   icon={<EditOutlined />}
                                                   style={{ 
-                                                    fontSize: '10px',
+                                                    fontSize: '12px',
                                                     height: '20px',
                                                     padding: '0 4px'
                                                   }}
@@ -6601,16 +6633,14 @@ const MapManagement: React.FC = () => {
                                                     e.stopPropagation();
                                                     handleEditPathGroup(group);
                                                   }}
-                                                >
-                                                  编辑
-                                                </Button>
+                                                />
                                                 <Button 
                                                   type="text" 
                                                   size="small" 
                                                   danger
                                                   icon={<DeleteOutlined />}
                                                   style={{ 
-                                                    fontSize: '10px',
+                                                    fontSize: '12px',
                                                     height: '20px',
                                                     padding: '0 4px'
                                                   }}
@@ -6618,9 +6648,7 @@ const MapManagement: React.FC = () => {
                                                     e.stopPropagation();
                                                     handleDeletePathGroup(group.id);
                                                   }}
-                                                >
-                                                  删除
-                                                </Button>
+                                                />
                                               </div>
                                             </div>
                                           ),
