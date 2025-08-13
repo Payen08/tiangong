@@ -181,14 +181,17 @@ const MapManagement: React.FC = () => {
   const [addMapFileForm] = Form.useForm();
   const [mapFileUploadedImage, setMapFileUploadedImage] = useState<any>(null);
   const [addMapFileLoading, setAddMapFileLoading] = useState(false);
+  const [currentMapFileName, setCurrentMapFileName] = useState<string>(''); // 当前地图文件名称
   
   // 连线数据类型
   interface MapLine {
     id: string;
+    name: string; // 线名称，从e1开始
     startPointId: string;
     endPointId: string;
     type: 'double-line' | 'single-line' | 'double-bezier' | 'single-bezier';
     color?: string;
+    length?: number; // 线长度（像素）
   }
 
   // 地图编辑器状态
@@ -197,6 +200,7 @@ const MapManagement: React.FC = () => {
   const [mapLines, setMapLines] = useState<MapLine[]>([]); // 地图上的连线
   const [pointCounter, setPointCounter] = useState(1); // 点名称计数器
   const [selectedPoints, setSelectedPoints] = useState<string[]>([]); // 选中的点ID列表
+  const [selectedLines, setSelectedLines] = useState<string[]>([]); // 选中的线ID列表
   const [isSelecting, setIsSelecting] = useState(false); // 是否正在框选
   const [selectionStart, setSelectionStart] = useState<{x: number, y: number} | null>(null); // 框选起始点
   const [selectionEnd, setSelectionEnd] = useState<{x: number, y: number} | null>(null); // 框选结束点
@@ -207,6 +211,10 @@ const MapManagement: React.FC = () => {
   // 连线相关状态
   const [isConnecting, setIsConnecting] = useState(false); // 是否正在连线
   const [connectingStartPoint, setConnectingStartPoint] = useState<string | null>(null); // 连线起始点ID
+  const [lineCounter, setLineCounter] = useState(1); // 线名称计数器
+  const [editingLine, setEditingLine] = useState<MapLine | null>(null); // 正在编辑的线
+  const [lineEditModalVisible, setLineEditModalVisible] = useState(false); // 线编辑弹窗显示状态
+  const [lineEditForm] = Form.useForm(); // 线编辑表单
   const [hoveredPoint, setHoveredPoint] = useState<string | null>(null); // 鼠标悬停的点ID
   const [continuousConnecting, setContinuousConnecting] = useState(false); // 连续连线模式
   const [lastConnectedPoint, setLastConnectedPoint] = useState<string | null>(null); // 上一个连接的点ID
@@ -235,18 +243,31 @@ const MapManagement: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // 监听ESC键退出连线模式
+  // 监听ESC键处理逻辑
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && (isConnecting || continuousConnecting)) {
-        console.log('⌨️ [连线埋点] 检测到ESC键，退出连线模式');
-        exitConnectingMode();
+      if (event.key === 'Escape') {
+        // 阻止默认的ESC键行为（防止关闭抽屉）
+        event.preventDefault();
+        event.stopPropagation();
+        
+        // 如果在地图编辑模式下
+        if (addMapFileDrawerVisible) {
+          // 如果正在连线模式，退出连线模式
+          if (isConnecting || continuousConnecting) {
+            console.log('⌨️ [连线埋点] 检测到ESC键，退出连线模式');
+            exitConnectingMode();
+          }
+          // 切换到选择工具
+          console.log('⌨️ [工具切换] 检测到ESC键，切换到选择工具');
+          setSelectedTool('select');
+        }
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isConnecting, continuousConnecting]);
+    window.addEventListener('keydown', handleKeyDown, true); // 使用捕获阶段
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isConnecting, continuousConnecting, addMapFileDrawerVisible]);
 
   // 初始化机器人设备数据
   useEffect(() => {
@@ -1406,6 +1427,7 @@ const MapManagement: React.FC = () => {
     addMapFileForm.resetFields();
     setMapFileUploadedImage(null);
     setAddMapFileStep(1);
+    setCurrentMapFileName(''); // 重置地图文件名称
     // 重置地图编辑器状态
     setSelectedTool('');
     setMapPoints([]);
@@ -1449,15 +1471,19 @@ const MapManagement: React.FC = () => {
     if (toolType !== 'select') {
       console.log('🧹 [工具埋点] 非选择工具，清除选择状态', {
         clearedSelectedPoints: selectedPoints.length,
+        clearedSelectedLines: selectedLines.length,
         clearedIsSelecting: isSelecting,
         clearedSelectionStart: !!selectionStart,
         clearedSelectionEnd: !!selectionEnd
       });
       
       setSelectedPoints([]);
+      setSelectedLines([]);  // 添加清除线的选中状态
       setIsSelecting(false);
       setSelectionStart(null);
       setSelectionEnd(null);
+      
+      console.log('✅ [工具埋点] 已清除所有选择状态（包括点和线）');
     } else {
       console.log('✅ [工具埋点] 选择工具激活，保持当前选择状态');
     }
@@ -1493,7 +1519,8 @@ const MapManagement: React.FC = () => {
   
   // 画布点击处理
   const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    console.log('🖱️ [画布埋点] handleCanvasClick被调用', {
+    console.log('🖱️ [画布埋点] ========== handleCanvasClick被调用 ==========');
+    console.log('🖱️ [画布埋点] 事件详情', {
       selectedTool,
       eventType: event.type,
       button: event.button,
@@ -1504,8 +1531,15 @@ const MapManagement: React.FC = () => {
       targetClassName: (event.target as Element).className,
       isSelecting,
       isMapPoint: !!(event.target as Element).closest('.map-point'),
+      isSvgElement: (event.target as Element).tagName === 'svg' || (event.target as Element).tagName === 'g' || (event.target as Element).tagName === 'line' || (event.target as Element).tagName === 'path',
       currentSelectedPoints: selectedPoints.length,
+      currentSelectedLines: selectedLines.length,
       timestamp: new Date().toISOString()
+    });
+    console.log('🖱️ [画布埋点] 当前选中状态', {
+      selectedPoints: selectedPoints,
+      selectedLines: selectedLines,
+      selectedTool: selectedTool
     });
     
     // 如果点击的是地图点，不处理画布点击
@@ -1514,10 +1548,21 @@ const MapManagement: React.FC = () => {
       return;
     }
     
-    // 如果是选择工具且刚刚完成了框选操作，不处理点击（避免立即清除框选结果）
+    // 如果是选择工具且刚刚完成了框选操作，需要特殊处理
     if (selectedTool === 'select' && wasJustSelecting.current) {
-      console.log('🚫 [画布埋点] 刚完成框选，跳过点击处理');
+      console.log('🔄 [画布埋点] 刚完成框选，但仍需处理线的选中状态');
       wasJustSelecting.current = false;
+      
+      // 即使刚完成框选，也要清除线的选中状态（如果有的话）
+      if (selectedLines.length > 0) {
+        console.log('🧹 [画布埋点] 框选后清除线的选中状态', {
+          previousSelectedLines: selectedLines.length
+        });
+        setSelectedLines([]);
+        console.log('✅ [画布埋点] 线的选中状态已清除（框选后处理）');
+      } else {
+        console.log('ℹ️ [画布埋点] 框选后没有选中的线需要清除');
+      }
       return;
     }
     
@@ -1526,6 +1571,14 @@ const MapManagement: React.FC = () => {
       const rect = event.currentTarget.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
+      
+      // 清除线的选中状态
+      if (selectedLines.length > 0) {
+        console.log('🧹 [画布埋点] 点工具模式，清除线的选中状态', {
+          previousSelectedLines: selectedLines.length
+        });
+        setSelectedLines([]);
+      }
       
       // 创建新点
       const newPoint = {
@@ -1546,26 +1599,63 @@ const MapManagement: React.FC = () => {
       setMapPoints(prev => [...prev, newPoint]);
       setPointCounter(prev => prev + 1);
     } else if (selectedTool === 'select') {
-      // 选择工具：只有在非框选状态时才清除选择状态
-      if (!isSelecting) {
+      // 选择工具：只有在非框选状态且没有选中点时才清除选择状态
+      if (!isSelecting && selectedPoints.length === 0) {
         console.log('🧹 [画布埋点] 选择工具模式，清除选择状态', {
           previousSelectedPoints: selectedPoints.length,
+          previousSelectedLines: selectedLines.length,
           previousSelectionStart: selectionStart,
           previousSelectionEnd: selectionEnd,
           previousIsSelecting: isSelecting
         });
         
-        setSelectedPoints([]);
+        // 清除线的选中状态
+        if (selectedLines.length > 0) {
+          console.log('🔄 [画布埋点] 清除线的选中状态', { count: selectedLines.length });
+          setSelectedLines([]);
+        }
+        
         setSelectionStart(null);
         setSelectionEnd(null);
         
-        console.log('✅ [画布埋点] 选择状态已清除');
+        console.log('✅ [画布埋点] 选择状态已清除（包括线和框选坐标）');
+      } else if (!isSelecting && selectedPoints.length > 0) {
+        console.log('🔄 [画布埋点] 有选中点时，只清除线的选中状态', {
+          selectedPointsCount: selectedPoints.length,
+          selectedLinesCount: selectedLines.length
+        });
+        
+        // 只清除线的选中状态，保留点的选中状态和框选坐标
+        if (selectedLines.length > 0) {
+          console.log('🔄 [画布埋点] 清除线的选中状态', { count: selectedLines.length });
+          setSelectedLines([]);
+        }
+        
+        console.log('✅ [画布埋点] 线的选中状态已清除，保留点的选中状态');
       } else {
         console.log('🚫 [画布埋点] 框选进行中，跳过清除选择状态', {
           isSelecting,
           selectionStart,
           selectionEnd
         });
+      }
+    } else {
+      // 其他工具模式：清除线的选中状态
+      console.log('🔧 [画布埋点] 其他工具模式处理', {
+        currentTool: selectedTool,
+        currentSelectedLines: selectedLines.length,
+        currentSelectedPoints: selectedPoints.length
+      });
+      
+      if (selectedLines.length > 0) {
+        console.log('🧹 [画布埋点] 其他工具模式，清除线的选中状态', {
+          currentTool: selectedTool,
+          previousSelectedLines: selectedLines.length
+        });
+        setSelectedLines([]);
+        console.log('✅ [画布埋点] 线的选中状态已清除');
+      } else {
+        console.log('ℹ️ [画布埋点] 没有选中的线需要清除');
       }
     }
   };
@@ -1642,6 +1732,14 @@ const MapManagement: React.FC = () => {
       
       console.log('🔄 [点击埋点] 更新选中点状态');
       setSelectedPoints(newSelectedPoints);
+      
+      // 清除线的选中状态（点和线不能同时选中）
+      if (selectedLines.length > 0) {
+        console.log('🧹 [点击埋点] 清除线的选中状态', {
+          previousSelectedLines: selectedLines.length
+        });
+        setSelectedLines([]);
+      }
       
       // 更新框选矩形以围绕选中的点
        if (newSelectedPoints.length > 0) {
@@ -1754,14 +1852,25 @@ const MapManagement: React.FC = () => {
           当前连线数组长度: mapLines.length
         });
 
+        // 计算线长度
+        const startPointData = getPointById(startPoint);
+        const endPointData = getPointById(pointId);
+        const lineLength = startPointData && endPointData ? 
+          Math.sqrt(Math.pow(endPointData.x - startPointData.x, 2) + Math.pow(endPointData.y - startPointData.y, 2)) : 0;
+
         // 创建新的连线
         const newLine: MapLine = {
           id: `line_${Date.now()}`,
+          name: `e${lineCounter}`,
           startPointId: startPoint,
           endPointId: pointId,
           type: selectedTool as 'double-line' | 'single-line' | 'double-bezier' | 'single-bezier',
-          color: '#87CEEB' // 浅蓝色
+          color: '#87CEEB', // 浅蓝色
+          length: Math.round(lineLength)
         };
+
+        // 更新线计数器
+        setLineCounter(prev => prev + 1);
 
         console.log('📝 [连线埋点] 新连线对象已创建', { newLine });
 
@@ -2163,13 +2272,55 @@ const MapManagement: React.FC = () => {
     message.success(`已删除 ${selectedPoints.length} 个点`);
   };
 
+  // 删除选中的线
+  const handleDeleteSelectedLines = () => {
+    if (selectedLines.length === 0) {
+      return;
+    }
+    
+    console.log('🗑️ [线删除埋点] 开始删除选中的线', {
+      selectedLinesCount: selectedLines.length,
+      selectedLineIds: selectedLines
+    });
+    
+    setMapLines(prev => 
+      prev.filter(line => !selectedLines.includes(line.id))
+    );
+    
+    const deletedCount = selectedLines.length;
+    setSelectedLines([]);
+    
+    console.log('✅ [线删除埋点] 线删除完成', {
+      deletedCount,
+      remainingLinesCount: mapLines.length - deletedCount
+    });
+    
+    message.success(`已删除 ${deletedCount} 条线`);
+  };
+
   // 键盘事件处理
   const handleKeyDown = (event: KeyboardEvent) => {
     // 只在地图编辑模式下且选择工具激活时处理键盘事件
-    if (addMapFileDrawerVisible && selectedTool === 'select' && selectedPoints.length > 0) {
+    if (addMapFileDrawerVisible && selectedTool === 'select') {
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
-        handleDeleteSelectedPoints();
+        
+        console.log('⌨️ [键盘删除埋点] 检测到删除键', {
+          key: event.key,
+          selectedPointsCount: selectedPoints.length,
+          selectedLinesCount: selectedLines.length
+        });
+        
+        // 优先删除选中的点，如果没有选中的点则删除选中的线
+        if (selectedPoints.length > 0) {
+          console.log('🗑️ [键盘删除埋点] 删除选中的点');
+          handleDeleteSelectedPoints();
+        } else if (selectedLines.length > 0) {
+          console.log('🗑️ [键盘删除埋点] 删除选中的线');
+          handleDeleteSelectedLines();
+        } else {
+          console.log('ℹ️ [键盘删除埋点] 没有选中的点或线需要删除');
+        }
       }
     }
   };
@@ -2180,7 +2331,7 @@ const MapManagement: React.FC = () => {
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [addMapFileDrawerVisible, selectedTool, selectedPoints]);
+  }, [addMapFileDrawerVisible, selectedTool, selectedPoints, selectedLines]);
   
   // 初始化测试点（仅在地图编辑器打开且没有点时）
   useEffect(() => {
@@ -2280,9 +2431,41 @@ const MapManagement: React.FC = () => {
   };
 
   // 渲染连线的SVG路径
+  // 绘制箭头的辅助函数
+  const renderArrow = (x: number, y: number, angle: number, color: string, key?: string) => {
+    console.log('🏹 renderArrow called:', { x, y, angle, color, key });
+    const arrowSize = 7; // 箭头尺寸（缩小）
+    const offset = 8; // 增加箭头向后偏移距离，让尖端更明显地显示在目标点前方
+    
+    // 计算箭头的实际位置（向后偏移）
+    const arrowX = x - offset * Math.cos(angle);
+    const arrowY = y - offset * Math.sin(angle);
+    
+    // 计算箭头的两个底边点
+    const x1 = arrowX - arrowSize * Math.cos(angle - Math.PI / 6);
+    const y1 = arrowY - arrowSize * Math.sin(angle - Math.PI / 6);
+    const x2 = arrowX - arrowSize * Math.cos(angle + Math.PI / 6);
+    const y2 = arrowY - arrowSize * Math.sin(angle + Math.PI / 6);
+    
+    console.log('🏹 Arrow points:', { originalX: x, originalY: y, arrowX, arrowY, x1, y1, x2, y2 });
+    
+    return (
+      <polygon
+        key={key || `arrow-${x}-${y}-${angle}`}
+        points={`${arrowX},${arrowY} ${x1},${y1} ${x2},${y2}`}
+        fill={color}
+        stroke={color}
+        strokeWidth="1"
+        style={{ pointerEvents: 'none' }}
+      />
+    );
+  };
+
   const renderLine = (line: MapLine) => {
+    console.log('🔗 renderLine called:', line);
     const startPoint = getPointById(line.startPointId);
     const endPoint = getPointById(line.endPointId);
+    console.log('🔗 Points found:', { startPoint, endPoint });
     
     if (!startPoint || !endPoint) {
       console.warn('连线渲染失败：找不到起始点或结束点', { line, startPoint, endPoint });
@@ -2290,12 +2473,13 @@ const MapManagement: React.FC = () => {
     }
 
     const lineColor = line.color || '#87CEEB';
+    const dx = endPoint.x - startPoint.x;
+    const dy = endPoint.y - startPoint.y;
+    const angle = Math.atan2(dy, dx);
     
     switch (line.type) {
       case 'double-line':
-        // 双行直线：两条平行线
-        const dx = endPoint.x - startPoint.x;
-        const dy = endPoint.y - startPoint.y;
+        // 双行直线：两条平行线，双向箭头
         const length = Math.sqrt(dx * dx + dy * dy);
         const unitX = dx / length;
         const unitY = dy / length;
@@ -2305,77 +2489,129 @@ const MapManagement: React.FC = () => {
         const perpX = -unitY * offset;
         const perpY = unitX * offset;
         
+        const isSelected = isLineSelected(line.id);
+        const selectedStroke = isSelected ? '#1890ff' : lineColor;
+        const selectedStrokeWidth = isSelected ? '4' : '2';
+        
         return (
-          <g key={line.id}>
+          <g 
+            key={line.id} 
+            onClick={(e) => handleLineClick(e, line.id)}
+            onDoubleClick={() => handleLineDoubleClick(line)} 
+            style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+          >
             <line
               x1={startPoint.x + perpX}
               y1={startPoint.y + perpY}
               x2={endPoint.x + perpX}
               y2={endPoint.y + perpY}
-              stroke={lineColor}
-              strokeWidth="2"
+              stroke={selectedStroke}
+              strokeWidth={selectedStrokeWidth}
+              style={{ filter: isSelected ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
             />
             <line
               x1={startPoint.x - perpX}
               y1={startPoint.y - perpY}
               x2={endPoint.x - perpX}
               y2={endPoint.y - perpY}
-              stroke={lineColor}
-              strokeWidth="2"
+              stroke={selectedStroke}
+              strokeWidth={selectedStrokeWidth}
+              style={{ filter: isSelected ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
             />
+            {/* 双向箭头 */}
+            {renderArrow(endPoint.x + perpX, endPoint.y + perpY, angle, selectedStroke, `${line.id}-end-arrow`)}
+            {renderArrow(startPoint.x - perpX, startPoint.y - perpY, angle + Math.PI, selectedStroke, `${line.id}-start-arrow`)}
           </g>
         );
         
       case 'single-line':
-        // 单行直线
+        // 单行直线，单向箭头指向终点
+        const isSelectedSingle = isLineSelected(line.id);
+        const selectedStrokeSingle = isSelectedSingle ? '#1890ff' : lineColor;
+        const selectedStrokeWidthSingle = isSelectedSingle ? '4' : '2';
+        
         return (
-          <line
-            key={line.id}
-            x1={startPoint.x}
-            y1={startPoint.y}
-            x2={endPoint.x}
-            y2={endPoint.y}
-            stroke={lineColor}
-            strokeWidth="2"
-          />
+          <g 
+            key={line.id} 
+            onClick={(e) => handleLineClick(e, line.id)}
+            onDoubleClick={() => handleLineDoubleClick(line)} 
+            style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+          >
+            <line
+              x1={startPoint.x}
+              y1={startPoint.y}
+              x2={endPoint.x}
+              y2={endPoint.y}
+              stroke={selectedStrokeSingle}
+              strokeWidth={selectedStrokeWidthSingle}
+              style={{ filter: isSelectedSingle ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
+            />
+            {/* 单向箭头指向终点 */}
+            {renderArrow(endPoint.x, endPoint.y, angle, selectedStrokeSingle, `${line.id}-arrow`)}
+          </g>
         );
         
       case 'double-bezier':
-        // 双向贝塞尔曲线
+        // 双向贝塞尔曲线，双向箭头
         const midX = (startPoint.x + endPoint.x) / 2;
         const midY = (startPoint.y + endPoint.y) / 2;
         const controlOffset = 50;
+        const isSelectedDoubleBezier = isLineSelected(line.id);
+        const selectedStrokeDoubleBezier = isSelectedDoubleBezier ? '#1890ff' : lineColor;
+        const selectedStrokeWidthDoubleBezier = isSelectedDoubleBezier ? '4' : '2';
         
         return (
-          <g key={line.id}>
+          <g 
+            key={line.id} 
+            onClick={(e) => handleLineClick(e, line.id)}
+            onDoubleClick={() => handleLineDoubleClick(line)} 
+            style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+          >
             <path
               d={`M ${startPoint.x} ${startPoint.y} Q ${midX} ${midY - controlOffset} ${endPoint.x} ${endPoint.y}`}
-              stroke={lineColor}
-              strokeWidth="2"
+              stroke={selectedStrokeDoubleBezier}
+              strokeWidth={selectedStrokeWidthDoubleBezier}
               fill="none"
+              style={{ filter: isSelectedDoubleBezier ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
             />
             <path
               d={`M ${startPoint.x} ${startPoint.y} Q ${midX} ${midY + controlOffset} ${endPoint.x} ${endPoint.y}`}
-              stroke={lineColor}
-              strokeWidth="2"
+              stroke={selectedStrokeDoubleBezier}
+              strokeWidth={selectedStrokeWidthDoubleBezier}
               fill="none"
+              style={{ filter: isSelectedDoubleBezier ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
             />
+            {/* 双向箭头 */}
+            {renderArrow(endPoint.x, endPoint.y, angle, selectedStrokeDoubleBezier, `${line.id}-end-arrow`)}
+            {renderArrow(startPoint.x, startPoint.y, angle + Math.PI, selectedStrokeDoubleBezier, `${line.id}-start-arrow`)}
           </g>
         );
         
       case 'single-bezier':
-        // 单向贝塞尔曲线
+        // 单向贝塞尔曲线，单向箭头指向终点
         const controlX = (startPoint.x + endPoint.x) / 2;
         const controlY = (startPoint.y + endPoint.y) / 2 - 30;
+        const isSelectedSingleBezier = isLineSelected(line.id);
+        const selectedStrokeSingleBezier = isSelectedSingleBezier ? '#1890ff' : lineColor;
+        const selectedStrokeWidthSingleBezier = isSelectedSingleBezier ? '4' : '2';
         
         return (
-          <path
-            key={line.id}
-            d={`M ${startPoint.x} ${startPoint.y} Q ${controlX} ${controlY} ${endPoint.x} ${endPoint.y}`}
-            stroke={lineColor}
-            strokeWidth="2"
-            fill="none"
-          />
+          <g 
+            key={line.id} 
+            onClick={(e) => handleLineClick(e, line.id)}
+            onDoubleClick={() => handleLineDoubleClick(line)} 
+            style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+          >
+            <path
+              d={`M ${startPoint.x} ${startPoint.y} Q ${controlX} ${controlY} ${endPoint.x} ${endPoint.y}`}
+              stroke={selectedStrokeSingleBezier}
+              strokeWidth={selectedStrokeWidthSingleBezier}
+              fill="none"
+              style={{ filter: isSelectedSingleBezier ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
+            />
+            {/* 单向箭头指向终点 */}
+            {renderArrow(endPoint.x, endPoint.y, angle, selectedStrokeSingleBezier, `${line.id}-arrow`)}
+          </g>
         );
         
       default:
@@ -2383,9 +2619,158 @@ const MapManagement: React.FC = () => {
     }
   };
   
+  // 线双击事件处理
+  const handleLineDoubleClick = (line: MapLine) => {
+    setEditingLine(line);
+    lineEditForm.setFieldsValue({
+      name: line.name,
+      type: line.type === 'double-line' || line.type === 'single-line' ? 'execution' : 'bezier'
+    });
+    setLineEditModalVisible(true);
+  };
+
+  // 保存线编辑
+  const handleSaveLineEdit = async (values: any) => {
+    if (!editingLine) return;
+    
+    try {
+      // 根据线类型更新线的type字段
+      const newType = values.type === 'execution' ? 
+        (editingLine.type.includes('double') ? 'double-line' : 'single-line') :
+        (editingLine.type.includes('double') ? 'double-bezier' : 'single-bezier');
+      
+      // 更新线数据
+      setMapLines(prev => prev.map(line => 
+        line.id === editingLine.id ? {
+          ...line,
+          name: values.name,
+          type: newType
+        } : line
+      ));
+      
+      message.success('线属性保存成功');
+      setLineEditModalVisible(false);
+      setEditingLine(null);
+      lineEditForm.resetFields();
+    } catch (error) {
+      message.error('保存失败，请重试');
+    }
+  };
+
   // 检查点是否被选中
   const isPointSelected = (pointId: string) => {
     return selectedPoints.includes(pointId);
+  };
+
+  // 判断线是否被选中
+  const isLineSelected = (lineId: string) => {
+    return selectedLines.includes(lineId);
+  };
+
+  // 处理线的点击事件
+  const handleLineClick = (event: React.MouseEvent, lineId: string) => {
+    const clickedLine = mapLines.find(l => l.id === lineId);
+    
+    // 详细的事件调试信息
+    console.log('🎯 [线点击埋点] handleLineClick被调用 - 开始', {
+      lineId,
+      lineData: clickedLine,
+      selectedTool,
+      eventType: event.type,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      currentSelectedLines: selectedLines.length,
+      currentSelectedLineIds: selectedLines,
+      timestamp: new Date().toISOString(),
+      // 事件对象详细信息
+      eventDetails: {
+        bubbles: event.bubbles,
+        cancelable: event.cancelable,
+        defaultPrevented: event.defaultPrevented,
+        isTrusted: event.isTrusted,
+        button: event.button,
+        buttons: event.buttons,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        pageX: event.pageX,
+        pageY: event.pageY
+      },
+      // DOM元素信息
+      targetInfo: {
+        tagName: (event.target as Element).tagName,
+        className: (event.target as Element).className,
+        id: (event.target as Element).id,
+        nodeName: (event.target as Element).nodeName
+      },
+      currentTargetInfo: {
+        tagName: (event.currentTarget as Element).tagName,
+        className: (event.currentTarget as Element).className,
+        id: (event.currentTarget as Element).id,
+        nodeName: (event.currentTarget as Element).nodeName
+      }
+    });
+    
+    // 检查是否找到了对应的线
+    if (!clickedLine) {
+      console.error('❌ [线点击埋点] 未找到对应的线数据', { lineId, availableLines: mapLines.map(l => l.id) });
+      return;
+    }
+    
+    console.log('✅ [线点击埋点] 找到对应线数据，继续处理', { clickedLine });
+    
+    // 添加用户友好的测试提示
+    console.log('🧪 [测试提示] 线点击事件已触发！请检查:', {
+      message: '如果您看到这条消息，说明线的点击事件已经正常工作',
+      selectedTool: selectedTool,
+      suggestion: selectedTool !== 'select' ? '请切换到选择工具(select)来测试线的选中功能' : '现在可以点击线来选中它们'
+    });
+    
+    event.stopPropagation();
+    
+    if (selectedTool === 'select') {
+      console.log('✅ [线点击埋点] 选择工具模式，处理线选择');
+      
+      let newSelectedLines: string[];
+      
+      if (event.ctrlKey || event.metaKey) {
+        console.log('🔄 [线点击埋点] 多选模式（Ctrl/Cmd + 点击）');
+        // Ctrl/Cmd + 点击：多选
+        const wasSelected = selectedLines.includes(lineId);
+        newSelectedLines = wasSelected
+          ? selectedLines.filter(id => id !== lineId)
+          : [...selectedLines, lineId];
+        
+        console.log('📊 [线点击埋点] 多选状态变化', {
+          lineId,
+          wasSelected,
+          action: wasSelected ? '取消选择' : '添加选择',
+          previousCount: selectedLines.length,
+          newCount: newSelectedLines.length,
+          newSelectedLines
+        });
+      } else {
+        console.log('🎯 [线点击埋点] 单选模式（普通点击）');
+        // 普通点击：单选
+        newSelectedLines = [lineId];
+        
+        console.log('📊 [线点击埋点] 单选状态变化', {
+          lineId,
+          previousSelectedLines: selectedLines,
+          newSelectedLines
+        });
+      }
+      
+      console.log('🔄 [线点击埋点] 更新选中线状态');
+      setSelectedLines(newSelectedLines);
+      
+      // 清除点的选中状态（线和点不能同时选中）
+      if (selectedPoints.length > 0) {
+        console.log('🔄 [线点击埋点] 清除点的选中状态');
+        setSelectedPoints([]);
+        setSelectionStart(null);
+        setSelectionEnd(null);
+      }
+    }
   };
   
   // 获取框选区域样式
@@ -2398,17 +2783,73 @@ const MapManagement: React.FC = () => {
       timestamp: new Date().toISOString()
     });
     
-    // 隐藏框选框的条件：没有框选区域坐标 或者 (既不在选择中也没有选中点)
-    if (!selectionStart || !selectionEnd || (!isSelecting && selectedPoints.length === 0)) {
+    // 如果有选中的点但没有框选坐标，动态计算框选区域
+    if ((!selectionStart || !selectionEnd) && selectedPoints.length > 0) {
+      console.log('🔧 [样式埋点] 动态计算选中点的框选区域');
+      
+      const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
+      if (selectedPointsData.length > 0) {
+        // 考虑点的实际大小（半径8px）和选中时的缩放（1.2倍）
+        const pointRadius = 8 * 1.2;
+        const pointMinX = Math.min(...selectedPointsData.map(p => p.x - pointRadius));
+        const pointMaxX = Math.max(...selectedPointsData.map(p => p.x + pointRadius));
+        const pointMinY = Math.min(...selectedPointsData.map(p => p.y - pointRadius));
+        const pointMaxY = Math.max(...selectedPointsData.map(p => p.y + pointRadius));
+        
+        // 添加边距
+        const padding = 15;
+        const dynamicStart = { x: pointMinX - padding, y: pointMinY - padding };
+        const dynamicEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
+        
+        const minX = Math.min(dynamicStart.x, dynamicEnd.x);
+        const minY = Math.min(dynamicStart.y, dynamicEnd.y);
+        const width = Math.abs(dynamicEnd.x - dynamicStart.x);
+        const height = Math.abs(dynamicEnd.y - dynamicStart.y);
+        
+        const style = {
+          position: 'absolute' as const,
+          left: minX,
+          top: minY,
+          width: Math.max(width, 1),
+          height: Math.max(height, 1),
+          border: '2px dashed #1890ff',
+          background: 'rgba(24, 144, 255, 0.1)',
+          pointerEvents: 'none' as const,
+          zIndex: 5,
+          boxSizing: 'border-box' as const
+        };
+        
+        console.log('✨ [样式埋点] 使用动态计算的框选框样式', {
+          selectedPointsCount: selectedPointsData.length,
+          dynamicBounds: { dynamicStart, dynamicEnd },
+          style
+        });
+        
+        return style;
+      }
+    }
+    
+    // 隐藏框选框的条件：没有框选区域坐标且没有选中点，或者既不在选择中也没有选中点
+    if ((!selectionStart || !selectionEnd) && selectedPoints.length === 0) {
       console.log('👻 [样式埋点] 框选框被隐藏', {
-        reason: !selectionStart ? '没有起始坐标' : 
-                !selectionEnd ? '没有结束坐标' : 
-                '既不在选择中也没有选中点',
+        reason: '没有框选坐标且没有选中点',
         hasSelectionStart: !!selectionStart,
         hasSelectionEnd: !!selectionEnd,
         isSelecting,
         selectedPointsLength: selectedPoints.length
       });
+      return { display: 'none' };
+    }
+    
+    // 如果没有坐标但在选择中，也隐藏（避免显示错误的框选框）
+    if ((!selectionStart || !selectionEnd) && isSelecting) {
+      console.log('👻 [样式埋点] 选择中但没有坐标，隐藏框选框');
+      return { display: 'none' };
+    }
+    
+    // 确保selectionStart和selectionEnd不为null
+    if (!selectionStart || !selectionEnd) {
+      console.log('👻 [样式埋点] 框选坐标为null，隐藏框选框');
       return { display: 'none' };
     }
     
@@ -3126,151 +3567,7 @@ const MapManagement: React.FC = () => {
                          </Col>
                        ))}
                     
-                    {/* 绘制的连线 */}
-                    {mapLines.map((line) => {
-                      const startPoint = mapPoints.find(p => p.id === line.startPointId);
-                      const endPoint = mapPoints.find(p => p.id === line.endPointId);
-                      
-                      if (!startPoint || !endPoint) return null;
-                      
-                      return (
-                        <svg
-                          key={line.id}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            pointerEvents: 'none',
-                            zIndex: 5
-                          }}
-                        >
-                          {line.type === 'single-line' && (
-                            <line
-                              x1={startPoint.x}
-                              y1={startPoint.y}
-                              x2={endPoint.x}
-                              y2={endPoint.y}
-                              stroke={line.color || '#1890ff'}
-                              strokeWidth="2"
-                            />
-                          )}
-                          {line.type === 'double-line' && (
-                            <g>
-                              <line
-                                x1={startPoint.x}
-                                y1={startPoint.y - 2}
-                                x2={endPoint.x}
-                                y2={endPoint.y - 2}
-                                stroke={line.color || '#1890ff'}
-                                strokeWidth="2"
-                              />
-                              <line
-                                x1={startPoint.x}
-                                y1={startPoint.y + 2}
-                                x2={endPoint.x}
-                                y2={endPoint.y + 2}
-                                stroke={line.color || '#1890ff'}
-                                strokeWidth="2"
-                              />
-                            </g>
-                          )}
-                          {(line.type === 'single-bezier' || line.type === 'double-bezier') && (
-                            <g>
-                              {/* 简单的贝塞尔曲线实现 */}
-                              <path
-                                d={`M ${startPoint.x} ${startPoint.y} Q ${(startPoint.x + endPoint.x) / 2} ${Math.min(startPoint.y, endPoint.y) - 50} ${endPoint.x} ${endPoint.y}`}
-                                stroke={line.color || '#1890ff'}
-                                strokeWidth="2"
-                                fill="none"
-                              />
-                              {line.type === 'double-bezier' && (
-                                <path
-                                  d={`M ${startPoint.x} ${startPoint.y} Q ${(startPoint.x + endPoint.x) / 2} ${Math.max(startPoint.y, endPoint.y) + 50} ${endPoint.x} ${endPoint.y}`}
-                                  stroke={line.color || '#1890ff'}
-                                  strokeWidth="2"
-                                  fill="none"
-                                />
-                              )}
-                            </g>
-                          )}
-                        </svg>
-                      );
-                    })}
-                    
-                    {/* 绘制的连线 */}
-                    {mapLines.map((line) => {
-                      const startPoint = mapPoints.find(p => p.id === line.startPointId);
-                      const endPoint = mapPoints.find(p => p.id === line.endPointId);
-                      
-                      if (!startPoint || !endPoint) return null;
-                      
-                      return (
-                        <svg
-                          key={line.id}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            pointerEvents: 'none',
-                            zIndex: 5
-                          }}
-                        >
-                          {line.type === 'single-line' && (
-                            <line
-                              x1={startPoint.x}
-                              y1={startPoint.y}
-                              x2={endPoint.x}
-                              y2={endPoint.y}
-                              stroke={line.color || '#1890ff'}
-                              strokeWidth="2"
-                            />
-                          )}
-                          {line.type === 'double-line' && (
-                            <g>
-                              <line
-                                x1={startPoint.x}
-                                y1={startPoint.y - 2}
-                                x2={endPoint.x}
-                                y2={endPoint.y - 2}
-                                stroke={line.color || '#1890ff'}
-                                strokeWidth="2"
-                              />
-                              <line
-                                x1={startPoint.x}
-                                y1={startPoint.y + 2}
-                                x2={endPoint.x}
-                                y2={endPoint.y + 2}
-                                stroke={line.color || '#1890ff'}
-                                strokeWidth="2"
-                              />
-                            </g>
-                          )}
-                          {(line.type === 'single-bezier' || line.type === 'double-bezier') && (
-                            <g>
-                              {/* 简单的贝塞尔曲线实现 */}
-                              <path
-                                d={`M ${startPoint.x} ${startPoint.y} Q ${(startPoint.x + endPoint.x) / 2} ${Math.min(startPoint.y, endPoint.y) - 50} ${endPoint.x} ${endPoint.y}`}
-                                stroke={line.color || '#1890ff'}
-                                strokeWidth="2"
-                                fill="none"
-                              />
-                              {line.type === 'double-bezier' && (
-                                <path
-                                  d={`M ${startPoint.x} ${startPoint.y} Q ${(startPoint.x + endPoint.x) / 2} ${Math.max(startPoint.y, endPoint.y) + 50} ${endPoint.x} ${endPoint.y}`}
-                                  stroke={line.color || '#1890ff'}
-                                  strokeWidth="2"
-                                  fill="none"
-                                />
-                              )}
-                            </g>
-                          )}
-                        </svg>
-                      );
-                    })}
+
                      </Row>
                    ) : (
                      <div style={{
@@ -4735,12 +5032,13 @@ const MapManagement: React.FC = () => {
 
       {/* 新增地图文件侧滑抽屉 */}
       <Drawer
-        title="新增地图文件"
+        title={`新增地图文件${currentMapFileName ? ` - ${currentMapFileName}` : (selectedMap?.name ? ` - ${selectedMap.name}` : '')}`}
         placement="right"
         width="100vw"
         open={addMapFileDrawerVisible}
         onClose={handleCloseAddMapFileDrawer}
         destroyOnClose
+        keyboard={false} // 禁用ESC键关闭抽屉
         styles={{
           body: { padding: 0 },
           header: { borderBottom: '1px solid #f0f0f0' }
@@ -4793,6 +5091,7 @@ const MapManagement: React.FC = () => {
                   <Input 
                     placeholder="请输入地图名称" 
                     size="large"
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentMapFileName(e.target.value)}
                   />
                 </Form.Item>
 
@@ -5083,11 +5382,38 @@ const MapManagement: React.FC = () => {
                         left: 0,
                         width: '100%',
                         height: '100%',
-                        pointerEvents: 'none',
+                        pointerEvents: 'auto', // 允许SVG接收事件
                         zIndex: 5
                       }}
+                      onClick={(e) => {
+                        // 只有点击SVG空白区域时才触发画布点击
+                        if (e.target === e.currentTarget) {
+                          const parentElement = e.currentTarget.parentElement as HTMLDivElement;
+                          const syntheticEvent = {
+                            ...e,
+                            currentTarget: parentElement,
+                            target: parentElement
+                          } as unknown as React.MouseEvent<HTMLDivElement>;
+                          handleCanvasClick(syntheticEvent);
+                        }
+                      }}
+                      onMouseDown={(e) => {
+                        // 只有在SVG空白区域的鼠标按下事件才传递给框选处理
+                        if (e.target === e.currentTarget) {
+                          const parentElement = e.currentTarget.parentElement as HTMLDivElement;
+                          const syntheticEvent = {
+                            ...e,
+                            currentTarget: parentElement,
+                            target: parentElement
+                          } as unknown as React.MouseEvent<HTMLDivElement>;
+                          handleSelectionStart(syntheticEvent);
+                        }
+                      }}
                     >
-                      {mapLines.map(line => renderLine(line))}
+                      {(() => {
+                        console.log('📊 mapLines data:', mapLines);
+                        return mapLines.map(line => renderLine(line));
+                      })()}
                     </svg>
                     
                     {/* 绘制的点 */}
@@ -5182,7 +5508,7 @@ const MapManagement: React.FC = () => {
                   
                   <div style={{ marginBottom: '16px' }}>
                     <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图名称</div>
-                    <div style={{ fontSize: '14px', fontWeight: 500 }}>新建地图文件</div>
+                    <div style={{ fontSize: '14px', fontWeight: 500 }}>{currentMapFileName || '新建地图文件'}</div>
                   </div>
                   
                   <div style={{ marginBottom: '16px' }}>
@@ -5338,6 +5664,120 @@ const MapManagement: React.FC = () => {
           }}>
             <div><strong>坐标位置:</strong> ({editingPoint?.x}, {editingPoint?.y})</div>
             <div style={{ marginTop: '4px' }}><strong>创建时间:</strong> {new Date().toLocaleString()}</div>
+          </div>
+        </Form>
+      </Modal>
+      
+      {/* 线属性编辑弹窗 */}
+      <Modal
+        title="线属性"
+        open={lineEditModalVisible}
+        onCancel={() => {
+          setLineEditModalVisible(false);
+          setEditingLine(null);
+          lineEditForm.resetFields();
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setLineEditModalVisible(false);
+            setEditingLine(null);
+            lineEditForm.resetFields();
+          }}>
+            取消
+          </Button>,
+          <Button key="submit" type="primary" onClick={() => lineEditForm.submit()}>
+            保存
+          </Button>
+        ]}
+        width={600}
+      >
+        <Form
+          form={lineEditForm}
+          layout="vertical"
+          onFinish={handleSaveLineEdit}
+        >
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="线ID"
+                style={{ marginBottom: 16 }}
+              >
+                <Input value={editingLine?.id} disabled style={{ color: '#666' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="name"
+                label="线名称"
+                rules={[
+                  { required: true, message: '请输入线名称' },
+                  { max: 20, message: '线名称不能超过20个字符' },
+                  {
+                     validator: async (_: any, value: string) => {
+                       if (value && editingLine) {
+                         const existingLine = mapLines.find(line => 
+                           line.name === value && line.id !== editingLine.id
+                         );
+                         if (existingLine) {
+                           throw new Error('线名称不能重复');
+                         }
+                       }
+                     }
+                   }
+                ]}
+                style={{ marginBottom: 16 }}
+              >
+                <Input placeholder="请输入线名称" />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="type"
+                label="线类型"
+                rules={[{ required: true, message: '请选择线类型' }]}
+                style={{ marginBottom: 16 }}
+              >
+                <Radio.Group>
+                  <Radio value="execution">执行</Radio>
+                  <Radio value="bezier">贝塞尔曲线</Radio>
+                </Radio.Group>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="线长度"
+                style={{ marginBottom: 16 }}
+              >
+                <Input value={`${editingLine?.length || 0} 像素`} disabled style={{ color: '#666' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <div style={{ 
+            background: '#f5f5f5', 
+            padding: '12px', 
+            borderRadius: '6px',
+            fontSize: '12px',
+            color: '#666'
+          }}>
+            <Row gutter={16}>
+              <Col span={12}>
+                <div><strong>起始点:</strong> {getPointById(editingLine?.startPointId || '')?.name || '未知'}</div>
+                <div style={{ marginTop: '4px' }}><strong>起始坐标:</strong> 
+                  ({getPointById(editingLine?.startPointId || '')?.x}, {getPointById(editingLine?.startPointId || '')?.y})
+                </div>
+              </Col>
+              <Col span={12}>
+                <div><strong>结束点:</strong> {getPointById(editingLine?.endPointId || '')?.name || '未知'}</div>
+                <div style={{ marginTop: '4px' }}><strong>结束坐标:</strong> 
+                  ({getPointById(editingLine?.endPointId || '')?.x}, {getPointById(editingLine?.endPointId || '')?.y})
+                </div>
+              </Col>
+            </Row>
+            <div style={{ marginTop: '8px' }}><strong>创建时间:</strong> {new Date().toLocaleString()}</div>
           </div>
         </Form>
       </Modal>
