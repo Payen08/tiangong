@@ -33,7 +33,7 @@ const Login: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center p-4">
-      <Card className="w-full max-w-md" style={{ boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}>
+      <Card className="w-full max-w-md" style={{ boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}>
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-800 mb-2">天工中控调度系统</h1>
         </div>
@@ -76,6 +76,9 @@ const Login: React.FC = () => {
               htmlType="submit"
               loading={loading}
               className="w-full h-12 text-lg"
+              style={{
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+              }}
             >
               {loading ? '登录中...' : '登录'}
             </Button>

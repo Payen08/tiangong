@@ -29,7 +29,10 @@ import {
   Progress,
   Alert,
   List,
+  Select,
 } from 'antd';
+import type { RadioChangeEvent } from 'antd';
+import type { ChangeEvent } from 'react';
 import {
   EditOutlined,
   DeleteOutlined,
@@ -57,6 +60,18 @@ import {
   CloseCircleOutlined,
   LoadingOutlined,
   ReloadOutlined,
+  DragOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
+  UndoOutlined,
+  RedoOutlined,
+  RotateLeftOutlined,
+  HomeOutlined,
+  SaveOutlined,
+  CheckOutlined,
+  SearchOutlined,
+  SendOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -222,12 +237,27 @@ const MapManagement: React.FC = () => {
   const [continuousConnecting, setContinuousConnecting] = useState(false); // 连续连线模式
   const [lastConnectedPoint, setLastConnectedPoint] = useState<string | null>(null); // 上一个连接的点ID
   
+  // 画布拖动和缩放相关状态
+  const [canvasScale, setCanvasScale] = useState(1); // 画布缩放比例
+  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 }); // 画布偏移量
+  const [isDragging, setIsDragging] = useState(false); // 是否正在拖动画布
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 }); // 拖动起始位置
+  const [dragTool, setDragTool] = useState(false); // 是否激活拖动工具
+  const [isSpacePressed, setIsSpacePressed] = useState(false); // 是否按住空格键
+  const [isCanvasClicked, setIsCanvasClicked] = useState(false); // 画布是否被点击过
+  
   // 响应式状态管理
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1600);
   const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < 992);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  
+
+  
+  // 搜索功能状态
+  const [searchValue, setSearchValue] = useState('');
+  const [searchType, setSearchType] = useState<'line' | 'point'>('line');
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -1444,6 +1474,205 @@ const MapManagement: React.FC = () => {
     pointEditForm.resetFields();
   };
   
+  // 新的顶部工具栏处理函数
+  const handleCancel = () => {
+    Modal.confirm({
+      title: '确认取消',
+      content: '取消后将丢失所有未保存的修改，确定要取消吗？',
+      onOk: () => {
+        handleCloseAddMapFileDrawer();
+        message.info('已取消编辑');
+      }
+    });
+  };
+  
+  const handleSave = () => {
+    // 保存当前地图编辑状态
+    message.success('地图已保存');
+    console.log('保存地图数据:', { mapPoints, mapLines });
+  };
+  
+  const handleSubmit = () => {
+    // 提交地图数据
+    message.success('地图已提交');
+    console.log('提交地图数据:', { mapPoints, mapLines });
+  };
+  
+  const handleSubmitAndExit = () => {
+    // 提交并退出
+    message.success('地图已提交，正在退出编辑器');
+    console.log('提交并退出:', { mapPoints, mapLines });
+    setTimeout(() => {
+      handleCloseAddMapFileDrawer();
+    }, 1000);
+  };
+  
+
+  
+  // 搜索处理函数
+  const handleSearch = (value: string) => {
+    setSearchValue(value);
+    console.log(`搜索${searchType === 'line' ? '线' : '点'}:`, value);
+    // 这里可以添加实际的搜索逻辑
+  };
+  
+  // 画布拖动和缩放处理函数
+  const handleCanvasDrag = (event: React.MouseEvent<HTMLDivElement>) => {
+    // 支持拖动工具或空格键拖动
+    if (!dragTool && !isSpacePressed && !isDragging) return;
+    
+    // 设置画布被点击状态，用于启用双指缩放功能
+    setIsCanvasClicked(true);
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    if (!isDragging) {
+      // 开始拖动
+      setIsDragging(true);
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startOffset = { ...canvasOffset };
+      
+      const handleMouseMove = (e: MouseEvent) => {
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+        
+        // 设置拖动灵敏度为1:1
+        const sensitivity = 1.0;
+        
+        setCanvasOffset({
+          x: startOffset.x + deltaX * sensitivity,
+          y: startOffset.y + deltaY * sensitivity
+        });
+      };
+      
+      const handleMouseUp = () => {
+        setIsDragging(false);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+      
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+  };
+  
+  const handleCanvasZoom = (delta: number) => {
+    const newScale = Math.max(0.1, Math.min(3, canvasScale + delta));
+    setCanvasScale(newScale);
+  };
+  
+  const handleZoomIn = () => {
+    handleCanvasZoom(0.1);
+  };
+  
+  const handleZoomOut = () => {
+    handleCanvasZoom(-0.1);
+  };
+  
+  const handleResetCanvas = () => {
+    setCanvasScale(1);
+    setCanvasOffset({ x: 0, y: 0 });
+  };
+  
+  // 触摸事件处理 - 双指缩放
+  const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
+  
+  const getTouchDistance = (touches: React.TouchList) => {
+    if (touches.length < 2) return null;
+    const touch1 = touches[0];
+    const touch2 = touches[1];
+    return Math.sqrt(
+      Math.pow(touch2.clientX - touch1.clientX, 2) + 
+      Math.pow(touch2.clientY - touch1.clientY, 2)
+    );
+  };
+  
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    // 基础触摸事件调试 - 无条件触发
+    console.log('🔥 [触摸事件] TouchStart被触发!', {
+      touchCount: event.touches.length,
+      timestamp: new Date().toLocaleTimeString()
+    });
+    
+    console.log('🔍 [触摸调试] TouchStart事件触发', {
+      touchCount: event.touches.length,
+      isCanvasClicked,
+      isSpacePressed,
+      canAllowZoom: event.touches.length === 2 && isCanvasClicked && isSpacePressed
+    });
+    
+    // 只有在画布被点击过且空格键按下时才允许双指缩放
+    if (event.touches.length === 2 && isCanvasClicked && isSpacePressed) {
+      event.preventDefault();
+      const distance = getTouchDistance(event.touches);
+      setLastTouchDistance(distance);
+      console.log('👆 [双指缩放] 开始双指操作，初始距离:', distance);
+    }
+  };
+  
+  const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    // 基础触摸事件调试 - 无条件触发
+    console.log('🔥 [触摸事件] TouchMove被触发!', {
+      touchCount: event.touches.length,
+      timestamp: new Date().toLocaleTimeString()
+    });
+    
+    // 只有在画布被点击过且空格键按下时才允许双指缩放
+    if (event.touches.length === 2 && lastTouchDistance !== null && isCanvasClicked && isSpacePressed) {
+      event.preventDefault();
+      const currentDistance = getTouchDistance(event.touches);
+      if (currentDistance !== null) {
+        const scale = currentDistance / lastTouchDistance;
+        const newScale = Math.max(0.1, Math.min(3, canvasScale * scale));
+        setCanvasScale(newScale);
+        setLastTouchDistance(currentDistance);
+        console.log('🔍 [双指缩放] 缩放中，当前比例:', newScale);
+      }
+    }
+  };
+  
+  const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    // 基础触摸事件调试 - 无条件触发
+    console.log('🔥 [触摸事件] TouchEnd被触发!', {
+      touchCount: event.touches.length,
+      timestamp: new Date().toLocaleTimeString()
+    });
+    
+    if (event.touches.length < 2) {
+      setLastTouchDistance(null);
+      console.log('✋ [双指缩放] 结束双指操作');
+    }
+  };
+
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    // 鼠标滚轮缩放 - 作为触摸缩放的替代方案
+    console.log('🖱️ [滚轮缩放] 滚轮事件触发', {
+      deltaY: event.deltaY,
+      isCanvasClicked,
+      isSpacePressed,
+      canAllowZoom: isCanvasClicked && isSpacePressed
+    });
+    
+    // 只有在画布被点击过且空格键按下时才允许滚轮缩放
+    if (isCanvasClicked && isSpacePressed) {
+      event.preventDefault();
+      const scaleFactor = event.deltaY > 0 ? 0.9 : 1.1;
+      const newScale = Math.max(0.1, Math.min(3, canvasScale * scaleFactor));
+      setCanvasScale(newScale);
+      console.log('🔍 [滚轮缩放] 缩放比例:', newScale);
+    }
+  };
+  
+  const toggleDragTool = () => {
+    setDragTool(!dragTool);
+    if (!dragTool) {
+      // 激活拖动工具时，切换到拖动模式
+      setSelectedTool('');
+    }
+  };
+
   // 工具选择处理
   const handleToolSelect = (toolType: string) => {
     console.log('🔧 [工具埋点] 工具选择', {
@@ -1469,6 +1698,11 @@ const MapManagement: React.FC = () => {
     });
     
     setSelectedTool(toolType);
+    
+    // 切换工具时关闭拖动模式
+    if (dragTool) {
+      setDragTool(false);
+    }
     
     // 切换工具时清除选择状态
     if (toolType !== 'select') {
@@ -1522,6 +1756,9 @@ const MapManagement: React.FC = () => {
   
   // 画布点击处理
   const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    // 设置画布被点击状态，用于启用双指缩放功能
+    setIsCanvasClicked(true);
+    console.log('🔍 [状态调试] 画布被点击，isCanvasClicked设置为true');
     console.log('🖱️ [画布埋点] ========== handleCanvasClick被调用 ==========');
     console.log('🖱️ [画布埋点] 事件详情', {
       selectedTool,
@@ -2352,6 +2589,15 @@ const MapManagement: React.FC = () => {
 
   // 键盘事件处理
   const handleKeyDown = (event: KeyboardEvent) => {
+    // 处理空格键拖动 - 移除addMapFileDrawerVisible限制，允许在任何时候使用空格键
+    if (event.code === 'Space' && !isSpacePressed) {
+      event.preventDefault();
+      setIsSpacePressed(true);
+      console.log('🔍 [状态调试] 空格键按下，isSpacePressed设置为true');
+      console.log('🚀 [空格键拖动] 空格键按下，启用拖动模式');
+      return;
+    }
+    
     // 只在地图编辑模式下且选择工具激活时处理键盘事件
     if (addMapFileDrawerVisible && selectedTool === 'select') {
       if (event.key === 'Delete' || event.key === 'Backspace') {
@@ -2376,14 +2622,27 @@ const MapManagement: React.FC = () => {
       }
     }
   };
+  
+  // 处理键盘释放事件
+  const handleKeyUp = (event: KeyboardEvent) => {
+    if (event.code === 'Space' && isSpacePressed) {
+      event.preventDefault();
+      setIsSpacePressed(false);
+      setIsCanvasClicked(false); // 重置画布点击状态，需要重新点击画布才能使用双指缩放
+      console.log('🔍 [状态调试] 空格键释放，isSpacePressed和isCanvasClicked都设置为false');
+      console.log('🛑 [空格键拖动] 空格键释放，禁用拖动模式和双指缩放');
+    }
+  };
 
   // 添加键盘事件监听器
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keyup', handleKeyUp);
     };
-  }, [addMapFileDrawerVisible, selectedTool, selectedPoints, selectedLines]);
+  }, [addMapFileDrawerVisible, selectedTool, selectedPoints, selectedLines, isSpacePressed]);
   
   // 初始化测试点（仅在地图编辑器打开且没有点时）
   useEffect(() => {
@@ -4018,15 +4277,13 @@ const MapManagement: React.FC = () => {
                    仅显示在线且已启用的机器人设备
                  </div>
                </div>
-               <div style={{ width: '300px' }}>
-                 <Input.Search
-                    placeholder="搜索机器人设备名称..."
-                    value={robotSearchText}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRobotSearchText(e.target.value)}
-                    allowClear
-                    style={{ width: '100%' }}
-                  />
-               </div>
+               <Input.Search
+                  placeholder="搜索机器人设备名称..."
+                  value={robotSearchText}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRobotSearchText(e.target.value)}
+                  allowClear
+                  style={{ width: '300px', height: '44px' }}
+                />
              </div>
            </div>
            
@@ -4050,7 +4307,7 @@ const MapManagement: React.FC = () => {
                  display: 'flex',
                  alignItems: 'center',
                  justifyContent: 'center',
-                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                  transition: 'all 0.2s ease',
                  opacity: isSliding ? 0.6 : 1
                }}
@@ -4076,7 +4333,7 @@ const MapManagement: React.FC = () => {
                  display: 'flex',
                  alignItems: 'center',
                  justifyContent: 'center',
-                 boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                  transition: 'all 0.2s ease',
                  opacity: isSliding ? 0.6 : 1
                }}
@@ -4532,7 +4789,10 @@ const MapManagement: React.FC = () => {
                  localImportForm.resetFields();
                  setLocalImportFile(null);
                }} 
-               style={{ marginRight: 8 }}
+               style={{ 
+                 marginRight: 8,
+                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+               }}
              >
                取消
              </Button>
@@ -4540,6 +4800,9 @@ const MapManagement: React.FC = () => {
                onClick={() => localImportForm.submit()} 
                type="primary" 
                loading={loading}
+               style={{
+                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+               }}
              >
                确认导入
              </Button>
@@ -4739,7 +5002,7 @@ const MapManagement: React.FC = () => {
                    display: 'flex',
                    alignItems: 'center',
                    justifyContent: 'center',
-                   boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                    transition: 'all 0.2s ease',
                    opacity: isSliding ? 0.6 : 1
                  }}
@@ -4765,7 +5028,7 @@ const MapManagement: React.FC = () => {
                    display: 'flex',
                    alignItems: 'center',
                    justifyContent: 'center',
-                   boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                    transition: 'all 0.2s ease',
                    opacity: isSliding ? 0.6 : 1
                  }}
@@ -5247,7 +5510,7 @@ const MapManagement: React.FC = () => {
                             maxWidth: '100%', 
                             maxHeight: '300px',
                             borderRadius: '8px',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
                           }} 
                         />
                         <div style={{ marginTop: '12px', color: '#666' }}>
@@ -5278,17 +5541,24 @@ const MapManagement: React.FC = () => {
             {addMapFileStep === 2 && (
               <div style={{ 
                 display: 'flex',
-                height: 'calc(100vh - 120px)',
-                background: '#f8f9fa'
+                height: '100vh',
+                background: '#f8f9fa',
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                zIndex: 1000
               }}>
-                {/* 左侧工具栏 */}
+                {/* 左侧工具栏 - 紧挨边缘 */}
                 <div style={{
-                  width: '200px',
+                  width: '180px',
                   background: '#fff',
                   borderRight: '1px solid #e8e8e8',
-                  padding: '16px',
+                  padding: '12px',
                   display: 'flex',
-                  flexDirection: 'column'
+                  flexDirection: 'column',
+                  boxShadow: '2px 0 8px rgba(0,0,0,0.1)'
                 }}>
                   <Title level={5} style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600 }}>绘图工具</Title>
                   
@@ -5443,30 +5713,88 @@ const MapManagement: React.FC = () => {
                   </div>
                 </div>
                 
-                {/* 中间画布区域 */}
+                {/* 中间画布区域 - 最大化绘图区域 */}
                 <div style={{
                   flex: 1,
                   display: 'flex',
                   flexDirection: 'column',
-                  background: '#fff',
-                  margin: '0 1px'
+                  background: '#fff'
                 }}>
-                  {/* 画布工具栏 */}
+                  {/* 悬浮工具栏 - 重新布局 */}
+                  {/* 左侧：搜索功能（放在绘图工具右边） */}
                   <div style={{
-                    height: '48px',
-                    borderBottom: '1px solid #e8e8e8',
+                    position: 'absolute',
+                    left: '200px', // 绘图工具宽度180px + 20px间距
+                    top: '16px',
+                    transform: 'translateY(0)',
                     display: 'flex',
                     alignItems: 'center',
-                    padding: '0 16px',
-                    background: '#fafafa'
+                    gap: '8px',
+                    zIndex: 1000
                   }}>
-                    <Space>
-                      <Button size="small" icon={<ReloadOutlined />}>重置视图</Button>
-                      <Button size="small">放大</Button>
-                      <Button size="small">缩小</Button>
-                      <Divider type="vertical" />
-                      <span style={{ fontSize: '12px', color: '#666' }}>缩放: 100%</span>
-                    </Space>
+                    <Radio.Group 
+                       value={searchType} 
+                       onChange={(e: RadioChangeEvent) => setSearchType(e.target.value)}
+                       style={{ height: 36 }}
+                     >
+                      <Radio.Button value="line">线名称</Radio.Button>
+                      <Radio.Button value="point">点名称</Radio.Button>
+                    </Radio.Group>
+                    <Input.Search
+                      placeholder={`搜索${searchType === 'line' ? '线名称' : '点名称'}...`}
+                      value={searchValue}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchValue(e.target.value)}
+                      onSearch={handleSearch}
+                      style={{ width: 250, height: 36 }}
+                    />
+                  </div>
+
+                  {/* 右侧：操作按钮和显示地图信息（上下排列，放在地图基本信息左边） */}
+                  <div style={{
+                    position: 'absolute',
+                    right: '280px', // 地图基本信息面板宽度260px + 20px间距
+                    top: '16px',
+                    transform: 'translateY(0)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '8px',
+                    alignItems: 'flex-end',
+                    zIndex: 1000
+                  }}>
+                    {/* 操作按钮 */}
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <Button 
+                        onClick={handleCancel}
+                        style={{ borderColor: '#d9d9d9', color: '#8c8c8c', background: '#f5f5f5', minWidth: '80px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                      >
+                        取消
+                      </Button>
+                      <Button 
+                        type="primary" 
+                        onClick={handleSave}
+                        style={{ background: '#52c41a', borderColor: '#52c41a', minWidth: '80px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                      >
+                        保存
+                      </Button>
+                      <Button 
+                        type="primary" 
+                        onClick={handleSubmit}
+                        style={{ minWidth: '80px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                      >
+                        提交
+                      </Button>
+                      <Button 
+                        type="primary" 
+                        onClick={handleSubmitAndExit}
+                        style={{ background: '#1890ff', borderColor: '#1890ff', minWidth: '100px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                      >
+                        提交并退出
+                      </Button>
+                    </div>
                   </div>
                   
                   {/* 画布主体 */}
@@ -5477,13 +5805,17 @@ const MapManagement: React.FC = () => {
                       position: 'relative',
                       overflow: 'hidden',
                       background: '#fff',
-                      cursor: getCanvasCursor(),
+                      cursor: (dragTool || isSpacePressed) ? 'grab' : (isDragging ? 'grabbing' : getCanvasCursor()),
                       userSelect: 'none'  // 防止文本选择
                     }}
-                    onClick={handleCanvasClick}
-                    onMouseDown={handleSelectionStart}
+                    onClick={(dragTool || isSpacePressed) ? undefined : handleCanvasClick}
+                    onMouseDown={(dragTool || isSpacePressed) ? handleCanvasDrag : handleSelectionStart}
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
+                    onWheel={handleWheel}
                   >
-                    {/* 网格背景 */}
+                    {/* 固定网格背景 - 铺满整个画布，不随拖动消失 */}
                     <div style={{
                       position: 'absolute',
                       top: 0,
@@ -5495,8 +5827,21 @@ const MapManagement: React.FC = () => {
                         linear-gradient(to bottom, #e8e8e8 1px, transparent 1px)
                       `,
                       backgroundSize: '20px 20px',
-                      opacity: 0.5
+                      opacity: 0.5,
+                      pointerEvents: 'none'  // 确保网格不会阻挡鼠标事件
                     }}></div>
+                    
+                    {/* 画布变换容器 */}
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      transform: `scale(${canvasScale}) translate(${canvasOffset.x}px, ${canvasOffset.y}px)`,
+                      transformOrigin: 'center center',
+                      transition: isDragging ? 'none' : 'transform 0.2s ease'
+                    }}>
                     
                     {/* 框选区域 */}
                     <div style={getSelectionBoxStyle()}></div>
@@ -5557,7 +5902,7 @@ const MapManagement: React.FC = () => {
                           borderRadius: '50%',
                           background: getPointColor(point.type),
                           border: isPointSelected(point.id) ? '3px solid #1890ff' : `2px solid ${getDarkerColor(getPointColor(point.type))}`,
-                          boxShadow: isPointSelected(point.id) ? '0 0 8px rgba(24, 144, 255, 0.6)' : '0 2px 4px rgba(0,0,0,0.2)',
+                          boxShadow: isPointSelected(point.id) ? '0 0 8px rgba(24, 144, 255, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.15)',
                           cursor: getPointCursor(point.id),
                           zIndex: 10,
                           transform: isPointSelected(point.id) ? 'scale(1.2)' : 'scale(1)',
@@ -5619,17 +5964,168 @@ const MapManagement: React.FC = () => {
                         <div style={{ fontSize: '12px' }}>选择左侧工具开始绘制地图</div>
                       </div>
                     )}
+                    </div>
                   </div>
                 </div>
                 
-                {/* 右侧信息面板 */}
+                {/* 悬浮操作工具栏 */}
                 <div style={{
-                  width: '280px',
+                  position: 'absolute',
+                  right: '280px', // 距离右侧信息面板20px
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: '#fff',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  border: '1px solid #e8e8e8',
+                  padding: '8px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  zIndex: 100
+                }}>
+                  {/* 拖动画布工具 */}
+                  <Button
+                    type={dragTool ? "primary" : "text"}
+                    icon={<DragOutlined />}
+                    size="small"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: 'none',
+                      background: dragTool ? '#1890ff' : 'transparent',
+                      color: dragTool ? '#fff' : 'inherit'
+                    }}
+                    title="拖动画布"
+                    onClick={toggleDragTool}
+                  />
+                  
+                  {/* 放大画布工具 */}
+                  <Button
+                    type="text"
+                    icon={<ZoomInOutlined />}
+                    size="small"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: 'none'
+                    }}
+                    title="放大画布"
+                    onClick={handleZoomIn}
+                  />
+                  
+                  {/* 缩小画布工具 */}
+                  <Button
+                    type="text"
+                    icon={<ZoomOutOutlined />}
+                    size="small"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: 'none'
+                    }}
+                    title="缩小画布"
+                    onClick={handleZoomOut}
+                  />
+                  
+                  {/* 分隔线 */}
+                  <div style={{
+                    height: '1px',
+                    background: '#e8e8e8',
+                    margin: '4px 0'
+                  }} />
+                  
+                  {/* 撤销工具 */}
+                  <Button
+                    type="text"
+                    icon={<UndoOutlined />}
+                    size="small"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: 'none'
+                    }}
+                    title="撤销"
+                  />
+                  
+                  {/* 重做工具 */}
+                  <Button
+                    type="text"
+                    icon={<RedoOutlined />}
+                    size="small"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: 'none'
+                    }}
+                    title="重做"
+                  />
+                  
+                  {/* 分隔线 */}
+                  <div style={{
+                    height: '1px',
+                    background: '#e8e8e8',
+                    margin: '4px 0'
+                  }} />
+                  
+                  {/* 旋转画布工具 */}
+                  <Button
+                    type="text"
+                    icon={<RotateLeftOutlined />}
+                    size="small"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: 'none'
+                    }}
+                    title="旋转画布"
+                  />
+                  
+                  {/* 回到初始画布工具 */}
+                  <Button
+                    type="text"
+                    icon={<HomeOutlined />}
+                    size="small"
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: 'none'
+                    }}
+                    title="回到初始画布"
+                    onClick={handleResetCanvas}
+                  />
+                </div>
+                
+                {/* 右侧信息面板 - 紧挨边缘 */}
+                <div style={{
+                  width: '260px',
                   background: '#fff',
                   borderLeft: '1px solid #e8e8e8',
-                  padding: '16px',
+                  padding: '12px',
                   display: 'flex',
-                  flexDirection: 'column'
+                  flexDirection: 'column',
+                  boxShadow: '-2px 0 8px rgba(0,0,0,0.1)'
                 }}>
                   <Title level={5} style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600 }}>地图基本信息</Title>
                   

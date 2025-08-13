@@ -419,6 +419,7 @@ const UserManagement: React.FC = () => {
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
               allowClear
               size={isMobile ? 'large' : 'middle'}
+
             />
           </Col>
           <Col 

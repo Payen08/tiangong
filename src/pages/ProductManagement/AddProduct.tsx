@@ -650,21 +650,44 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
       }}>
         {currentStep === 0 && (
           <>
-            <Button onClick={handleBack}>
+            <Button 
+              onClick={handleBack}
+              style={{
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+              }}
+            >
               取消
             </Button>
-            <Button type="primary" onClick={handleNext}>
+            <Button 
+              type="primary" 
+              onClick={handleNext}
+              style={{
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+              }}
+            >
               下一步
             </Button>
           </>
         )}
         {currentStep > 0 && (
-          <Button onClick={handlePrev}>
+          <Button 
+            onClick={handlePrev}
+            style={{
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+            }}
+          >
             上一步
           </Button>
         )}
         {currentStep === 1 && (
-          <Button type="primary" onClick={handleFinish} loading={loading}>
+          <Button 
+            type="primary" 
+            onClick={handleFinish} 
+            loading={loading}
+            style={{
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+            }}
+          >
             完成创建
           </Button>
         )}

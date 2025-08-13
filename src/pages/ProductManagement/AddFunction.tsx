@@ -2639,26 +2639,56 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           justifyContent: 'center',
         }}>
           <Space>
-            <Button onClick={handleClose}>
+            <Button 
+              onClick={handleClose}
+              style={{
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+              }}
+            >
               取消
             </Button>
             {currentStep > 0 && (
-              <Button onClick={handlePrev}>
+              <Button 
+                onClick={handlePrev}
+                style={{
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                }}
+              >
                 上一步
               </Button>
             )}
             {currentStep === 0 && currentFunctionType === '属性（静态）' && (
-              <Button type="primary" onClick={handleNext} loading={loading}>
+              <Button 
+                type="primary" 
+                onClick={handleNext} 
+                loading={loading}
+                style={{
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                }}
+              >
                 保存
               </Button>
             )}
             {currentStep === 0 && currentFunctionType !== '属性（静态）' && (
-              <Button type="primary" onClick={handleNext}>
+              <Button 
+                type="primary" 
+                onClick={handleNext}
+                style={{
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                }}
+              >
                 下一步
               </Button>
             )}
             {currentStep === 1 && (
-              <Button type="primary" onClick={handleSave} loading={loading}>
+              <Button 
+                type="primary" 
+                onClick={handleSave} 
+                loading={loading}
+                style={{
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+                }}
+              >
                 保存
               </Button>
             )}

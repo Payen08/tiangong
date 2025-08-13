@@ -1153,6 +1153,7 @@ const ProductManagement: React.FC = () => {
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
               allowClear
               size={isMobile ? 'large' : 'middle'}
+
             />
           </Col>
           <Col xs={12} sm={12} md={5} lg={4} xl={isLargeScreen ? 4 : 4} xxl={4}>
