@@ -246,15 +246,16 @@ const MapManagement: React.FC = () => {
   const [isSpacePressed, setIsSpacePressed] = useState(false); // 是否按住空格键
   const [isCanvasClicked, setIsCanvasClicked] = useState(false); // 画布是否被点击过
   
+  // 画布引用
+  const canvasRef = React.useRef<HTMLDivElement>(null);
+  
   // 响应式状态管理
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isLargeScreen, setIsLargeScreen] = useState(window.innerWidth >= 1600);
   const [isSmallScreen, setIsSmallScreen] = useState(window.innerWidth < 992);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  
 
-  
   // 搜索功能状态
   const [searchValue, setSearchValue] = useState('');
   const [searchType, setSearchType] = useState<'line' | 'point'>('line');
@@ -276,6 +277,35 @@ const MapManagement: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // 退出连线模式函数
+  const exitConnectingMode = () => {
+    setIsConnecting(false);
+    setContinuousConnecting(false);
+    setConnectingStartPoint(null);
+    setLastConnectedPoint(null);
+  };
+
+  // 框选状态引用
+  const wasJustSelecting = React.useRef(false);
+
+  // 屏幕坐标转画布坐标函数
+  const screenToCanvasCoordinates = (screenX: number, screenY: number, canvasElement: HTMLDivElement) => {
+    const rect = canvasElement.getBoundingClientRect();
+    const relativeX = screenX - rect.left;
+    const relativeY = screenY - rect.top;
+    
+    // 考虑画布变换：scale(canvasScale) translate(canvasOffset.x, canvasOffset.y)
+    const canvasX = (relativeX / canvasScale) - canvasOffset.x;
+    const canvasY = (relativeY / canvasScale) - canvasOffset.y;
+    
+    return { x: canvasX, y: canvasY };
+  };
+
+  // 根据ID获取点数据
+  const getPointById = (pointId: string) => {
+    return mapPoints.find(point => point.id === pointId);
+  };
+
   // 监听ESC键处理逻辑
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -288,7 +318,6 @@ const MapManagement: React.FC = () => {
         if (addMapFileDrawerVisible) {
           // 如果正在连线模式，退出连线模式
           if (isConnecting || continuousConnecting) {
-            console.log('⌨️ [连线埋点] 检测到ESC键，退出连线模式');
             exitConnectingMode();
           }
           // 切换到选择工具
@@ -1506,9 +1535,7 @@ const MapManagement: React.FC = () => {
       handleCloseAddMapFileDrawer();
     }, 1000);
   };
-  
 
-  
   // 搜索处理函数
   const handleSearch = (value: string) => {
     setSearchValue(value);
@@ -1674,30 +1701,8 @@ const MapManagement: React.FC = () => {
   };
 
   // 工具选择处理
-  const handleToolSelect = (toolType: string) => {
-    console.log('🔧 [工具埋点] 工具选择', {
-      previousTool: selectedTool,
-      newTool: toolType,
-      currentSelectedPoints: selectedPoints.length,
-      currentIsSelecting: isSelecting,
-      currentConnectingState: {
-        isConnecting,
-        connectingStartPoint,
-        continuousConnecting,
-        lastConnectedPoint
-      },
-      timestamp: new Date().toISOString()
-    });
-    
-    // 检查是否是连线工具
-    const isLineToolSelected = ['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(toolType);
-    console.log('🔗 [工具埋点] 连线工具检查', {
-      toolType,
-      isLineToolSelected,
-      supportedLineTools: ['double-line', 'single-line', 'double-bezier', 'single-bezier']
-    });
-    
-    setSelectedTool(toolType);
+  const handleToolSelect = (toolType: string) => {    // 检查是否是连线工具
+    const isLineToolSelected = ['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(toolType);    setSelectedTool(toolType);
     
     // 切换工具时关闭拖动模式
     if (dragTool) {
@@ -1705,52 +1710,19 @@ const MapManagement: React.FC = () => {
     }
     
     // 切换工具时清除选择状态
-    if (toolType !== 'select') {
-      console.log('🧹 [工具埋点] 非选择工具，清除选择状态', {
-        clearedSelectedPoints: selectedPoints.length,
-        clearedSelectedLines: selectedLines.length,
-        clearedIsSelecting: isSelecting,
-        clearedSelectionStart: !!selectionStart,
-        clearedSelectionEnd: !!selectionEnd
-      });
-      
-      setSelectedPoints([]);
+    if (toolType !== 'select') {      setSelectedPoints([]);
       setSelectedLines([]);  // 添加清除线的选中状态
       setIsSelecting(false);
       setSelectionStart(null);
-      setSelectionEnd(null);
-      
-      console.log('✅ [工具埋点] 已清除所有选择状态（包括点和线）');
-    } else {
-      console.log('✅ [工具埋点] 选择工具激活，保持当前选择状态');
-    }
+      setSelectionEnd(null);    } else {    }
     
     // 如果选择了连线工具，重置连线状态
-    if (isLineToolSelected) {
-      console.log('🔗 [工具埋点] 连线工具激活，重置连线状态', {
-        previousConnectingState: {
-          isConnecting,
-          connectingStartPoint,
-          continuousConnecting,
-          lastConnectedPoint
-        }
-      });
-      
-      // 重置连线相关状态
+    if (isLineToolSelected) {      // 重置连线相关状态
       setIsConnecting(false);
       setConnectingStartPoint(null);
       setContinuousConnecting(false);
-      setLastConnectedPoint(null);
-      
-      console.log('✅ [工具埋点] 连线状态已重置，准备开始新的连线操作');
-    } else if (isConnecting || continuousConnecting) {
-      // 如果当前处于连线模式但选择了非连线工具，退出连线模式
-      console.log('🚫 [工具埋点] 非连线工具激活，退出连线模式', {
-        wasConnecting: isConnecting,
-        wasContinuousConnecting: continuousConnecting
-      });
-      
-      exitConnectingMode();
+      setLastConnectedPoint(null);    } else if (isConnecting || continuousConnecting) {
+      // 如果当前处于连线模式但选择了非连线工具，退出连线模式      exitConnectingMode();
     }
   };
   
@@ -1758,65 +1730,29 @@ const MapManagement: React.FC = () => {
   const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
     // 设置画布被点击状态，用于启用双指缩放功能
     setIsCanvasClicked(true);
-    console.log('🔍 [状态调试] 画布被点击，isCanvasClicked设置为true');
-    console.log('🖱️ [画布埋点] ========== handleCanvasClick被调用 ==========');
-    console.log('🖱️ [画布埋点] 事件详情', {
-      selectedTool,
-      eventType: event.type,
-      button: event.button,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      target: event.target,
-      targetTagName: (event.target as Element).tagName,
-      targetClassName: (event.target as Element).className,
-      isSelecting,
-      isMapPoint: !!(event.target as Element).closest('.map-point'),
-      isSvgElement: (event.target as Element).tagName === 'svg' || (event.target as Element).tagName === 'g' || (event.target as Element).tagName === 'line' || (event.target as Element).tagName === 'path',
-      currentSelectedPoints: selectedPoints.length,
-      currentSelectedLines: selectedLines.length,
-      timestamp: new Date().toISOString()
-    });
-    console.log('🖱️ [画布埋点] 当前选中状态', {
-      selectedPoints: selectedPoints,
-      selectedLines: selectedLines,
-      selectedTool: selectedTool
-    });
     
     // 如果点击的是地图点，不处理画布点击
     if ((event.target as Element).closest('.map-point')) {
-      console.log('🎯 [画布埋点] 点击了地图点，跳过画布点击处理');
       return;
     }
     
     // 如果是选择工具且刚刚完成了框选操作，需要特殊处理
     if (selectedTool === 'select' && wasJustSelecting.current) {
-      console.log('🔄 [画布埋点] 刚完成框选，但仍需处理线的选中状态');
       wasJustSelecting.current = false;
       
       // 即使刚完成框选，也要清除线的选中状态（如果有的话）
       if (selectedLines.length > 0) {
-        console.log('🧹 [画布埋点] 框选后清除线的选中状态', {
-          previousSelectedLines: selectedLines.length
-        });
         setSelectedLines([]);
-        console.log('✅ [画布埋点] 线的选中状态已清除（框选后处理）');
-      } else {
-        console.log('ℹ️ [画布埋点] 框选后没有选中的线需要清除');
       }
       return;
     }
     
     if (selectedTool === 'point') {
-      console.log('➕ [画布埋点] 点工具模式，创建新点');
-      const rect = event.currentTarget.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
+      const canvasElement = event.currentTarget;
+      const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       
       // 清除线的选中状态
       if (selectedLines.length > 0) {
-        console.log('🧹 [画布埋点] 点工具模式，清除线的选中状态', {
-          previousSelectedLines: selectedLines.length
-        });
         setSelectedLines([]);
       }
       
@@ -1830,174 +1766,57 @@ const MapManagement: React.FC = () => {
         direction: 0 // 默认方向
       };
       
-      console.log('📍 [画布埋点] 新点创建', {
-        newPoint,
-        pointCounter,
-        totalPointsAfter: mapPoints.length + 1
-      });
-      
       setMapPoints(prev => [...prev, newPoint]);
       setPointCounter(prev => prev + 1);
     } else if (selectedTool === 'select') {
       // 选择工具：只有在非框选状态且没有选中点时才清除选择状态
       if (!isSelecting && selectedPoints.length === 0) {
-        console.log('🧹 [画布埋点] 选择工具模式，清除选择状态', {
-          previousSelectedPoints: selectedPoints.length,
-          previousSelectedLines: selectedLines.length,
-          previousSelectionStart: selectionStart,
-          previousSelectionEnd: selectionEnd,
-          previousIsSelecting: isSelecting
-        });
-        
         // 清除线的选中状态
         if (selectedLines.length > 0) {
-          console.log('🔄 [画布埋点] 清除线的选中状态', { count: selectedLines.length });
           setSelectedLines([]);
         }
         
         setSelectionStart(null);
         setSelectionEnd(null);
-        
-        console.log('✅ [画布埋点] 选择状态已清除（包括线和框选坐标）');
       } else if (!isSelecting && selectedPoints.length > 0) {
-        console.log('🔄 [画布埋点] 有选中点时，只清除线的选中状态', {
-          selectedPointsCount: selectedPoints.length,
-          selectedLinesCount: selectedLines.length
-        });
-        
         // 只清除线的选中状态，保留点的选中状态和框选坐标
         if (selectedLines.length > 0) {
-          console.log('🔄 [画布埋点] 清除线的选中状态', { count: selectedLines.length });
           setSelectedLines([]);
         }
-        
-        console.log('✅ [画布埋点] 线的选中状态已清除，保留点的选中状态');
-      } else {
-        console.log('🚫 [画布埋点] 框选进行中，跳过清除选择状态', {
-          isSelecting,
-          selectionStart,
-          selectionEnd
-        });
       }
+      // 框选进行中时不做任何处理
     } else {
       // 其他工具模式：清除线的选中状态
-      console.log('🔧 [画布埋点] 其他工具模式处理', {
-        currentTool: selectedTool,
-        currentSelectedLines: selectedLines.length,
-        currentSelectedPoints: selectedPoints.length
-      });
-      
       if (selectedLines.length > 0) {
-        console.log('🧹 [画布埋点] 其他工具模式，清除线的选中状态', {
-          currentTool: selectedTool,
-          previousSelectedLines: selectedLines.length
-        });
         setSelectedLines([]);
-        console.log('✅ [画布埋点] 线的选中状态已清除');
-      } else {
-        console.log('ℹ️ [画布埋点] 没有选中的线需要清除');
       }
     }
   };
   
   // 点击点元素处理
   const handlePointClick = (event: React.MouseEvent, pointId: string) => {
-    const clickedPoint = mapPoints.find(p => p.id === pointId);
-    console.log('🎯 [点击埋点] handlePointClick被调用', {
-      pointId,
-      pointData: clickedPoint,
-      selectedTool,
-      eventType: event.type,
-      ctrlKey: event.ctrlKey,
-      metaKey: event.metaKey,
-      currentSelectedPoints: selectedPoints.length,
-      currentSelectedPointIds: selectedPoints,
-      isConnecting,
-      continuousConnecting,
-      connectingStartPoint,
-      lastConnectedPoint,
-      timestamp: new Date().toISOString()
-    });
-    
-    event.stopPropagation();
+    const clickedPoint = mapPoints.find(p => p.id === pointId);    event.stopPropagation();
     
     // 连线工具模式处理
-    if (['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(selectedTool)) {
-      console.log('🔗 [点击埋点] 检测到连线工具，调用连接处理函数', {
-        selectedTool,
-        pointId,
-        当前连线状态: {
-          isConnecting,
-          continuousConnecting,
-          connectingStartPoint,
-          lastConnectedPoint
-        }
-      });
-      handlePointConnection(pointId);
+    if (['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(selectedTool)) {      handlePointConnection(pointId);
       return;
     }
     
-    if (selectedTool === 'select') {
-      console.log('✅ [点击埋点] 选择工具模式，处理点选择');
+    if (selectedTool === 'select') {      let newSelectedPoints: string[];
       
-      let newSelectedPoints: string[];
-      
-      if (event.ctrlKey || event.metaKey) {
-        console.log('🔄 [点击埋点] 多选模式（Ctrl/Cmd + 点击）');
-        // Ctrl/Cmd + 点击：多选
+      if (event.ctrlKey || event.metaKey) {        // Ctrl/Cmd + 点击：多选
         const wasSelected = selectedPoints.includes(pointId);
         newSelectedPoints = wasSelected
           ? selectedPoints.filter(id => id !== pointId)
-          : [...selectedPoints, pointId];
-        
-        console.log('📊 [点击埋点] 多选状态变化', {
-          pointId,
-          wasSelected,
-          action: wasSelected ? '取消选择' : '添加选择',
-          previousCount: selectedPoints.length,
-          newCount: newSelectedPoints.length,
-          newSelectedPoints
-        });
-      } else {
-        console.log('🎯 [点击埋点] 单选模式（普通点击）');
-        // 普通点击：单选
-        newSelectedPoints = [pointId];
-        
-        console.log('📊 [点击埋点] 单选状态变化', {
-          pointId,
-          previousSelectedPoints: selectedPoints,
-          newSelectedPoints
-        });
-      }
-      
-      console.log('🔄 [点击埋点] 更新选中点状态');
-      setSelectedPoints(newSelectedPoints);
+          : [...selectedPoints, pointId];      } else {        // 普通点击：单选
+        newSelectedPoints = [pointId];      }      setSelectedPoints(newSelectedPoints);
       
       // 清除线的选中状态（点和线不能同时选中）
-      if (selectedLines.length > 0) {
-        console.log('🧹 [点击埋点] 清除线的选中状态', {
-          previousSelectedLines: selectedLines.length
-        });
-        setSelectedLines([]);
+      if (selectedLines.length > 0) {        setSelectedLines([]);
       }
       
       // 更新框选矩形以围绕选中的点
-       if (newSelectedPoints.length > 0) {
-         console.log('📐 [点击埋点] 计算框选矩形', {
-           selectedPointsCount: newSelectedPoints.length,
-           selectedPointIds: newSelectedPoints
-         });
-         
-         const selectedPointsData = mapPoints.filter(point => newSelectedPoints.includes(point.id));
-         console.log('📍 [点击埋点] 选中点数据', {
-           selectedPointsData: selectedPointsData.map(p => ({
-             id: p.id,
-             name: p.name,
-             position: { x: p.x, y: p.y }
-           }))
-         });
-         
-         // 考虑点的实际大小（半径8px）和选中时的缩放（1.2倍）
+       if (newSelectedPoints.length > 0) {         const selectedPointsData = mapPoints.filter(point => newSelectedPoints.includes(point.id));         // 考虑点的实际大小（半径8px）和选中时的缩放（1.2倍）
          const pointRadius = 8 * 1.2; // 选中时点会放大到1.2倍
          const pointMinX = Math.min(...selectedPointsData.map(p => p.x - pointRadius));
          const pointMaxX = Math.max(...selectedPointsData.map(p => p.x + pointRadius));
@@ -2007,91 +1826,28 @@ const MapManagement: React.FC = () => {
          // 添加一些边距使框选框更明显
          const padding = 15;
          const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
-         const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
-         
-         console.log('🔲 [点击埋点] 框选矩形计算结果', {
-           pointRadius,
-           boundingBox: { pointMinX, pointMaxX, pointMinY, pointMaxY },
-           padding,
-           selectionStart: newSelectionStart,
-           selectionEnd: newSelectionEnd
-         });
-         
-         setSelectionStart(newSelectionStart);
+         const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };         setSelectionStart(newSelectionStart);
          setSelectionEnd(newSelectionEnd);
-      } else {
-        console.log('🧹 [点击埋点] 没有选中点，清除框选');
-        // 没有选中点时清除框选
+      } else {        // 没有选中点时清除框选
         setSelectionStart(null);
         setSelectionEnd(null);
       }
-    } else {
-      console.log('❌ [点击埋点] 非选择工具，忽略点击', { selectedTool });
-    }
+    } else {    }
   };
 
   // 处理点连接逻辑
   const handlePointConnection = (pointId: string) => {
-    console.log('🔗 [连线埋点] ========== 处理点连接开始 ==========');
-    console.log('🔗 [连线埋点] 输入参数和当前状态', {
-      输入点ID: pointId,
-      当前工具: selectedTool,
-      连线状态: {
-        isConnecting,
-        continuousConnecting,
-        connectingStartPoint,
-        lastConnectedPoint
-      },
-      当前连线数量: mapLines.length,
-      时间戳: new Date().toISOString()
-    });
-
     if (!isConnecting && !continuousConnecting) {
       // 开始连线模式
-      console.log('🎯 [连线埋点] 条件匹配：开始连线模式');
-      console.log('🎯 [连线埋点] 即将设置状态', {
-        action: '开始连线模式',
-        startPointId: pointId,
-        将要设置的状态: {
-          isConnecting: true,
-          continuousConnecting: true,
-          connectingStartPoint: pointId,
-          lastConnectedPoint: pointId
-        }
-      });
-      
       setIsConnecting(true);
       setContinuousConnecting(true);
       setConnectingStartPoint(pointId);
       setLastConnectedPoint(pointId);
-      
-      console.log('🎯 [连线埋点] 状态设置完成，等待React更新');
-      
     } else if (continuousConnecting || (isConnecting && connectingStartPoint)) {
       // 连续连线模式
-      console.log('🔗 [连线埋点] 条件匹配：连续连线模式');
       // 优先使用lastConnectedPoint，如果没有则使用connectingStartPoint
       const startPoint = lastConnectedPoint || connectingStartPoint;
-      
-      console.log('🔗 [连线埋点] 连线参数计算', {
-        计算的起始点: startPoint,
-        目标点: pointId,
-        lastConnectedPoint,
-        connectingStartPoint,
-        continuousConnecting,
-        isConnecting,
-        使用的起始点来源: lastConnectedPoint ? 'lastConnectedPoint' : 'connectingStartPoint'
-      });
-      
       if (startPoint && startPoint !== pointId) {
-        console.log('✅ [连线埋点] 连线条件满足，开始创建连线');
-        console.log('✅ [连线埋点] 连线详情', {
-          startPointId: startPoint,
-          endPointId: pointId,
-          lineType: selectedTool,
-          当前连线数组长度: mapLines.length
-        });
-
         // 计算线长度
         const startPointData = getPointById(startPoint);
         const endPointData = getPointById(pointId);
@@ -2131,18 +1887,9 @@ const MapManagement: React.FC = () => {
           // 更新线计数器（双向线占用两个名称）
           setLineCounter(prev => prev + 2);
           
-          console.log('📝 [连线埋点] 双向线对象已创建', { forwardLine, backwardLine });
-          
           // 更新连线数据
           setMapLines(prev => {
             const newLines = [...prev, forwardLine, backwardLine];
-            console.log('📊 [连线埋点] 更新连线数组（双向线）', {
-              操作: '添加双向线（两条独立线）',
-              原数组长度: prev.length,
-              新数组长度: newLines.length,
-              新连线: [forwardLine, backwardLine],
-              完整新数组: newLines
-            });
             return newLines;
           });
         } else {
@@ -2160,66 +1907,23 @@ const MapManagement: React.FC = () => {
           // 更新线计数器
           setLineCounter(prev => prev + 1);
           
-          console.log('📝 [连线埋点] 新连线对象已创建', { newLine });
-          
           // 更新连线数据
           setMapLines(prev => {
             const newLines = [...prev, newLine];
-            console.log('📊 [连线埋点] 更新连线数组', {
-              操作: '添加新连线',
-              原数组长度: prev.length,
-              新数组长度: newLines.length,
-              新连线: newLine,
-              完整新数组: newLines
-            });
             return newLines;
           });
         }
         
         // 更新最后连接的点，为下一次连线做准备
-        console.log('🔄 [连线埋点] 更新最后连接点', {
-          原lastConnectedPoint: lastConnectedPoint,
-          新lastConnectedPoint: pointId
-        });
         setLastConnectedPoint(pointId);
-        
-        console.log('📊 [连线埋点] 连线创建完成，系统准备就绪', {
-          连线类型: selectedTool,
-          预期总连线数: selectedTool === 'double-line' ? mapLines.length + 2 : mapLines.length + 1,
-          下次连线起始点: pointId,
-          状态: '等待用户点击下一个点或按ESC退出'
-        });
       } else {
-        console.log('⚠️ [连线埋点] 连线条件不满足', {
-          原因: !startPoint ? '起始点不存在' : '起始点和结束点相同',
-          startPoint,
-          endPoint: pointId,
-          详细检查: {
-            startPoint存在: !!startPoint,
-            点不相同: startPoint !== pointId
-          }
-        });
+        // 起始点和结束点相同，不创建连线
       }
     } else {
-      console.log('🤔 [连线埋点] 未匹配任何条件', {
-        isConnecting,
-        continuousConnecting,
-        说明: '既不是初始状态也不是连续连线状态，这可能是一个异常情况'
-      });
+      // 其他情况
     }
-    
-    console.log('🔗 [连线埋点] ========== 处理点连接结束 ==========');
   };
 
-  // 退出连线模式
-  const exitConnectingMode = () => {
-    console.log('🚪 [连线埋点] 退出连线模式');
-    setIsConnecting(false);
-    setContinuousConnecting(false);
-    setConnectingStartPoint(null);
-    setLastConnectedPoint(null);
-  };
-  
   // 双击点元素处理
   const handlePointDoubleClick = (event: React.MouseEvent, point: any) => {
     event.stopPropagation();
@@ -2234,61 +1938,19 @@ const MapManagement: React.FC = () => {
       setPointEditModalVisible(true);
     }
   };
-  
-  // 画布引用
-  const canvasRef = React.useRef<HTMLDivElement>(null);
-  // 标记是否刚完成框选操作
-  const wasJustSelecting = React.useRef<boolean>(false);
+
+  // 框选开始处理
 
   // 框选开始处理
   const handleSelectionStart = (event: React.MouseEvent<HTMLDivElement>) => {
-    console.log('🔍 [框选埋点] handleSelectionStart被调用', {
-      selectedTool,
-      eventType: event.type,
-      button: event.button,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      target: event.target,
-      targetTagName: (event.target as Element).tagName,
-      targetClassName: (event.target as Element).className,
-      isMapPoint: !!(event.target as Element).closest('.map-point'),
-      canvasRefExists: !!canvasRef.current,
-      timestamp: new Date().toISOString()
-    });
-    
     // 只有在选择工具激活且没有点击到地图点且是左键点击时才开始框选
     if (selectedTool === 'select' && !(event.target as Element).closest('.map-point') && event.button === 0) {
-      console.log('✅ [框选埋点] 满足框选条件，开始处理');
-      
       // 阻止默认行为和事件冒泡
       event.preventDefault();
       event.stopPropagation();
       
-      const rect = event.currentTarget.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      
-      console.log('📍 [框选埋点] 计算坐标信息', {
-        canvasRect: {
-          left: rect.left,
-          top: rect.top,
-          width: rect.width,
-          height: rect.height
-        },
-        mousePosition: {
-          clientX: event.clientX,
-          clientY: event.clientY
-        },
-        relativePosition: { x, y },
-        timestamp: new Date().toISOString()
-      });
-      
-      console.log('🎯 [框选埋点] 设置框选状态', {
-        isSelecting: true,
-        selectionStart: { x, y },
-        selectionEnd: { x, y },
-        previousSelectedPoints: selectedPoints.length
-      });
+      const canvasElement = event.currentTarget;
+      const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       
       setIsSelecting(true);
       setSelectionStart({ x, y });
@@ -2302,51 +1964,19 @@ const MapManagement: React.FC = () => {
       const capturedSelectionStart = { x, y }; // 框选起始点
       let capturedSelectionEnd = { x, y }; // 框选结束点，会在移动中更新
       
-      console.log('📸 [框选埋点] 立即捕获状态快照', {
-        capturedIsSelecting,
-        capturedSelectionStart,
-        capturedSelectionEnd
-      });
-      
       // 添加全局事件监听
       const handleGlobalMouseMove = (e: MouseEvent) => {
-        console.log('🖱️ [框选埋点] 全局鼠标移动', {
-          clientX: e.clientX,
-          clientY: e.clientY,
-          canvasExists: !!canvasRef.current
-        });
-        
-        if (canvasRef.current) {
-          const rect = canvasRef.current.getBoundingClientRect();
-          const newX = e.clientX - rect.left;
-          const newY = e.clientY - rect.top;
-          
-          console.log('📐 [框选埋点] 更新框选终点', {
-            newPosition: { x: newX, y: newY },
-            canvasRect: {
-              left: rect.left,
-              top: rect.top,
-              width: rect.width,
-              height: rect.height
-            }
-          });
-          
-          // 更新UI状态
-          setSelectionEnd({ x: newX, y: newY });
-          // 同时更新闭包中的状态
-          capturedSelectionEnd = { x: newX, y: newY };
-        }
-      };
+         if (canvasRef.current) {
+           const { x: newX, y: newY } = screenToCanvasCoordinates(e.clientX, e.clientY, canvasRef.current);
+           
+           // 更新UI状态
+           setSelectionEnd({ x: newX, y: newY });
+           // 同时更新闭包中的状态
+           capturedSelectionEnd = { x: newX, y: newY };
+         }
+       };
       
       const handleGlobalMouseUp = () => {
-        console.log('🔚 [框选埋点] 全局鼠标释放，移除事件监听器');
-        
-        console.log('📸 [框选埋点] 使用闭包状态快照', {
-          capturedIsSelecting,
-          capturedSelectionStart,
-          capturedSelectionEnd
-        });
-        
         document.removeEventListener('mousemove', handleGlobalMouseMove);
         document.removeEventListener('mouseup', handleGlobalMouseUp);
         
@@ -2362,16 +1992,8 @@ const MapManagement: React.FC = () => {
         }, 50);
       };
       
-      console.log('👂 [框选埋点] 添加全局事件监听器');
       document.addEventListener('mousemove', handleGlobalMouseMove);
       document.addEventListener('mouseup', handleGlobalMouseUp);
-    } else {
-      console.log('❌ [框选埋点] 不满足框选条件', {
-        selectedTool,
-        isSelectTool: selectedTool === 'select',
-        isMapPoint: !!(event.target as Element).closest('.map-point'),
-        reason: selectedTool !== 'select' ? '工具不是选择工具' : '点击了地图点'
-      });
     }
   };
   
@@ -2382,81 +2004,32 @@ const MapManagement: React.FC = () => {
   
   // 框选结束处理（带状态参数）
   const handleSelectionEndWithState = (wasSelecting: boolean, startPos: {x: number, y: number} | null, endPos: {x: number, y: number} | null) => {
-    console.log('🔚 [框选埋点] handleSelectionEndWithState被调用', { 
-      wasSelecting, 
-      startPos, 
-      endPos, 
-      selectedPointsCount: selectedPoints.length,
-      mapPointsCount: mapPoints.length,
-      timestamp: new Date().toISOString()
-    });
-    
     if (wasSelecting && startPos && endPos) {
-      console.log('✅ [框选埋点] 满足框选结束条件，开始处理');
-      
       // 计算框选区域
       const minX = Math.min(startPos.x, endPos.x);
       const maxX = Math.max(startPos.x, endPos.x);
       const minY = Math.min(startPos.y, endPos.y);
       const maxY = Math.max(startPos.y, endPos.y);
       
-      console.log('📐 [框选埋点] 框选区域计算', {
-        originalCoords: { startPos, endPos },
-        calculatedBounds: { minX, maxX, minY, maxY }
-      });
-      
       // 检查框选区域是否足够大（避免误触）
       const width = maxX - minX;
       const height = maxY - minY;
       const minSelectionSize = 3; // 降低最小框选尺寸
       
-      console.log('📏 [框选埋点] 框选尺寸检查', {
-        width,
-        height,
-        minSelectionSize,
-        widthValid: width > minSelectionSize,
-        heightValid: height > minSelectionSize,
-        sizeValid: width > minSelectionSize || height > minSelectionSize
-      });
-      
       if (width > minSelectionSize || height > minSelectionSize) {
-        console.log('✅ [框选埋点] 框选尺寸满足要求，开始筛选点');
-        
         // 找出在框选区域内的点
         const selectedPointIds = mapPoints
           .filter(point => {
             const inSelection = point.x >= minX && point.x <= maxX && 
                                point.y >= minY && point.y <= maxY;
-            console.log('🎯 [框选埋点] 检查点是否在框选区域', {
-              pointId: point.id,
-              pointName: point.name,
-              pointPosition: { x: point.x, y: point.y },
-              selectionBounds: { minX, maxX, minY, maxY },
-              checks: {
-                xInRange: point.x >= minX && point.x <= maxX,
-                yInRange: point.y >= minY && point.y <= maxY
-              },
-              inSelection
-            });
             return inSelection;
           })
           .map(point => point.id);
-        
-        console.log('📊 [框选埋点] 框选筛选结果', {
-          totalMapPoints: mapPoints.length,
-          selectedPointIds,
-          selectedCount: selectedPointIds.length,
-          selectedPointDetails: mapPoints
-            .filter(p => selectedPointIds.includes(p.id))
-            .map(p => ({ id: p.id, name: p.name, position: { x: p.x, y: p.y } }))
-        });
         
         setSelectedPoints(selectedPointIds);
         
         // 如果有选中的点，保持框选状态但更新框选区域为选中点的边界
         if (selectedPointIds.length > 0) {
-          console.log('🎯 [框选埋点] 有选中点，更新框选区域');
-          
           const selectedPointsData = mapPoints.filter(point => selectedPointIds.includes(point.id));
           // 考虑点的实际大小（半径8px）和选中时的缩放（1.2倍）
           const pointRadius = 8 * 1.2; // 选中时点会放大到1.2倍
@@ -2470,46 +2043,22 @@ const MapManagement: React.FC = () => {
           const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
           const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
           
-          console.log('🔲 [框选埋点] 更新框选区域计算', {
-            selectedPointsData: selectedPointsData.map(p => ({ id: p.id, x: p.x, y: p.y })),
-            pointRadius,
-            pointBounds: { pointMinX, pointMaxX, pointMinY, pointMaxY },
-            padding,
-            newSelectionStart,
-            newSelectionEnd
-          });
-          
           setSelectionStart(newSelectionStart);
           setSelectionEnd(newSelectionEnd);
           setIsSelecting(false); // 结束拖拽状态但保持框选显示
-          
-          console.log('✅ [框选埋点] 框选状态更新完成，isSelecting设为false');
         } else {
-          console.log('🧹 [框选埋点] 没有选中任何点，清除框选');
           // 没有选中点时清除框选
           setIsSelecting(false);
           setSelectionStart(null);
           setSelectionEnd(null);
         }
       } else {
-        console.log('❌ [框选埋点] 框选区域太小，清除框选', {
-          width,
-          height,
-          minSelectionSize,
-          reason: '框选区域不满足最小尺寸要求'
-        });
         // 框选区域太小，清除框选
         setIsSelecting(false);
         setSelectionStart(null);
         setSelectionEnd(null);
       }
     } else {
-      console.log('❌ [框选埋点] 不满足框选结束条件', {
-        wasSelecting,
-        hasStartPos: !!startPos,
-        hasEndPos: !!endPos,
-        reason: '缺少必要的框选状态'
-      });
       setIsSelecting(false);
       setSelectionStart(null);
       setSelectionEnd(null);
@@ -2518,20 +2067,9 @@ const MapManagement: React.FC = () => {
   
   // 框选结束处理（兼容旧接口）
   const handleSelectionEnd = () => {
-    console.log('🔚 [框选埋点] handleSelectionEnd被调用', { 
-      isSelecting, 
-      selectionStart, 
-      selectionEnd, 
-      selectedPointsCount: selectedPoints.length,
-      mapPointsCount: mapPoints.length,
-      timestamp: new Date().toISOString()
-    });
-    
     handleSelectionEndWithState(isSelecting, selectionStart, selectionEnd);
   };
-  
 
-  
   // 保存点编辑
   const handleSavePointEdit = (values: any) => {
     if (editingPoint) {
@@ -2565,26 +2103,12 @@ const MapManagement: React.FC = () => {
   const handleDeleteSelectedLines = () => {
     if (selectedLines.length === 0) {
       return;
-    }
-    
-    console.log('🗑️ [线删除埋点] 开始删除选中的线', {
-      selectedLinesCount: selectedLines.length,
-      selectedLineIds: selectedLines
-    });
-    
-    setMapLines(prev => 
+    }    setMapLines(prev => 
       prev.filter(line => !selectedLines.includes(line.id))
     );
     
     const deletedCount = selectedLines.length;
-    setSelectedLines([]);
-    
-    console.log('✅ [线删除埋点] 线删除完成', {
-      deletedCount,
-      remainingLinesCount: mapLines.length - deletedCount
-    });
-    
-    message.success(`已删除 ${deletedCount} 条线`);
+    setSelectedLines([]);    message.success(`已删除 ${deletedCount} 条线`);
   };
 
   // 键盘事件处理
@@ -2601,24 +2125,10 @@ const MapManagement: React.FC = () => {
     // 只在地图编辑模式下且选择工具激活时处理键盘事件
     if (addMapFileDrawerVisible && selectedTool === 'select') {
       if (event.key === 'Delete' || event.key === 'Backspace') {
-        event.preventDefault();
-        
-        console.log('⌨️ [键盘删除埋点] 检测到删除键', {
-          key: event.key,
-          selectedPointsCount: selectedPoints.length,
-          selectedLinesCount: selectedLines.length
-        });
-        
-        // 优先删除选中的点，如果没有选中的点则删除选中的线
-        if (selectedPoints.length > 0) {
-          console.log('🗑️ [键盘删除埋点] 删除选中的点');
-          handleDeleteSelectedPoints();
-        } else if (selectedLines.length > 0) {
-          console.log('🗑️ [键盘删除埋点] 删除选中的线');
-          handleDeleteSelectedLines();
-        } else {
-          console.log('ℹ️ [键盘删除埋点] 没有选中的点或线需要删除');
-        }
+        event.preventDefault();        // 优先删除选中的点，如果没有选中的点则删除选中的线
+        if (selectedPoints.length > 0) {          handleDeleteSelectedPoints();
+        } else if (selectedLines.length > 0) {          handleDeleteSelectedLines();
+        } else {        }
       }
     }
   };
@@ -2644,40 +2154,7 @@ const MapManagement: React.FC = () => {
     };
   }, [addMapFileDrawerVisible, selectedTool, selectedPoints, selectedLines, isSpacePressed]);
   
-  // 初始化测试点（仅在地图编辑器打开且没有点时）
-  useEffect(() => {
-    if (addMapFileDrawerVisible && mapPoints.length === 0) {
-      const testPoints = [
-        {
-          id: 'test_point_1',
-          name: 'n1',
-          type: '站点',
-          x: 150,
-          y: 100,
-          direction: 0
-        },
-        {
-          id: 'test_point_2',
-          name: 'n2',
-          type: '充电点',
-          x: 300,
-          y: 150,
-          direction: 90
-        },
-        {
-          id: 'test_point_3',
-          name: 'n3',
-          type: '停靠点',
-          x: 200,
-          y: 250,
-          direction: 180
-        }
-      ];
-      setMapPoints(testPoints);
-      setPointCounter(4);
-      console.log('已添加测试点:', testPoints);
-    }
-  }, [addMapFileDrawerVisible, mapPoints.length]);
+  // 测试代码已删除 - 不再自动添加测试点
   
   // 获取点类型对应的颜色
   const getPointColor = (type: string) => {
@@ -2734,11 +2211,6 @@ const MapManagement: React.FC = () => {
       return 'crosshair'; // 连线工具在点上显示十字架
     }
     return 'default';
-  };
-
-  // 根据点ID获取点的坐标
-  const getPointById = (pointId: string) => {
-    return mapPoints.find(point => point.id === pointId);
   };
 
   // 渲染连线的SVG路径
@@ -3057,102 +2529,23 @@ const MapManagement: React.FC = () => {
   const handleLineClick = (event: React.MouseEvent, lineId: string) => {
     const clickedLine = mapLines.find(l => l.id === lineId);
     
-    // 详细的事件调试信息
-    console.log('🎯 [线点击埋点] handleLineClick被调用 - 开始', {
-      lineId,
-      lineData: clickedLine,
-      selectedTool,
-      eventType: event.type,
-      ctrlKey: event.ctrlKey,
-      metaKey: event.metaKey,
-      currentSelectedLines: selectedLines.length,
-      currentSelectedLineIds: selectedLines,
-      timestamp: new Date().toISOString(),
-      // 事件对象详细信息
-      eventDetails: {
-        bubbles: event.bubbles,
-        cancelable: event.cancelable,
-        defaultPrevented: event.defaultPrevented,
-        isTrusted: event.isTrusted,
-        button: event.button,
-        buttons: event.buttons,
-        clientX: event.clientX,
-        clientY: event.clientY,
-        pageX: event.pageX,
-        pageY: event.pageY
-      },
-      // DOM元素信息
-      targetInfo: {
-        tagName: (event.target as Element).tagName,
-        className: (event.target as Element).className,
-        id: (event.target as Element).id,
-        nodeName: (event.target as Element).nodeName
-      },
-      currentTargetInfo: {
-        tagName: (event.currentTarget as Element).tagName,
-        className: (event.currentTarget as Element).className,
-        id: (event.currentTarget as Element).id,
-        nodeName: (event.currentTarget as Element).nodeName
-      }
-    });
-    
-    // 检查是否找到了对应的线
+    // 详细的事件调试信息    // 检查是否找到了对应的线
     if (!clickedLine) {
       console.error('❌ [线点击埋点] 未找到对应的线数据', { lineId, availableLines: mapLines.map(l => l.id) });
       return;
-    }
+    }    event.stopPropagation();
     
-    console.log('✅ [线点击埋点] 找到对应线数据，继续处理', { clickedLine });
-    
-    // 添加用户友好的测试提示
-    console.log('🧪 [测试提示] 线点击事件已触发！请检查:', {
-      message: '如果您看到这条消息，说明线的点击事件已经正常工作',
-      selectedTool: selectedTool,
-      suggestion: selectedTool !== 'select' ? '请切换到选择工具(select)来测试线的选中功能' : '现在可以点击线来选中它们'
-    });
-    
-    event.stopPropagation();
-    
-    if (selectedTool === 'select') {
-      console.log('✅ [线点击埋点] 选择工具模式，处理线选择');
+    if (selectedTool === 'select') {      let newSelectedLines: string[];
       
-      let newSelectedLines: string[];
-      
-      if (event.ctrlKey || event.metaKey) {
-        console.log('🔄 [线点击埋点] 多选模式（Ctrl/Cmd + 点击）');
-        // Ctrl/Cmd + 点击：多选
+      if (event.ctrlKey || event.metaKey) {        // Ctrl/Cmd + 点击：多选
         const wasSelected = selectedLines.includes(lineId);
         newSelectedLines = wasSelected
           ? selectedLines.filter(id => id !== lineId)
-          : [...selectedLines, lineId];
-        
-        console.log('📊 [线点击埋点] 多选状态变化', {
-          lineId,
-          wasSelected,
-          action: wasSelected ? '取消选择' : '添加选择',
-          previousCount: selectedLines.length,
-          newCount: newSelectedLines.length,
-          newSelectedLines
-        });
-      } else {
-        console.log('🎯 [线点击埋点] 单选模式（普通点击）');
-        // 普通点击：单选
-        newSelectedLines = [lineId];
-        
-        console.log('📊 [线点击埋点] 单选状态变化', {
-          lineId,
-          previousSelectedLines: selectedLines,
-          newSelectedLines
-        });
-      }
-      
-      console.log('🔄 [线点击埋点] 更新选中线状态');
-      setSelectedLines(newSelectedLines);
+          : [...selectedLines, lineId];      } else {        // 普通点击：单选
+        newSelectedLines = [lineId];      }      setSelectedLines(newSelectedLines);
       
       // 清除点的选中状态（线和点不能同时选中）
-      if (selectedPoints.length > 0) {
-        console.log('🔄 [线点击埋点] 清除点的选中状态');
-        setSelectedPoints([]);
+      if (selectedPoints.length > 0) {        setSelectedPoints([]);
         setSelectionStart(null);
         setSelectionEnd(null);
       }
@@ -3160,20 +2553,8 @@ const MapManagement: React.FC = () => {
   };
   
   // 获取框选区域样式
-  const getSelectionBoxStyle = () => {
-    console.log('🎨 [样式埋点] getSelectionBoxStyle被调用', { 
-      selectionStart, 
-      selectionEnd, 
-      isSelecting, 
-      selectedPointsLength: selectedPoints.length,
-      timestamp: new Date().toISOString()
-    });
-    
-    // 如果有选中的点但没有框选坐标，动态计算框选区域
-    if ((!selectionStart || !selectionEnd) && selectedPoints.length > 0) {
-      console.log('🔧 [样式埋点] 动态计算选中点的框选区域');
-      
-      const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
+  const getSelectionBoxStyle = () => {    // 如果有选中的点但没有框选坐标，动态计算框选区域
+    if ((!selectionStart || !selectionEnd) && selectedPoints.length > 0) {      const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
       if (selectedPointsData.length > 0) {
         // 考虑点的实际大小（半径8px）和选中时的缩放（1.2倍）
         const pointRadius = 8 * 1.2;
@@ -3203,40 +2584,20 @@ const MapManagement: React.FC = () => {
           pointerEvents: 'none' as const,
           zIndex: 5,
           boxSizing: 'border-box' as const
-        };
-        
-        console.log('✨ [样式埋点] 使用动态计算的框选框样式', {
-          selectedPointsCount: selectedPointsData.length,
-          dynamicBounds: { dynamicStart, dynamicEnd },
-          style
-        });
-        
-        return style;
+        };        return style;
       }
     }
     
     // 隐藏框选框的条件：没有框选区域坐标且没有选中点，或者既不在选择中也没有选中点
-    if ((!selectionStart || !selectionEnd) && selectedPoints.length === 0) {
-      console.log('👻 [样式埋点] 框选框被隐藏', {
-        reason: '没有框选坐标且没有选中点',
-        hasSelectionStart: !!selectionStart,
-        hasSelectionEnd: !!selectionEnd,
-        isSelecting,
-        selectedPointsLength: selectedPoints.length
-      });
-      return { display: 'none' };
+    if ((!selectionStart || !selectionEnd) && selectedPoints.length === 0) {      return { display: 'none' };
     }
     
     // 如果没有坐标但在选择中，也隐藏（避免显示错误的框选框）
-    if ((!selectionStart || !selectionEnd) && isSelecting) {
-      console.log('👻 [样式埋点] 选择中但没有坐标，隐藏框选框');
-      return { display: 'none' };
+    if ((!selectionStart || !selectionEnd) && isSelecting) {      return { display: 'none' };
     }
     
     // 确保selectionStart和selectionEnd不为null
-    if (!selectionStart || !selectionEnd) {
-      console.log('👻 [样式埋点] 框选坐标为null，隐藏框选框');
-      return { display: 'none' };
+    if (!selectionStart || !selectionEnd) {      return { display: 'none' };
     }
     
     const minX = Math.min(selectionStart.x, selectionEnd.x);
@@ -3260,23 +2621,8 @@ const MapManagement: React.FC = () => {
       pointerEvents: 'none' as const,
       zIndex: 5,
       boxSizing: 'border-box' as const
-    };
-    
-    console.log('✨ [样式埋点] 框选框显示样式', {
-      calculatedDimensions: {
-        minX, minY, width, height, finalWidth, finalHeight
-      },
-      style,
-      selectionCoords: {
-        start: selectionStart,
-        end: selectionEnd
-      }
-    });
-    
-    return style;
+    };    return style;
   };
-
-
 
   // 渲染展开的地图文件内容
   const renderExpandedRow = (record: MapData) => {
@@ -3307,7 +2653,6 @@ const MapManagement: React.FC = () => {
                     onClick={() => handleDeleteFile(file)}
                     title="删除"
                   />,
-
 
                   <EyeOutlined
                     key="details"
@@ -3880,7 +3225,6 @@ const MapManagement: React.FC = () => {
                   新增
                 </Button>
               </div>
-              
 
               {(selectedMap || isSearchMode) ? (
         <Card 
@@ -3952,7 +3296,6 @@ const MapManagement: React.FC = () => {
                           </Card>
                          </Col>
                        ))}
-                    
 
                      </Row>
                    ) : (
