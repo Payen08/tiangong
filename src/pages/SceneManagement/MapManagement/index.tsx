@@ -192,6 +192,8 @@ const MapManagement: React.FC = () => {
     type: 'double-line' | 'single-line' | 'double-bezier' | 'single-bezier';
     color?: string;
     length?: number; // 线长度（像素）
+    pairedLineId?: string; // 配对线的ID（仅用于double-line类型的两条独立线）
+    direction?: 'forward' | 'backward'; // 线的方向（仅用于double-line类型）
   }
 
   // 地图编辑器状态
@@ -215,6 +217,7 @@ const MapManagement: React.FC = () => {
   const [editingLine, setEditingLine] = useState<MapLine | null>(null); // 正在编辑的线
   const [lineEditModalVisible, setLineEditModalVisible] = useState(false); // 线编辑弹窗显示状态
   const [lineEditForm] = Form.useForm(); // 线编辑表单
+  const [doubleLineClickCount, setDoubleLineClickCount] = useState<Record<string, number>>({}); // 双向直线的双击计数
   const [hoveredPoint, setHoveredPoint] = useState<string | null>(null); // 鼠标悬停的点ID
   const [continuousConnecting, setContinuousConnecting] = useState(false); // 连续连线模式
   const [lastConnectedPoint, setLastConnectedPoint] = useState<string | null>(null); // 上一个连接的点ID
@@ -1859,33 +1862,82 @@ const MapManagement: React.FC = () => {
           Math.sqrt(Math.pow(endPointData.x - startPointData.x, 2) + Math.pow(endPointData.y - startPointData.y, 2)) : 0;
 
         // 创建新的连线
-        const newLine: MapLine = {
-          id: `line_${Date.now()}`,
-          name: `e${lineCounter}`,
-          startPointId: startPoint,
-          endPointId: pointId,
-          type: selectedTool as 'double-line' | 'single-line' | 'double-bezier' | 'single-bezier',
-          color: '#87CEEB', // 浅蓝色
-          length: Math.round(lineLength)
-        };
-
-        // 更新线计数器
-        setLineCounter(prev => prev + 1);
-
-        console.log('📝 [连线埋点] 新连线对象已创建', { newLine });
-
-        // 更新连线数据
-        setMapLines(prev => {
-          const newLines = [...prev, newLine];
-          console.log('📊 [连线埋点] 更新连线数组', {
-            操作: '添加新连线',
-            原数组长度: prev.length,
-            新数组长度: newLines.length,
-            新连线: newLine,
-            完整新数组: newLines
+        if (selectedTool === 'double-line') {
+          // 双向线：创建两条独立的单向线
+          const forwardLineId = `line_${Date.now()}_forward`;
+          const backwardLineId = `line_${Date.now()}_backward`;
+          
+          const forwardLine: MapLine = {
+            id: forwardLineId,
+            name: `e${lineCounter}`,
+            startPointId: startPoint,
+            endPointId: pointId,
+            type: 'double-line',
+            color: '#87CEEB',
+            length: Math.round(lineLength),
+            pairedLineId: backwardLineId,
+            direction: 'forward'
+          };
+          
+          const backwardLine: MapLine = {
+            id: backwardLineId,
+            name: `e${lineCounter + 1}`,
+            startPointId: pointId,
+            endPointId: startPoint,
+            type: 'double-line',
+            color: '#87CEEB',
+            length: Math.round(lineLength),
+            pairedLineId: forwardLineId,
+            direction: 'backward'
+          };
+          
+          // 更新线计数器（双向线占用两个名称）
+          setLineCounter(prev => prev + 2);
+          
+          console.log('📝 [连线埋点] 双向线对象已创建', { forwardLine, backwardLine });
+          
+          // 更新连线数据
+          setMapLines(prev => {
+            const newLines = [...prev, forwardLine, backwardLine];
+            console.log('📊 [连线埋点] 更新连线数组（双向线）', {
+              操作: '添加双向线（两条独立线）',
+              原数组长度: prev.length,
+              新数组长度: newLines.length,
+              新连线: [forwardLine, backwardLine],
+              完整新数组: newLines
+            });
+            return newLines;
           });
-          return newLines;
-        });
+        } else {
+          // 单向线：创建一条线
+          const newLine: MapLine = {
+            id: `line_${Date.now()}`,
+            name: `e${lineCounter}`,
+            startPointId: startPoint,
+            endPointId: pointId,
+            type: selectedTool as 'single-line' | 'double-bezier' | 'single-bezier',
+            color: '#87CEEB',
+            length: Math.round(lineLength)
+          };
+          
+          // 更新线计数器
+          setLineCounter(prev => prev + 1);
+          
+          console.log('📝 [连线埋点] 新连线对象已创建', { newLine });
+          
+          // 更新连线数据
+          setMapLines(prev => {
+            const newLines = [...prev, newLine];
+            console.log('📊 [连线埋点] 更新连线数组', {
+              操作: '添加新连线',
+              原数组长度: prev.length,
+              新数组长度: newLines.length,
+              新连线: newLine,
+              完整新数组: newLines
+            });
+            return newLines;
+          });
+        }
         
         // 更新最后连接的点，为下一次连线做准备
         console.log('🔄 [连线埋点] 更新最后连接点', {
@@ -1895,8 +1947,8 @@ const MapManagement: React.FC = () => {
         setLastConnectedPoint(pointId);
         
         console.log('📊 [连线埋点] 连线创建完成，系统准备就绪', {
-          新连线: newLine,
-          预期总连线数: mapLines.length + 1,
+          连线类型: selectedTool,
+          预期总连线数: selectedTool === 'double-line' ? mapLines.length + 2 : mapLines.length + 1,
           下次连线起始点: pointId,
           状态: '等待用户点击下一个点或按ESC退出'
         });
@@ -2479,19 +2531,13 @@ const MapManagement: React.FC = () => {
     
     switch (line.type) {
       case 'double-line':
-        // 双行直线：两条平行线，双向箭头
-        const length = Math.sqrt(dx * dx + dy * dy);
-        const unitX = dx / length;
-        const unitY = dy / length;
-        const offset = 2; // 两条线之间的距离
-        
-        // 计算垂直方向的偏移
-        const perpX = -unitY * offset;
-        const perpY = unitX * offset;
-        
+        // 双向直线：每条线独立渲染，通过pairedLineId关联
         const isSelected = isLineSelected(line.id);
         const selectedStroke = isSelected ? '#1890ff' : lineColor;
         const selectedStrokeWidth = isSelected ? '4' : '2';
+        
+        // 为backward方向的线添加透明度以显示重叠效果
+        const opacity = line.direction === 'backward' ? 0.7 : 1;
         
         return (
           <g 
@@ -2500,32 +2546,26 @@ const MapManagement: React.FC = () => {
             onDoubleClick={() => handleLineDoubleClick(line)} 
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
+            {/* 当前线 */}
             <line
-              x1={startPoint.x + perpX}
-              y1={startPoint.y + perpY}
-              x2={endPoint.x + perpX}
-              y2={endPoint.y + perpY}
+              x1={startPoint.x}
+              y1={startPoint.y}
+              x2={endPoint.x}
+              y2={endPoint.y}
               stroke={selectedStroke}
               strokeWidth={selectedStrokeWidth}
-              style={{ filter: isSelected ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
+              style={{ 
+                filter: isSelected ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none',
+                opacity: opacity
+              }}
             />
-            <line
-              x1={startPoint.x - perpX}
-              y1={startPoint.y - perpY}
-              x2={endPoint.x - perpX}
-              y2={endPoint.y - perpY}
-              stroke={selectedStroke}
-              strokeWidth={selectedStrokeWidth}
-              style={{ filter: isSelected ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
-            />
-            {/* 双向箭头 */}
-            {renderArrow(endPoint.x + perpX, endPoint.y + perpY, angle, selectedStroke, `${line.id}-end-arrow`)}
-            {renderArrow(startPoint.x - perpX, startPoint.y - perpY, angle + Math.PI, selectedStroke, `${line.id}-start-arrow`)}
+            {/* 箭头指向终点 */}
+            {renderArrow(endPoint.x, endPoint.y, angle, selectedStroke, `${line.id}-arrow`)}
           </g>
         );
         
       case 'single-line':
-        // 单行直线，单向箭头指向终点
+        // 单向直线，单向箭头指向终点
         const isSelectedSingle = isLineSelected(line.id);
         const selectedStrokeSingle = isSelectedSingle ? '#1890ff' : lineColor;
         const selectedStrokeWidthSingle = isSelectedSingle ? '4' : '2';
@@ -2621,11 +2661,98 @@ const MapManagement: React.FC = () => {
   
   // 线双击事件处理
   const handleLineDoubleClick = (line: MapLine) => {
-    setEditingLine(line);
-    lineEditForm.setFieldsValue({
-      name: line.name,
-      type: line.type === 'double-line' || line.type === 'single-line' ? 'execution' : 'bezier'
-    });
+    // 如果是双向直线，实现双击切换功能
+    if (line.type === 'double-line' && line.pairedLineId) {
+      // 获取当前双击计数（基于配对线组）
+      const pairKey = [line.id, line.pairedLineId].sort().join('_');
+      const currentCount = doubleLineClickCount[pairKey] || 0;
+      const newCount = currentCount + 1;
+      
+      // 更新双击计数
+      setDoubleLineClickCount(prev => ({
+        ...prev,
+        [pairKey]: newCount
+      }));
+      
+      // 确定要编辑的线：奇数次编辑forward线，偶数次编辑backward线
+      let targetLine: MapLine;
+      if (newCount % 2 === 1) {
+        // 第一次双击：编辑forward线
+        targetLine = line.direction === 'forward' ? line : mapLines.find(l => l.id === line.pairedLineId) || line;
+      } else {
+        // 第二次双击：编辑backward线
+        targetLine = line.direction === 'backward' ? line : mapLines.find(l => l.id === line.pairedLineId) || line;
+      }
+      
+      setEditingLine(targetLine);
+      
+      // 根据方向设置表单
+      const directionText = targetLine.direction === 'forward' ? '第一条线（A→B）' : '第二条线（B→A）';
+      
+      lineEditForm.setFieldsValue({
+        name: targetLine.name,
+        type: 'execution',
+        direction: directionText
+      });
+      
+      message.info(`正在编辑双向直线的${directionText}`);
+    } else if (line.type === 'single-line') {
+      // 单向直线：检查是否有重叠的其他单向线
+      const overlappingLines = mapLines.filter(l => 
+        l.id !== line.id && 
+        l.type === 'single-line' &&
+        ((l.startPointId === line.startPointId && l.endPointId === line.endPointId) ||
+         (l.startPointId === line.endPointId && l.endPointId === line.startPointId))
+      );
+      
+      if (overlappingLines.length > 0) {
+        // 有重叠线，实现切换功能
+        const allOverlappingLines = [line, ...overlappingLines];
+        const lineIds = allOverlappingLines.map(l => l.id).sort();
+        const pairKey = lineIds.join('_');
+        const currentCount = doubleLineClickCount[pairKey] || 0;
+        const newCount = currentCount + 1;
+        
+        // 更新双击计数
+        setDoubleLineClickCount(prev => ({
+          ...prev,
+          [pairKey]: newCount
+        }));
+        
+        // 根据双击次数选择要编辑的线
+        const targetLineIndex = (newCount - 1) % allOverlappingLines.length;
+        const targetLine = allOverlappingLines[targetLineIndex];
+        
+        setEditingLine(targetLine);
+        
+        // 设置表单，显示当前编辑的是第几条线
+        const lineNumber = targetLineIndex + 1;
+        const totalLines = allOverlappingLines.length;
+        
+        lineEditForm.setFieldsValue({
+          name: targetLine.name,
+          type: 'execution',
+          direction: `第${lineNumber}条线（共${totalLines}条重叠线）`
+        });
+        
+        message.info(`正在编辑第${lineNumber}条重叠线（共${totalLines}条）`);
+      } else {
+        // 没有重叠线，正常编辑
+        setEditingLine(line);
+        lineEditForm.setFieldsValue({
+          name: line.name,
+          type: 'execution'
+        });
+      }
+    } else {
+       // 贝塞尔曲线的原有逻辑
+       setEditingLine(line);
+       lineEditForm.setFieldsValue({
+           name: line.name,
+           type: 'bezier'
+         });
+     }
+    
     setLineEditModalVisible(true);
   };
 
@@ -5238,7 +5365,7 @@ const MapManagement: React.FC = () => {
                         <div style={{ width: '16px', height: '1px', background: '#1890ff', marginBottom: '2px' }}></div>
                         <div style={{ width: '16px', height: '1px', background: '#1890ff' }}></div>
                       </div>
-                      双行直线
+                      双向直线
                     </Button>
                     
                     <Button 
@@ -5256,7 +5383,7 @@ const MapManagement: React.FC = () => {
                       }}
                     >
                       <div style={{ width: '16px', height: '1px', background: '#1890ff', marginRight: '8px' }}></div>
-                      单行直线
+                      单向直线
                     </Button>
                     
                     <Button 
@@ -5670,7 +5797,11 @@ const MapManagement: React.FC = () => {
       
       {/* 线属性编辑弹窗 */}
       <Modal
-        title="线属性"
+        title={
+          editingLine?.type === 'double-line' && editingLine?.direction
+            ? `双向直线属性 - ${editingLine.direction === 'forward' ? '第一条线（A→B）' : '第二条线（B→A）'}`
+            : '线属性'
+        }
         open={lineEditModalVisible}
         onCancel={() => {
           setLineEditModalVisible(false);
@@ -5691,6 +5822,26 @@ const MapManagement: React.FC = () => {
         ]}
         width={600}
       >
+        {/* 线编辑切换提示 */}
+        {editingLine?.type === 'double-line' && (
+          <Alert
+            message="双向直线编辑提示"
+            description="双击双向直线可以在第一条线（A→B）和第二条线（B→A）之间切换编辑。当前正在编辑的方向已在下方显示。"
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+        {editingLine?.type === 'single-line' && lineEditForm.getFieldValue('direction')?.includes('重叠线') && (
+          <Alert
+            message="重叠线编辑提示"
+            description="双击重叠的线可以在多条重叠线之间切换编辑。当前正在编辑的线信息已在下方显示。"
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+        )}
+        
         <Form
           form={lineEditForm}
           layout="vertical"
@@ -5746,6 +5897,33 @@ const MapManagement: React.FC = () => {
                 </Radio.Group>
               </Form.Item>
             </Col>
+          </Row>
+          
+          {/* 方向显示（双向直线或重叠单向线） */}
+          {(editingLine?.type === 'double-line' || 
+            (editingLine?.type === 'single-line' && lineEditForm.getFieldValue('direction'))) && (
+            <Row gutter={16}>
+              <Col span={24}>
+                <Form.Item
+                  name="direction"
+                  label="当前编辑方向"
+                  style={{ marginBottom: 16 }}
+                >
+                  <Input 
+                    disabled 
+                    style={{ 
+                      color: '#1890ff', 
+                      fontWeight: 'bold',
+                      background: '#f0f8ff',
+                      border: '1px solid #1890ff'
+                    }} 
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          )}
+          
+          <Row gutter={16}>
             <Col span={12}>
               <Form.Item
                 label="线长度"
