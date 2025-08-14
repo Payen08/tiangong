@@ -30,6 +30,7 @@ import {
   Alert,
   List,
   Collapse,
+  Select,
 } from 'antd';
 import type { RadioChangeEvent } from 'antd';
 import type { ChangeEvent } from 'react';
@@ -205,6 +206,30 @@ const MapManagement: React.FC = () => {
   const [addMapFileLoading, setAddMapFileLoading] = useState(false);
   const [currentMapFileName, setCurrentMapFileName] = useState<string>(''); // 当前地图文件名称
   
+  // 地图信息相关状态
+  const [mapInfo, setMapInfo] = useState({
+    mapName: '新建地图文件',
+    originX: 0,
+    originY: 0,
+    direction: 0, // -180 到 180
+    width: 100, // 单位：米
+    height: 100, // 单位：米
+    resolution: 0.05 // 分辨率
+  });
+  
+  // 计算机器人扫图范围
+  const calculateScanArea = () => {
+    return (mapInfo.width * mapInfo.height).toFixed(2);
+  };
+
+  // 根据分辨率计算比例换算
+  const calculateScale = () => {
+    // 分辨率单位为m/pixel，转换为cm/pixel后计算比例
+    const cmPerPixel = mapInfo.resolution * 100;
+    const ratio = Math.round(cmPerPixel);
+    return `1:${ratio}`;
+  };
+  
   // 连线数据类型
   interface MapLine {
     id: string;
@@ -219,7 +244,7 @@ const MapManagement: React.FC = () => {
   }
 
   // 地图编辑器状态
-  const [selectedTool, setSelectedTool] = useState<string>(''); // 当前选中的工具
+  const [selectedTool, setSelectedTool] = useState<string>('select'); // 当前选中的工具，默认选中选择工具
   const [mapType, setMapType] = useState<'topology' | 'grayscale'>('topology'); // 地图类型：拓扑地图或黑白底图
   const [currentMode, setCurrentMode] = useState<'edit' | 'view'>('edit'); // 当前模式：编辑模式或阅览模式
   const [exitEditModalVisible, setExitEditModalVisible] = useState(false); // 退出编辑模式确认弹窗
@@ -273,7 +298,7 @@ const MapManagement: React.FC = () => {
   const [pageSize, setPageSize] = useState(10);
   
   // 右侧信息面板标签页状态
-  const [activeTabKey, setActiveTabKey] = useState('basic');
+  const [activeTabKey, setActiveTabKey] = useState('tools'); // 默认选中绘图工具Tab
 
   // 搜索功能状态
   const [searchValue, setSearchValue] = useState('');
@@ -589,6 +614,9 @@ const MapManagement: React.FC = () => {
 
   // 框选状态引用
   const wasJustSelecting = React.useRef(false);
+  
+  // 防抖引用 - 防止React.StrictMode导致的重复点击
+  const lastClickTime = React.useRef(0);
 
   // 屏幕坐标转画布坐标函数
   const screenToCanvasCoordinates = (screenX: number, screenY: number, canvasElement: HTMLDivElement) => {
@@ -596,11 +624,102 @@ const MapManagement: React.FC = () => {
     const relativeX = screenX - rect.left;
     const relativeY = screenY - rect.top;
     
-    // 考虑画布变换：scale(canvasScale) translate(canvasOffset.x, canvasOffset.y)
+    // CSS transform: scale(canvasScale) translate(canvasOffset.x, canvasOffset.y)
+    // 变换顺序：先缩放，再平移
+    // 逆变换：先减去平移，再除以缩放
+    // 但是CSS中的translate是在缩放后的坐标系中，所以需要先除以缩放，再减去偏移
     const canvasX = (relativeX / canvasScale) - canvasOffset.x;
     const canvasY = (relativeY / canvasScale) - canvasOffset.y;
     
+    // 调试日志
+    console.log('🔍 [坐标转换调试] screenToCanvasCoordinates (修复后):', {
+      输入: { screenX, screenY },
+      画布边界: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+      相对坐标: { relativeX, relativeY },
+      画布状态: { canvasScale, canvasOffset },
+      计算过程: {
+        step1_除以缩放: { x: relativeX / canvasScale, y: relativeY / canvasScale },
+        step2_减去偏移: { x: (relativeX / canvasScale) - canvasOffset.x, y: (relativeY / canvasScale) - canvasOffset.y }
+      },
+      最终结果: { canvasX, canvasY }
+    });
+    
     return { x: canvasX, y: canvasY };
+  };
+
+  // 专门的坐标转换验证函数
+  const debugCoordinateTransformation = (screenX: number, screenY: number, canvasElement: HTMLDivElement) => {
+    const rect = canvasElement.getBoundingClientRect();
+    const relativeX = screenX - rect.left;
+    const relativeY = screenY - rect.top;
+    
+    // 修复后的转换逻辑
+    const canvasX = (relativeX / canvasScale) - canvasOffset.x;
+    const canvasY = (relativeY / canvasScale) - canvasOffset.y;
+    
+    // 反向验证：画布坐标转回屏幕坐标
+    const backToRelativeX = (canvasX + canvasOffset.x) * canvasScale;
+    const backToRelativeY = (canvasY + canvasOffset.y) * canvasScale;
+    const backToScreenX = backToRelativeX + rect.left;
+    const backToScreenY = backToRelativeY + rect.top;
+    
+    console.log('🔍 [坐标转换验证] 详细分析 (修复后):', {
+      '1_输入屏幕坐标': `{x: ${screenX}, y: ${screenY}}`,
+      '2_画布边界信息': {
+        left: rect.left.toFixed(2),
+        top: rect.top.toFixed(2),
+        width: rect.width.toFixed(2),
+        height: rect.height.toFixed(2)
+      },
+      '3_相对画布坐标': `{x: ${relativeX.toFixed(2)}, y: ${relativeY.toFixed(2)}}`,
+      '4_当前画布状态': {
+        canvasScale: canvasScale.toFixed(3),
+        canvasOffset: `{x: ${canvasOffset.x.toFixed(2)}, y: ${canvasOffset.y.toFixed(2)}}`
+      },
+      '5_转换后画布坐标': `{x: ${canvasX.toFixed(2)}, y: ${canvasY.toFixed(2)}}`,
+      '6_反向验证': {
+        backToRelative: `{x: ${backToRelativeX.toFixed(2)}, y: ${backToRelativeY.toFixed(2)}}`,
+        backToScreen: `{x: ${backToScreenX.toFixed(2)}, y: ${backToScreenY.toFixed(2)}}`
+      },
+      '7_坐标转换误差': {
+        x_error: Math.abs(screenX - backToScreenX).toFixed(2),
+        y_error: Math.abs(screenY - backToScreenY).toFixed(2)
+      }
+    });
+    
+    return { canvasX, canvasY, backToScreenX, backToScreenY };
+  };
+
+  // 画布坐标转屏幕坐标函数
+  const canvasToScreenCoordinates = (canvasX: number, canvasY: number) => {
+    if (!canvasRef.current) return { x: 0, y: 0 };
+    
+    const rect = canvasRef.current.getBoundingClientRect();
+    
+    // 正确的逆变换：这是 screenToCanvasCoordinates 的完全逆变换
+    // screenToCanvasCoordinates: canvasX = (relativeX / canvasScale) - canvasOffset.x
+    // 其中 relativeX = screenX - rect.left
+    // 所以：canvasX = ((screenX - rect.left) / canvasScale) - canvasOffset.x
+    // 逆变换：screenX = (canvasX + canvasOffset.x) * canvasScale + rect.left
+    
+    const screenX = (canvasX + canvasOffset.x) * canvasScale + rect.left;
+    const screenY = (canvasY + canvasOffset.y) * canvasScale + rect.top;
+    
+    // 调试日志（减少频繁输出）
+    if (Math.random() < 0.02) {
+      console.log('🔄 [坐标转换调试] canvasToScreenCoordinates (修复后):', {
+        输入: { canvasX: canvasX.toFixed(2), canvasY: canvasY.toFixed(2) },
+        画布边界: { left: rect.left.toFixed(2), top: rect.top.toFixed(2) },
+        画布状态: { canvasScale: canvasScale.toFixed(3), canvasOffset: `{x: ${canvasOffset.x.toFixed(2)}, y: ${canvasOffset.y.toFixed(2)}}` },
+        计算公式: {
+          X轴: `(${canvasX.toFixed(2)} + ${canvasOffset.x.toFixed(2)}) * ${canvasScale.toFixed(3)} + ${rect.left.toFixed(2)} = ${screenX.toFixed(2)}`,
+          Y轴: `(${canvasY.toFixed(2)} + ${canvasOffset.y.toFixed(2)}) * ${canvasScale.toFixed(3)} + ${rect.top.toFixed(2)} = ${screenY.toFixed(2)}`
+        },
+        最终结果: { screenX: screenX.toFixed(2), screenY: screenY.toFixed(2) }
+      });
+    }
+    
+    return { x: screenX, y: screenY };
   };
 
   // 根据ID获取点数据
@@ -1793,7 +1912,7 @@ const MapManagement: React.FC = () => {
     setAddMapFileStep(1);
     setCurrentMapFileName(''); // 重置地图文件名称
     // 重置地图编辑器状态
-    setSelectedTool('');
+    setSelectedTool('select'); // 重置为默认的选择工具
     setMapType('topology'); // 重置为默认的拓扑地图
     setCurrentMode('edit'); // 重置为编辑模式
     setMapPoints(defaultMapPoints);
@@ -1805,6 +1924,7 @@ const MapManagement: React.FC = () => {
     setEditingPoint(null);
     setPointEditModalVisible(false);
     pointEditForm.resetFields();
+    setActiveTabKey('tools'); // 重置为默认的绘图工具Tab
   };
   
   // 新的顶部工具栏处理函数
@@ -2056,6 +2176,18 @@ const MapManagement: React.FC = () => {
     // 设置画布被点击状态，用于启用双指缩放功能
     setIsCanvasClicked(true);
     
+    // 防抖逻辑 - 防止React.StrictMode导致的重复点击
+    const currentTime = Date.now();
+    if (currentTime - lastClickTime.current < 100) { // 100ms内的重复点击将被忽略
+      console.log('🚫 [防抖] 检测到重复点击，忽略此次点击', {
+        时间间隔: currentTime - lastClickTime.current,
+        上次点击时间: lastClickTime.current,
+        当前点击时间: currentTime
+      });
+      return;
+    }
+    lastClickTime.current = currentTime;
+    
     // 如果点击的是地图点，不处理画布点击
     if ((event.target as Element).closest('.map-point')) {
       return;
@@ -2074,7 +2206,35 @@ const MapManagement: React.FC = () => {
     
     if (selectedTool === 'point') {
       const canvasElement = event.currentTarget;
+      
+      // 详细的坐标转换调试
+      console.log('🎯 [完整坐标流程] handleCanvasClick开始', {
+        原始事件坐标: { 
+          clientX: event.clientX, 
+          clientY: event.clientY,
+          offsetX: (event as any).offsetX,
+          offsetY: (event as any).offsetY
+        },
+        画布元素信息: {
+          tagName: canvasElement.tagName,
+          className: canvasElement.className,
+          rect: canvasElement.getBoundingClientRect()
+        },
+        当前画布状态: {
+          canvasScale: canvasScale,
+          canvasOffset: canvasOffset
+        },
+        timestamp: new Date().toISOString()
+      });
+      
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+      
+      console.log('🎯 [完整坐标流程] 坐标转换完成', {
+        输入屏幕坐标: { clientX: event.clientX, clientY: event.clientY },
+        输出画布坐标: { x, y },
+        即将创建点的位置: { x, y },
+        timestamp: new Date().toISOString()
+      });
       
       // 清除线的选中状态
       if (selectedLines.length > 0) {
@@ -2151,7 +2311,16 @@ const MapManagement: React.FC = () => {
          // 添加一些边距使框选框更明显
          const padding = 15;
          const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
-         const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };         setSelectionStart(newSelectionStart);
+         const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
+         
+         console.log('🎯 [选中点框选] 设置框选坐标', {
+           选中点数量: newSelectedPoints.length,
+           画布坐标范围: { pointMinX, pointMaxX, pointMinY, pointMaxY },
+           框选起始坐标: newSelectionStart,
+           框选结束坐标: newSelectionEnd
+         });
+         
+         setSelectionStart(newSelectionStart);
          setSelectionEnd(newSelectionEnd);
       } else {        // 没有选中点时清除框选
         setSelectionStart(null);
@@ -2302,7 +2471,16 @@ const MapManagement: React.FC = () => {
       event.stopPropagation();
       
       const canvasElement = event.currentTarget;
+      
+      // 使用坐标转换函数将屏幕坐标转换为画布坐标
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+      
+      // 调试日志 - 框选开始
+       console.log('📦 [框选调试] handleSelectionStart 详细数据 (修复后):', {
+          '1_鼠标屏幕坐标': `{clientX: ${event.clientX}, clientY: ${event.clientY}}`,
+          '2_转换后画布坐标': `{x: ${x.toFixed(2)}, y: ${y.toFixed(2)}}`,
+          '3_画布状态': `{scale: ${canvasScale.toFixed(3)}, offset: {x: ${canvasOffset.x.toFixed(2)}, y: ${canvasOffset.y.toFixed(2)}}}`
+        });
       
       setIsSelecting(true);
       setSelectionStart({ x, y });
@@ -2319,7 +2497,18 @@ const MapManagement: React.FC = () => {
       // 添加全局事件监听
       const handleGlobalMouseMove = (e: MouseEvent) => {
          if (canvasRef.current) {
+           // 使用坐标转换函数将屏幕坐标转换为画布坐标
            const { x: newX, y: newY } = screenToCanvasCoordinates(e.clientX, e.clientY, canvasRef.current);
+           
+           // 调试日志 - 框选移动（减少频繁输出）
+            if (Math.random() < 0.05) { // 只输出5%的调用
+              console.log('📦 [框选调试] handleGlobalMouseMove 详细数据 (修复后):', {
+                '1_鼠标屏幕坐标': `{clientX: ${e.clientX}, clientY: ${e.clientY}}`,
+                '2_转换后画布坐标': `{x: ${newX.toFixed(2)}, y: ${newY.toFixed(2)}}`,
+                '3_框选起始点': `{x: ${capturedSelectionStart.x.toFixed(2)}, y: ${capturedSelectionStart.y.toFixed(2)}}`,
+                '4_画布状态': `{scale: ${canvasScale.toFixed(3)}, offset: {x: ${canvasOffset.x.toFixed(2)}, y: ${canvasOffset.y.toFixed(2)}}}`
+              });
+            }
            
            // 更新UI状态
            setSelectionEnd({ x: newX, y: newY });
@@ -2357,7 +2546,8 @@ const MapManagement: React.FC = () => {
   // 框选结束处理（带状态参数）
   const handleSelectionEndWithState = (wasSelecting: boolean, startPos: {x: number, y: number} | null, endPos: {x: number, y: number} | null) => {
     if (wasSelecting && startPos && endPos) {
-      // 计算框选区域
+      // startPos和endPos已经是画布坐标，直接使用即可
+      // 计算框选区域（画布坐标）
       const minX = Math.min(startPos.x, endPos.x);
       const maxX = Math.max(startPos.x, endPos.x);
       const minY = Math.min(startPos.y, endPos.y);
@@ -2368,8 +2558,14 @@ const MapManagement: React.FC = () => {
       const height = maxY - minY;
       const minSelectionSize = 3; // 降低最小框选尺寸
       
+      console.log('🎯 [框选调试] 框选结束处理:', {
+        '画布坐标': { startPos, endPos },
+        '框选区域': { minX: minX.toFixed(2), maxX: maxX.toFixed(2), minY: minY.toFixed(2), maxY: maxY.toFixed(2) },
+        '区域大小': { width: width.toFixed(2), height: height.toFixed(2) }
+      });
+      
       if (width > minSelectionSize || height > minSelectionSize) {
-        // 找出在框选区域内的点
+        // 找出在框选区域内的点（使用画布坐标判断）
         const selectedPointIds = mapPoints
           .filter(point => {
             const inSelection = point.x >= minX && point.x <= maxX && 
@@ -2448,6 +2644,10 @@ const MapManagement: React.FC = () => {
       prev.filter(point => !selectedPoints.includes(point.id))
     );
     setSelectedPoints([]);
+    // 清除框选框显示
+    setSelectionStart(null);
+    setSelectionEnd(null);
+    setIsSelecting(false);
     message.success(`已删除 ${selectedPoints.length} 个点`);
   };
 
@@ -2455,12 +2655,19 @@ const MapManagement: React.FC = () => {
   const handleDeleteSelectedLines = () => {
     if (selectedLines.length === 0) {
       return;
-    }    setMapLines(prev => 
+    }
+    
+    setMapLines(prev => 
       prev.filter(line => !selectedLines.includes(line.id))
     );
     
     const deletedCount = selectedLines.length;
-    setSelectedLines([]);    message.success(`已删除 ${deletedCount} 条线`);
+    setSelectedLines([]);
+    // 清除框选框显示
+    setSelectionStart(null);
+    setSelectionEnd(null);
+    setIsSelecting(false);
+    message.success(`已删除 ${deletedCount} 条线`);
   };
 
   // 键盘事件处理
@@ -2607,9 +2814,22 @@ const MapManagement: React.FC = () => {
       return null;
     }
 
+    // 直接使用画布坐标，避免双重变换
+    const startCoords = { x: startPoint.x, y: startPoint.y };
+    const endCoords = { x: endPoint.x, y: endPoint.y };
+    
+    console.log('🔗 [连线坐标] 详细数据:', {
+      '1_起始点画布坐标': `{x: ${startCoords.x.toFixed(2)}, y: ${startCoords.y.toFixed(2)}}`,
+      '2_结束点画布坐标': `{x: ${endCoords.x.toFixed(2)}, y: ${endCoords.y.toFixed(2)}}`,
+      '3_当前画布状态': {
+        canvasScale: canvasScale.toFixed(3),
+        canvasOffset: `{x: ${canvasOffset.x.toFixed(2)}, y: ${canvasOffset.y.toFixed(2)}}`
+      }
+    });
+
     const lineColor = line.color || '#87CEEB';
-    const dx = endPoint.x - startPoint.x;
-    const dy = endPoint.y - startPoint.y;
+    const dx = endCoords.x - startCoords.x;
+    const dy = endCoords.y - startCoords.y;
     const angle = Math.atan2(dy, dx);
     
     switch (line.type) {
@@ -2631,10 +2851,10 @@ const MapManagement: React.FC = () => {
           >
             {/* 当前线 */}
             <line
-              x1={startPoint.x}
-              y1={startPoint.y}
-              x2={endPoint.x}
-              y2={endPoint.y}
+              x1={startCoords.x}
+              y1={startCoords.y}
+              x2={endCoords.x}
+              y2={endCoords.y}
               stroke={selectedStroke}
               strokeWidth={selectedStrokeWidth}
               style={{ 
@@ -2643,7 +2863,7 @@ const MapManagement: React.FC = () => {
               }}
             />
             {/* 箭头指向终点 */}
-            {renderArrow(endPoint.x, endPoint.y, angle, selectedStroke, `${line.id}-arrow`)}
+            {renderArrow(endCoords.x, endCoords.y, angle, selectedStroke, `${line.id}-arrow`)}
           </g>
         );
         
@@ -2661,24 +2881,24 @@ const MapManagement: React.FC = () => {
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
             <line
-              x1={startPoint.x}
-              y1={startPoint.y}
-              x2={endPoint.x}
-              y2={endPoint.y}
+              x1={startCoords.x}
+              y1={startCoords.y}
+              x2={endCoords.x}
+              y2={endCoords.y}
               stroke={selectedStrokeSingle}
               strokeWidth={selectedStrokeWidthSingle}
               style={{ filter: isSelectedSingle ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
             />
             {/* 单向箭头指向终点 */}
-            {renderArrow(endPoint.x, endPoint.y, angle, selectedStrokeSingle, `${line.id}-arrow`)}
+            {renderArrow(endCoords.x, endCoords.y, angle, selectedStrokeSingle, `${line.id}-arrow`)}
           </g>
         );
         
       case 'double-bezier':
         // 双向贝塞尔曲线，双向箭头
-        const midX = (startPoint.x + endPoint.x) / 2;
-        const midY = (startPoint.y + endPoint.y) / 2;
-        const controlOffset = 50;
+        const midX = (startCoords.x + endCoords.x) / 2;
+        const midY = (startCoords.y + endCoords.y) / 2;
+        const controlOffset = 50 * canvasScale; // 控制点偏移也需要根据缩放调整
         const isSelectedDoubleBezier = isLineSelected(line.id);
         const selectedStrokeDoubleBezier = isSelectedDoubleBezier ? '#1890ff' : lineColor;
         const selectedStrokeWidthDoubleBezier = isSelectedDoubleBezier ? '4' : '2';
@@ -2691,29 +2911,29 @@ const MapManagement: React.FC = () => {
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
             <path
-              d={`M ${startPoint.x} ${startPoint.y} Q ${midX} ${midY - controlOffset} ${endPoint.x} ${endPoint.y}`}
+              d={`M ${startCoords.x} ${startCoords.y} Q ${midX} ${midY - controlOffset} ${endCoords.x} ${endCoords.y}`}
               stroke={selectedStrokeDoubleBezier}
               strokeWidth={selectedStrokeWidthDoubleBezier}
               fill="none"
               style={{ filter: isSelectedDoubleBezier ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
             />
             <path
-              d={`M ${startPoint.x} ${startPoint.y} Q ${midX} ${midY + controlOffset} ${endPoint.x} ${endPoint.y}`}
+              d={`M ${startCoords.x} ${startCoords.y} Q ${midX} ${midY + controlOffset} ${endCoords.x} ${endCoords.y}`}
               stroke={selectedStrokeDoubleBezier}
               strokeWidth={selectedStrokeWidthDoubleBezier}
               fill="none"
               style={{ filter: isSelectedDoubleBezier ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
             />
             {/* 双向箭头 */}
-            {renderArrow(endPoint.x, endPoint.y, angle, selectedStrokeDoubleBezier, `${line.id}-end-arrow`)}
-            {renderArrow(startPoint.x, startPoint.y, angle + Math.PI, selectedStrokeDoubleBezier, `${line.id}-start-arrow`)}
+            {renderArrow(endCoords.x, endCoords.y, angle, selectedStrokeDoubleBezier, `${line.id}-end-arrow`)}
+            {renderArrow(startCoords.x, startCoords.y, angle + Math.PI, selectedStrokeDoubleBezier, `${line.id}-start-arrow`)}
           </g>
         );
         
       case 'single-bezier':
         // 单向贝塞尔曲线，单向箭头指向终点
-        const controlX = (startPoint.x + endPoint.x) / 2;
-        const controlY = (startPoint.y + endPoint.y) / 2 - 30;
+        const controlX = (startCoords.x + endCoords.x) / 2;
+        const controlY = (startCoords.y + endCoords.y) / 2 - 30 * canvasScale; // 控制点偏移也需要根据缩放调整
         const isSelectedSingleBezier = isLineSelected(line.id);
         const selectedStrokeSingleBezier = isSelectedSingleBezier ? '#1890ff' : lineColor;
         const selectedStrokeWidthSingleBezier = isSelectedSingleBezier ? '4' : '2';
@@ -2726,14 +2946,14 @@ const MapManagement: React.FC = () => {
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
             <path
-              d={`M ${startPoint.x} ${startPoint.y} Q ${controlX} ${controlY} ${endPoint.x} ${endPoint.y}`}
+              d={`M ${startCoords.x} ${startCoords.y} Q ${controlX} ${controlY} ${endCoords.x} ${endCoords.y}`}
               stroke={selectedStrokeSingleBezier}
               strokeWidth={selectedStrokeWidthSingleBezier}
               fill="none"
               style={{ filter: isSelectedSingleBezier ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
             />
             {/* 单向箭头指向终点 */}
-            {renderArrow(endPoint.x, endPoint.y, angle, selectedStrokeSingleBezier, `${line.id}-arrow`)}
+            {renderArrow(endCoords.x, endCoords.y, angle, selectedStrokeSingleBezier, `${line.id}-arrow`)}
           </g>
         );
         
@@ -2905,8 +3125,10 @@ const MapManagement: React.FC = () => {
   };
   
   // 获取框选区域样式
-  const getSelectionBoxStyle = () => {    // 如果有选中的点但没有框选坐标，动态计算框选区域
-    if ((!selectionStart || !selectionEnd) && selectedPoints.length > 0) {      const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
+  const getSelectionBoxStyle = () => {
+    // 如果有选中的点但没有框选坐标，动态计算框选区域
+    if ((!selectionStart || !selectionEnd) && selectedPoints.length > 0) {
+      const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
       if (selectedPointsData.length > 0) {
         // 考虑点的实际大小（半径8px）和选中时的缩放（1.2倍）
         const pointRadius = 8 * 1.2;
@@ -2925,42 +3147,74 @@ const MapManagement: React.FC = () => {
         const width = Math.abs(dynamicEnd.x - dynamicStart.x);
         const height = Math.abs(dynamicEnd.y - dynamicStart.y);
         
+        // 将画布坐标转换为屏幕坐标
+        const screenStart = canvasToScreenCoordinates(minX, minY);
+        const screenWidth = width * canvasScale;
+        const screenHeight = height * canvasScale;
+        
         const style = {
           position: 'absolute' as const,
-          left: minX,
-          top: minY,
-          width: Math.max(width, 1),
-          height: Math.max(height, 1),
+          left: screenStart.x,
+          top: screenStart.y,
+          width: Math.max(screenWidth, 1),
+          height: Math.max(screenHeight, 1),
           border: '2px dashed #1890ff',
           background: 'rgba(24, 144, 255, 0.1)',
           pointerEvents: 'none' as const,
           zIndex: 5,
           boxSizing: 'border-box' as const
-        };        return style;
+        };
+        return style;
       }
     }
     
     // 隐藏框选框的条件：没有框选区域坐标且没有选中点，或者既不在选择中也没有选中点
-    if ((!selectionStart || !selectionEnd) && selectedPoints.length === 0) {      return { display: 'none' };
+    if ((!selectionStart || !selectionEnd) && selectedPoints.length === 0) {
+      return { display: 'none' };
     }
     
     // 如果没有坐标但在选择中，也隐藏（避免显示错误的框选框）
-    if ((!selectionStart || !selectionEnd) && isSelecting) {      return { display: 'none' };
+    if ((!selectionStart || !selectionEnd) && isSelecting) {
+      return { display: 'none' };
     }
     
     // 确保selectionStart和selectionEnd不为null
-    if (!selectionStart || !selectionEnd) {      return { display: 'none' };
+    if (!selectionStart || !selectionEnd) {
+      return { display: 'none' };
     }
     
+    // 🔧 关键修复：框选框在transform容器内，直接使用画布坐标，不需要转换为屏幕坐标
+    // 因为框选框的父容器已经有了transform变换，所以直接使用画布坐标即可
     const minX = Math.min(selectionStart.x, selectionEnd.x);
     const minY = Math.min(selectionStart.y, selectionEnd.y);
     const width = Math.abs(selectionEnd.x - selectionStart.x);
     const height = Math.abs(selectionEnd.y - selectionStart.y);
     
-    // 确保最小尺寸，避免框选框太小看不见
-    const minSize = 1;
-    const finalWidth = Math.max(width, minSize);
-    const finalHeight = Math.max(height, minSize);
+    const finalWidth = Math.max(width, 1); // 确保最小尺寸
+    const finalHeight = Math.max(height, 1);
+    
+    // 调试日志 - 框选框样式计算（减少频繁输出）
+    if (Math.random() < 0.1) { // 只输出10%的调用
+      console.log('🎨 [框选调试] getSelectionBoxStyle 详细数据 (最终修复):', {
+        '1_画布坐标': { 
+          selectionStart: selectionStart ? `{x: ${selectionStart.x.toFixed(2)}, y: ${selectionStart.y.toFixed(2)}}` : null,
+          selectionEnd: selectionEnd ? `{x: ${selectionEnd.x.toFixed(2)}, y: ${selectionEnd.y.toFixed(2)}}` : null
+        },
+        '2_直接计算结果': { 
+          minX: minX.toFixed(2), 
+          minY: minY.toFixed(2), 
+          width: width.toFixed(2), 
+          height: height.toFixed(2) 
+        },
+        '3_最终样式': { 
+          left: minX.toFixed(2), 
+          top: minY.toFixed(2), 
+          width: finalWidth.toFixed(2), 
+          height: finalHeight.toFixed(2) 
+        },
+        '4_说明': '框选框在transform容器内，直接使用画布坐标'
+      });
+    }
     
     const style = {
       position: 'absolute' as const,
@@ -2973,7 +3227,8 @@ const MapManagement: React.FC = () => {
       pointerEvents: 'none' as const,
       zIndex: 5,
       boxSizing: 'border-box' as const
-    };    return style;
+    };
+    return style;
   };
 
   // 渲染展开的地图文件内容
@@ -5270,7 +5525,6 @@ const MapManagement: React.FC = () => {
                           textAlign: 'center',
                           fontWeight: 500
                         }}>
-                          <EditOutlined style={{ marginRight: '6px' }} />
                           编辑模式
                         </div>
                         <Button 
@@ -5304,9 +5558,14 @@ const MapManagement: React.FC = () => {
                         <Button 
                           type="primary"
                           onClick={handleEnterEditMode}
+                          disabled={true}
                           style={{
                             height: '32px',
-                            fontSize: '12px'
+                            fontSize: '12px',
+                            backgroundColor: '#f5f5f5',
+                            borderColor: '#d9d9d9',
+                            color: '#bfbfbf',
+                            cursor: 'not-allowed'
                           }}
                         >
                           进入编辑模式
@@ -5331,19 +5590,33 @@ const MapManagement: React.FC = () => {
                         border: mapType === 'topology' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                         borderRadius: '6px',
                         background: mapType === 'topology' ? '#e6f7ff' : '#fff',
-                        fontSize: '13px'
+                        fontSize: '13px',
+                        color: mapType === 'topology' ? '#1890ff' : '#666'
                       }}
                     >
-                      <div style={{
-                        width: '14px',
-                        height: '14px',
-                        marginRight: '6px',
-                        background: 'linear-gradient(45deg, #1890ff 25%, transparent 25%, transparent 75%, #1890ff 75%), linear-gradient(45deg, #1890ff 25%, transparent 25%, transparent 75%, #1890ff 75%)',
-                        backgroundSize: '4px 4px',
-                        backgroundPosition: '0 0, 2px 2px',
-                        border: '1px solid #1890ff',
-                        borderRadius: '2px'
-                      }}></div>
+                      <svg 
+                        width="14" 
+                        height="14" 
+                        viewBox="0 0 24 24" 
+                        fill="none" 
+                        stroke="#1890ff" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                        style={{ marginRight: '6px' }}
+                      >
+                        <circle cx="12" cy="12" r="3"/>
+                        <circle cx="6" cy="6" r="2"/>
+                        <circle cx="18" cy="6" r="2"/>
+                        <circle cx="6" cy="18" r="2"/>
+                        <circle cx="18" cy="18" r="2"/>
+                        <path d="m9 9 6 6"/>
+                        <path d="m15 9-6 6"/>
+                        <path d="m8 6 4 6"/>
+                        <path d="m16 6-4 6"/>
+                        <path d="m8 18 4-6"/>
+                        <path d="m16 18-4-6"/>
+                      </svg>
                       拓扑地图
                     </Button>
                     
@@ -5358,39 +5631,170 @@ const MapManagement: React.FC = () => {
                         border: mapType === 'grayscale' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                         borderRadius: '6px',
                         background: mapType === 'grayscale' ? '#e6f7ff' : '#fff',
-                        fontSize: '13px'
+                        fontSize: '13px',
+                        color: mapType === 'grayscale' ? '#1890ff' : '#666'
                       }}
                     >
-                      <div style={{
-                        width: '14px',
-                        height: '14px',
-                        marginRight: '6px',
-                        background: 'linear-gradient(to right, #666 0%, #999 50%, #ccc 100%)',
-                        border: '1px solid #666',
-                        borderRadius: '2px'
-                      }}></div>
+                      <svg 
+                        width="14" 
+                        height="14" 
+                        viewBox="0 0 24 24" 
+                        fill="none" 
+                        stroke="#1890ff" 
+                        strokeWidth="1.5" 
+                        strokeLinecap="round" 
+                        strokeLinejoin="round"
+                        style={{ marginRight: '6px' }}
+                      >
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        <path d="M9 9h6v6H9z"/>
+                        <path d="M3 9h6"/>
+                        <path d="M9 3v6"/>
+                        <path d="M15 3v6"/>
+                        <path d="M21 9h-6"/>
+                        <path d="M9 15v6"/>
+                        <path d="M15 15v6"/>
+                        <path d="M3 15h6"/>
+                        <path d="M15 15h6"/>
+                      </svg>
                       黑白底图
                     </Button>
                   </div>
                   
                   <Divider style={{ margin: '0 0 16px 0' }} />
                   
-                  <Title level={5} style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600 }}>基本信息</Title>
+                  <Title level={5} style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: 600 }}>地图信息</Title>
                   
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <div style={{ marginBottom: '8px' }}>
-                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图名称</div>
-                      <div style={{ fontSize: '14px', fontWeight: 500 }}>{currentMapFileName || '新建地图文件'}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div>
+                       <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图名称</div>
+                       <div style={{ 
+                         fontSize: '14px', 
+                         fontWeight: 500, 
+                         padding: '4px 11px',
+                         border: '1px solid #d9d9d9',
+                         borderRadius: '6px',
+                         backgroundColor: '#f5f5f5',
+                         color: '#666'
+                       }}>
+                         {mapInfo.mapName}
+                       </div>
+                     </div>
+                    
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图原点 (X, Y坐标)</div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <Input 
+                          value={mapInfo.originX}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, originX: Number(e.target.value) || 0})}
+                          placeholder="X坐标"
+                          size="small"
+                          type="number"
+                          style={{ flex: 1 }}
+                        />
+                        <Input 
+                          value={mapInfo.originY}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, originY: Number(e.target.value) || 0})}
+                          placeholder="Y坐标"
+                          size="small"
+                          type="number"
+                          style={{ flex: 1 }}
+                        />
+                      </div>
                     </div>
                     
-                    <div style={{ marginBottom: '8px' }}>
-                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>画布尺寸</div>
-                      <div style={{ fontSize: '14px' }}>1920 × 1080 px</div>
+                    <div>
+                       <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图方向</div>
+                       <Input 
+                         value={mapInfo.direction}
+                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, direction: Number(e.target.value) || 0})}
+                         placeholder="请输入地图方向（-180到180）"
+                         size="small"
+                         type="number"
+                         min="-180"
+                         max="180"
+                         addonAfter="°"
+                       />
+                     </div>
+                    
+                    <div>
+                       <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图长宽 (单位: m)</div>
+                       <div style={{ display: 'flex', gap: '6px' }}>
+                         <div style={{ 
+                           fontSize: '14px', 
+                           fontWeight: 500, 
+                           padding: '4px 8px',
+                           border: '1px solid #d9d9d9',
+                           borderRadius: '6px',
+                           backgroundColor: '#f5f5f5',
+                           color: '#666',
+                           textAlign: 'center',
+                           minWidth: '60px'
+                         }}>
+                           长: {mapInfo.width}m
+                         </div>
+                         <div style={{ 
+                           fontSize: '14px', 
+                           fontWeight: 500, 
+                           padding: '4px 8px',
+                           border: '1px solid #d9d9d9',
+                           borderRadius: '6px',
+                           backgroundColor: '#f5f5f5',
+                           color: '#666',
+                           textAlign: 'center',
+                           minWidth: '60px'
+                         }}>
+                           宽: {mapInfo.height}m
+                         </div>
+                       </div>
+                     </div>
+                     
+                     <div>
+                       <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>机器人扫图范围</div>
+                       <div style={{ 
+                         fontSize: '14px', 
+                         fontWeight: 500, 
+                         padding: '4px 11px',
+                         border: '1px solid #d9d9d9',
+                         borderRadius: '6px',
+                         backgroundColor: '#e6f7ff',
+                         color: '#1890ff',
+                         textAlign: 'center'
+                       }}>
+                         {calculateScanArea()} m²
+                       </div>
+                     </div>
+                    
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>分辨率 (m/pixel)</div>
+                      <Input 
+                        value={mapInfo.resolution}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, resolution: Number(e.target.value) || 0})}
+                        placeholder="请输入分辨率"
+                        size="small"
+                        type="number"
+                        step="0.001"
+                        min="0"
+                      />
                     </div>
                     
-                    <div style={{ marginBottom: '8px' }}>
-                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>网格大小</div>
-                      <div style={{ fontSize: '14px' }}>20 × 20 px</div>
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>比例换算</div>
+                      <div style={{ 
+                        fontSize: '14px', 
+                        fontWeight: 500, 
+                        padding: '4px 11px',
+                        border: '1px solid #d9d9d9',
+                        borderRadius: '6px',
+                        backgroundColor: '#f5f5f5',
+                        color: '#666',
+                        textAlign: 'center'
+                      }}>
+                        {calculateScale()}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#999', marginTop: '2px', textAlign: 'center' }}>
+                        1像素对应实际距离的比例
+                      </div>
                     </div>
                   </div>
                   
@@ -5467,7 +5871,7 @@ const MapManagement: React.FC = () => {
                       <Button 
                         type="primary" 
                         onClick={handleSubmit}
-                        style={{ minWidth: '80px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                        style={{ background: '#1890ff', borderColor: '#1890ff', minWidth: '80px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
                       >
                         提交
                       </Button>
@@ -5573,64 +5977,70 @@ const MapManagement: React.FC = () => {
                     </svg>
                     
                     {/* 绘制的点 */}
-                    {mapPoints.map((point) => (
-                      <div
-                        key={point.id}
-                        className="map-point"
-                        style={{
-                          position: 'absolute',
-                          left: point.x - 8,
-                          top: point.y - 8,
-                          width: '16px',
-                          height: '16px',
-                          borderRadius: '50%',
-                          background: getPointColor(point.type),
-                          border: isPointSelected(point.id) ? '3px solid #1890ff' : `2px solid ${getDarkerColor(getPointColor(point.type))}`,
-                          boxShadow: isPointSelected(point.id) ? '0 0 8px rgba(24, 144, 255, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.15)',
-                          cursor: getPointCursor(point.id),
-                          zIndex: 10,
-                          transform: isPointSelected(point.id) ? 'scale(1.2)' : 'scale(1)',
-                          transition: 'all 0.2s ease'
-                        }}
-                        title={`${point.name} (${point.type})`}
-                        onClick={(e) => handlePointClick(e, point.id)}
-                        onDoubleClick={(e) => handlePointDoubleClick(e, point)}
-                        onMouseEnter={() => setHoveredPoint(point.id)}
-                        onMouseLeave={() => setHoveredPoint(null)}
-                      >
-                        {/* 方向指示器 - 圆形内包含箭头 */}
+                    {mapPoints.map((point) => {
+                      // 直接使用画布坐标，因为父容器已经应用了CSS transform
+                      // 不需要再次转换为屏幕坐标，避免双重变换
+                      const canvasCoords = { x: point.x, y: point.y };
+                      
+                      return (
                         <div
+                          key={point.id}
+                          className="map-point"
                           style={{
                             position: 'absolute',
-                            top: '50%',
-                            left: '50%',
-                            width: '12px',
-                            height: '12px',
+                            left: canvasCoords.x - 8,
+                            top: canvasCoords.y - 8,
+                            width: '16px',
+                            height: '16px',
                             borderRadius: '50%',
-                            background: 'rgba(24, 144, 255, 0.2)',
-                            transformOrigin: '50% 50%',
-                            transform: `translate(-50%, -50%)`,
-                            zIndex: 1,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
+                            background: getPointColor(point.type),
+                            border: isPointSelected(point.id) ? '3px solid #1890ff' : `2px solid ${getDarkerColor(getPointColor(point.type))}`,
+                            boxShadow: isPointSelected(point.id) ? '0 0 8px rgba(24, 144, 255, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.15)',
+                            cursor: getPointCursor(point.id),
+                            zIndex: 10,
+                            transform: isPointSelected(point.id) ? 'scale(1.2)' : 'scale(1)',
+                            transition: 'all 0.2s ease'
                           }}
+                          title={`${point.name} (${point.type})`}
+                          onClick={(e) => handlePointClick(e, point.id)}
+                          onDoubleClick={(e) => handlePointDoubleClick(e, point)}
+                          onMouseEnter={() => setHoveredPoint(point.id)}
+                          onMouseLeave={() => setHoveredPoint(null)}
                         >
-                          {/* 箭头 */}
+                          {/* 方向指示器 - 圆形内包含箭头 */}
                           <div
                             style={{
-                              width: '0',
-                              height: '0',
-                              borderLeft: '2px solid transparent',
-                              borderRight: '2px solid transparent',
-                              borderBottom: '3px solid #ffffff',
-                              transform: `rotate(${(point.direction || 0)}deg)`,
-                              transformOrigin: '50% 66%'
+                              position: 'absolute',
+                              top: '50%',
+                              left: '50%',
+                              width: '12px',
+                              height: '12px',
+                              borderRadius: '50%',
+                              background: 'rgba(24, 144, 255, 0.2)',
+                              transformOrigin: '50% 50%',
+                              transform: `translate(-50%, -50%)`,
+                              zIndex: 1,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
                             }}
-                          />
+                          >
+                            {/* 箭头 */}
+                            <div
+                              style={{
+                                width: '0',
+                                height: '0',
+                                borderLeft: '2px solid transparent',
+                                borderRight: '2px solid transparent',
+                                borderBottom: '3px solid #ffffff',
+                                transform: `rotate(${(point.direction || 0)}deg)`,
+                                transformOrigin: '50% 66%'
+                              }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                     
                     {/* 画布提示内容 */}
                     {mapPoints.length === 0 && (
@@ -5838,28 +6248,14 @@ const MapManagement: React.FC = () => {
                                   padding: '0 12px',
                                   border: selectedTool === 'select' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
-                                  background: selectedTool === 'select' ? '#e6f7ff' : '#fff'
+                                  background: selectedTool === 'select' ? '#e6f7ff' : '#fff',
+                                  color: selectedTool === 'select' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <div style={{ 
-                                  width: '16px', 
-                                  height: '16px', 
-                                  border: '2px solid #1890ff', 
-                                  borderRadius: '2px',
-                                  marginRight: '8px',
-                                  position: 'relative'
-                                }}>
-                                  <div style={{
-                                    position: 'absolute',
-                                    top: '2px',
-                                    right: '-2px',
-                                    width: '0',
-                                    height: '0',
-                                    borderLeft: '4px solid #1890ff',
-                                    borderTop: '2px solid transparent',
-                                    borderBottom: '2px solid transparent'
-                                  }}></div>
-                                </div>
+                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                  <rect x="2" y="2" width="10" height="10" fill="none" stroke="#1890ff" strokeWidth="1.5" rx="1"/>
+                                  <polygon points="12,6 15,9 12,12" fill="#1890ff"/>
+                                </svg>
                                 选择工具
                               </Button>
                               
@@ -5874,11 +6270,15 @@ const MapManagement: React.FC = () => {
                                   padding: '0 12px',
                                   border: selectedTool === 'point' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
-                                  background: selectedTool === 'point' ? '#e6f7ff' : '#fff'
+                                  background: selectedTool === 'point' ? '#e6f7ff' : '#fff',
+                                  color: selectedTool === 'point' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <div style={{ width: '16px', height: '16px', borderRadius: '50%', background: '#1890ff', marginRight: '8px' }}></div>
-                                点
+                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                  <circle cx="8" cy="8" r="6" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
+                                  <circle cx="8" cy="8" r="2" fill="#1890ff"/>
+                                </svg>
+                                绘制节点
                               </Button>
                               
                               <Button 
@@ -5892,13 +6292,15 @@ const MapManagement: React.FC = () => {
                                   padding: '0 12px',
                                   border: selectedTool === 'double-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
-                                  background: selectedTool === 'double-line' ? '#e6f7ff' : '#fff'
+                                  background: selectedTool === 'double-line' ? '#e6f7ff' : '#fff',
+                                  color: selectedTool === 'double-line' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <div style={{ display: 'flex', flexDirection: 'column', marginRight: '8px' }}>
-                                  <div style={{ width: '16px', height: '1px', background: '#1890ff', marginBottom: '2px' }}></div>
-                                  <div style={{ width: '16px', height: '1px', background: '#1890ff' }}></div>
-                                </div>
+                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                  <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
+                                  <polygon points="1,8 4,6 4,10" fill="#1890ff"/>
+                                  <polygon points="15,8 12,6 12,10" fill="#1890ff"/>
+                                </svg>
                                 双向直线
                               </Button>
                               
@@ -5913,10 +6315,14 @@ const MapManagement: React.FC = () => {
                                   padding: '0 12px',
                                   border: selectedTool === 'single-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
-                                  background: selectedTool === 'single-line' ? '#e6f7ff' : '#fff'
+                                  background: selectedTool === 'single-line' ? '#e6f7ff' : '#fff',
+                                  color: selectedTool === 'single-line' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <div style={{ width: '16px', height: '1px', background: '#1890ff', marginRight: '8px' }}></div>
+                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                  <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
+                                  <polygon points="15,8 12,6 12,10" fill="#1890ff"/>
+                                </svg>
                                 单向直线
                               </Button>
                               
@@ -5931,16 +6337,15 @@ const MapManagement: React.FC = () => {
                                   padding: '0 12px',
                                   border: selectedTool === 'double-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
-                                  background: selectedTool === 'double-bezier' ? '#e6f7ff' : '#fff'
+                                  background: selectedTool === 'double-bezier' ? '#e6f7ff' : '#fff',
+                                  color: selectedTool === 'double-bezier' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <div style={{ 
-                                  width: '16px', 
-                                  height: '8px', 
-                                  border: '1px solid #1890ff',
-                                  borderRadius: '8px 8px 0 0',
-                                  marginRight: '8px'
-                                }}></div>
+                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                  <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
+                                  <polygon points="1,8 4,6 4,10" fill="#1890ff"/>
+                                  <polygon points="15,8 12,6 12,10" fill="#1890ff"/>
+                                </svg>
                                 双向贝塞尔曲线
                               </Button>
                               
@@ -5955,16 +6360,14 @@ const MapManagement: React.FC = () => {
                                   padding: '0 12px',
                                   border: selectedTool === 'single-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
-                                  background: selectedTool === 'single-bezier' ? '#e6f7ff' : '#fff'
+                                  background: selectedTool === 'single-bezier' ? '#e6f7ff' : '#fff',
+                                  color: selectedTool === 'single-bezier' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <div style={{ 
-                                  width: '16px', 
-                                  height: '8px', 
-                                  border: '1px solid #1890ff',
-                                  borderRadius: '8px 0 0 0',
-                                  marginRight: '8px'
-                                }}></div>
+                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                  <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
+                                  <polygon points="15,8 12,6 12,10" fill="#1890ff"/>
+                                </svg>
                                 单向贝塞尔曲线
                               </Button>
                             </div>
