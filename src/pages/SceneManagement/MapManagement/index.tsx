@@ -277,6 +277,19 @@ const MapManagement: React.FC = () => {
   const [hoveredPoint, setHoveredPoint] = useState<string | null>(null); // 鼠标悬停的点ID
   const [continuousConnecting, setContinuousConnecting] = useState(false); // 连续连线模式
   const [lastConnectedPoint, setLastConnectedPoint] = useState<string | null>(null); // 上一个连接的点ID
+  const [mousePosition, setMousePosition] = useState<{x: number, y: number} | null>(null); // 鼠标在画布上的位置
+  
+  // 撤销重做相关状态
+  interface HistoryState {
+    mapPoints: any[];
+    mapLines: MapLine[];
+    pointCounter: number;
+    lineCounter: number;
+  }
+  
+  const [history, setHistory] = useState<HistoryState[]>([]); // 历史记录栈
+  const [historyIndex, setHistoryIndex] = useState(-1); // 当前历史记录索引
+  const [maxHistorySize] = useState(50); // 最大历史记录数量
   
   // 画布拖动和缩放相关状态
   const [canvasScale, setCanvasScale] = useState(1); // 画布缩放比例
@@ -338,6 +351,8 @@ const MapManagement: React.FC = () => {
     id: string;
     name: string;
     description: string;
+    startNode: string;  // 起始节点名称
+    endNode: string;    // 结束节点名称
   }
 
   interface PathGroup {
@@ -389,19 +404,32 @@ const MapManagement: React.FC = () => {
       id: 'path-group1',
       name: '路径组1',
       paths: [
-        { id: 'e1', name: 'e1', description: 'n1→n2' },
-        { id: 'e2', name: 'e2', description: 'n3→n4' }
+        { id: 'e1', name: 'e1', description: 'e1(n1<-->n2)', startNode: 'n1', endNode: 'n2' },
+        { id: 'e2', name: 'e2', description: 'e2(n3-->n4)', startNode: 'n3', endNode: 'n4' }
       ]
     },
     {
       id: 'path-group2',
       name: '路径组2',
       paths: [
-        { id: 'e1_pg2', name: 'e1', description: 'n1→n2' },
-        { id: 'e2_pg2', name: 'e2', description: 'n3→n4' }
+        { id: 'e1_pg2', name: 'e1', description: 'e1(n1<-->n2)', startNode: 'n1', endNode: 'n2' },
+        { id: 'e2_pg2', name: 'e2', description: 'e2(n3-->n4)', startNode: 'n3', endNode: 'n4' }
       ]
     }
   ]);
+
+  // 线条右键菜单相关状态
+  const [lineContextMenuVisible, setLineContextMenuVisible] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [contextMenuLineIds, setContextMenuLineIds] = useState<string[]>([]);
+  
+  // 路径组选择弹窗相关状态
+  const [pathGroupSelectModalVisible, setPathGroupSelectModalVisible] = useState(false);
+  const [pathGroupSelectForm] = Form.useForm();
+  
+  // 新增路径组气泡相关状态
+  const [addPathGroupPopoverVisible, setAddPathGroupPopoverVisible] = useState(false);
+  const [newPathGroupName, setNewPathGroupName] = useState('');
 
   // 移除节点函数
   const removeNodeFromGroup = (groupId: string, nodeId: string) => {
@@ -587,6 +615,130 @@ const MapManagement: React.FC = () => {
     message.success('路径已从路径组移除');
   };
 
+  // 处理线条右键菜单
+  const handleLineContextMenu = (e: React.MouseEvent, lineId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // 如果右键的线条没有被选中，则只选中这一条线
+    if (!selectedLines.includes(lineId)) {
+      setSelectedLines([lineId]);
+      setContextMenuLineIds([lineId]);
+    } else {
+      // 如果右键的线条已被选中，则对所有选中的线条显示菜单
+      setContextMenuLineIds(selectedLines);
+    }
+    
+    setContextMenuPosition({ x: e.clientX, y: e.clientY });
+    setLineContextMenuVisible(true);
+  };
+
+  // 关闭右键菜单
+  const handleCloseContextMenu = () => {
+    setLineContextMenuVisible(false);
+    setContextMenuLineIds([]);
+  };
+
+  // 打开路径组选择弹窗
+  const handleOpenPathGroupSelect = () => {
+    setLineContextMenuVisible(false);
+    setPathGroupSelectModalVisible(true);
+    pathGroupSelectForm.resetFields();
+  };
+
+  // 关闭路径组选择弹窗
+  const handleClosePathGroupSelect = () => {
+    setPathGroupSelectModalVisible(false);
+    pathGroupSelectForm.resetFields();
+  };
+
+  // 处理新增路径组气泡确认
+  const handleCreateNewPathGroup = () => {
+    if (!newPathGroupName.trim()) {
+      message.error('请输入路径组名称');
+      return;
+    }
+    if (newPathGroupName.length > 6) {
+      message.error('路径组名称不能超过6个字符');
+      return;
+    }
+    
+    const newGroup: PathGroup = {
+      id: `path-group-${Date.now()}`,
+      name: newPathGroupName.trim(),
+      paths: []
+    };
+    setPathGroups(prev => [...prev, newGroup]);
+    message.success('新路径组已创建');
+    
+    // 重置状态
+    setNewPathGroupName('');
+    setAddPathGroupPopoverVisible(false);
+  };
+
+  // 取消新增路径组
+  const handleCancelCreatePathGroup = () => {
+    setNewPathGroupName('');
+    setAddPathGroupPopoverVisible(false);
+  };
+
+  // 将选中线条加入路径组
+  const handleAddLinesToPathGroup = async () => {
+    try {
+      const values = await pathGroupSelectForm.validateFields();
+      const { pathGroupId } = values;
+      
+      if (pathGroupId) {
+        // 将选中的线条加入到路径组
+        const linesToAdd = contextMenuLineIds.map(lineId => {
+          const line = mapLines.find(l => l.id === lineId);
+          // 获取线条的起始和结束节点名称
+          const startPoint = getPointById(line?.startPointId || '');
+          const endPoint = getPointById(line?.endPointId || '');
+          const startNode = startPoint?.name || 'n1';
+          const endNode = endPoint?.name || 'n2';
+          const lineName = line?.name || lineId;
+          
+          // 根据线条类型和方向决定箭头格式
+          let arrow = '-->';
+          if (line?.type === 'double-line') {
+            arrow = '<-->';
+          } else if (line?.direction === 'backward') {
+            arrow = '<--';
+          }
+          
+          return {
+            id: lineId,
+            name: lineName,
+            description: `${startNode}${arrow}${endNode}`,
+            startNode,
+            endNode
+          };
+        });
+        
+        setPathGroups(prev => prev.map(group => {
+          if (group.id === pathGroupId) {
+            // 避免重复添加
+            const existingPathIds = group.paths.map(p => p.id);
+            const newPaths = linesToAdd.filter(path => !existingPathIds.includes(path.id));
+            return {
+              ...group,
+              paths: [...group.paths, ...newPaths]
+            };
+          }
+          return group;
+        }));
+        
+        const groupName = pathGroups.find(g => g.id === pathGroupId)?.name || '路径组';
+        message.success(`已将 ${contextMenuLineIds.length} 条线加入到 ${groupName}`);
+      }
+      
+      handleClosePathGroupSelect();
+    } catch (error) {
+      console.error('加入路径组失败:', error);
+    }
+  };
+
   // 监听窗口大小变化
   useEffect(() => {
     const handleResize = () => {
@@ -604,12 +756,25 @@ const MapManagement: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // 组件初始化时保存初始状态到历史记录
+  useEffect(() => {
+    const initialState: HistoryState = {
+      mapPoints: [],
+      mapLines: [],
+      pointCounter: 0,
+      lineCounter: 0
+    };
+    setHistory([initialState]);
+    setHistoryIndex(0);
+  }, []);
+
   // 退出连线模式函数
   const exitConnectingMode = () => {
     setIsConnecting(false);
     setContinuousConnecting(false);
     setConnectingStartPoint(null);
     setLastConnectedPoint(null);
+    setMousePosition(null); // 清除鼠标位置，隐藏临时线条
   };
 
   // 框选状态引用
@@ -727,30 +892,7 @@ const MapManagement: React.FC = () => {
     return mapPoints.find(point => point.id === pointId);
   };
 
-  // 监听ESC键处理逻辑
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        // 阻止默认的ESC键行为（防止关闭抽屉）
-        event.preventDefault();
-        event.stopPropagation();
-        
-        // 如果在地图编辑模式下
-        if (addMapFileDrawerVisible) {
-          // 如果正在连线模式，退出连线模式
-          if (isConnecting || continuousConnecting) {
-            exitConnectingMode();
-          }
-          // 切换到选择工具
-          console.log('⌨️ [工具切换] 检测到ESC键，切换到选择工具');
-          setSelectedTool('select');
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown, true); // 使用捕获阶段
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [isConnecting, continuousConnecting, addMapFileDrawerVisible]);
+  // 监听ESC键处理逻辑 - 已合并到统一的键盘事件监听器中
 
   // 初始化机器人设备数据
   useEffect(() => {
@@ -2251,6 +2393,9 @@ const MapManagement: React.FC = () => {
         direction: 0 // 默认方向
       };
       
+      // 保存历史记录（添加点之前）
+      saveToHistory();
+      
       setMapPoints(prev => [...prev, newPoint]);
       setPointCounter(prev => prev + 1);
     } else if (selectedTool === 'select') {
@@ -2368,8 +2513,12 @@ const MapManagement: React.FC = () => {
         const lineLength = startPointData && endPointData ? 
           Math.sqrt(Math.pow(endPointData.x - startPointData.x, 2) + Math.pow(endPointData.y - startPointData.y, 2)) : 0;
 
+        // 保存历史记录（创建线条之前）
+        saveToHistory();
+        
         // 创建新的连线
         if (selectedTool === 'double-line') {
+          
           // 双向线：创建两条独立的单向线
           const forwardLineId = `line_${Date.now()}_forward`;
           const backwardLineId = `line_${Date.now()}_backward`;
@@ -2401,9 +2550,9 @@ const MapManagement: React.FC = () => {
           // 更新线计数器（双向线占用两个名称）
           setLineCounter(prev => prev + 2);
           
-          // 更新连线数据
+          // 更新连线数据（backward线先添加，forward线后添加，确保forward线在上层）
           setMapLines(prev => {
-            const newLines = [...prev, forwardLine, backwardLine];
+            const newLines = [...prev, backwardLine, forwardLine];
             return newLines;
           });
           
@@ -2450,6 +2599,7 @@ const MapManagement: React.FC = () => {
     event.stopPropagation();
     
     if (selectedTool === 'select') {
+      // 打开编辑弹窗
       setEditingPoint(point);
       pointEditForm.setFieldsValue({
         name: point.name,
@@ -2621,6 +2771,9 @@ const MapManagement: React.FC = () => {
   // 保存点编辑
   const handleSavePointEdit = (values: any) => {
     if (editingPoint) {
+      // 保存历史记录（编辑点之前）
+      saveToHistory();
+      
       setMapPoints(prev => 
         prev.map(point => 
           point.id === editingPoint.id 
@@ -2640,6 +2793,9 @@ const MapManagement: React.FC = () => {
       return;
     }
     
+    // 保存历史记录（删除点之前）
+    saveToHistory();
+    
     setMapPoints(prev => 
       prev.filter(point => !selectedPoints.includes(point.id))
     );
@@ -2651,11 +2807,23 @@ const MapManagement: React.FC = () => {
     message.success(`已删除 ${selectedPoints.length} 个点`);
   };
 
+  // 从地图元素列表中移除节点
+  const handleRemoveMapPoint = (pointId: string) => {
+    const pointToRemove = mapPoints.find(p => p.id === pointId);
+    if (pointToRemove) {
+      setMapPoints(prev => prev.filter(point => point.id !== pointId));
+      message.success(`节点 "${pointToRemove.name}" 已从地图元素列表中移除`);
+    }
+  };
+
   // 删除选中的线
   const handleDeleteSelectedLines = () => {
     if (selectedLines.length === 0) {
       return;
     }
+    
+    // 保存历史记录（删除线之前）
+    saveToHistory();
     
     setMapLines(prev => 
       prev.filter(line => !selectedLines.includes(line.id))
@@ -2670,8 +2838,114 @@ const MapManagement: React.FC = () => {
     message.success(`已删除 ${deletedCount} 条线`);
   };
 
+  // 撤销重做核心逻辑函数
+  // 保存当前状态到历史记录
+  const saveToHistory = () => {
+    const currentState: HistoryState = {
+      mapPoints: [...mapPoints],
+      mapLines: [...mapLines],
+      pointCounter,
+      lineCounter
+    };
+
+    let newHistory: HistoryState[];
+    let newIndex: number;
+
+    // 如果当前不在历史记录的末尾，删除后面的记录
+    if (historyIndex < history.length - 1) {
+      newHistory = [...history.slice(0, historyIndex + 1), currentState];
+      newIndex = historyIndex + 1;
+    } else {
+      // 如果历史记录超过最大限制，删除最早的记录
+      if (history.length >= maxHistorySize) {
+        newHistory = [...history.slice(1), currentState];
+        newIndex = maxHistorySize - 1;
+      } else {
+        newHistory = [...history, currentState];
+        newIndex = history.length;
+      }
+    }
+
+    setHistory(newHistory);
+    setHistoryIndex(newIndex);
+  };
+
+  // 撤销操作
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const previousState = history[historyIndex - 1];
+      setMapPoints(previousState.mapPoints);
+      setMapLines(previousState.mapLines);
+      setPointCounter(previousState.pointCounter);
+      setLineCounter(previousState.lineCounter);
+      setHistoryIndex(historyIndex - 1);
+      
+      // 清除选中状态
+      setSelectedPoints([]);
+      setSelectedLines([]);
+      
+      message.success('已撤销上一步操作');
+    } else {
+      message.info('没有可撤销的操作');
+    }
+  };
+
+  // 重做操作
+  const handleRedo = () => {
+    if (historyIndex < history.length - 1) {
+      const nextState = history[historyIndex + 1];
+      setMapPoints(nextState.mapPoints);
+      setMapLines(nextState.mapLines);
+      setPointCounter(nextState.pointCounter);
+      setLineCounter(nextState.lineCounter);
+      setHistoryIndex(historyIndex + 1);
+      
+      // 清除选中状态
+      setSelectedPoints([]);
+      setSelectedLines([]);
+      
+      message.success('已重做操作');
+    } else {
+      message.info('没有可重做的操作');
+    }
+  };
+
   // 键盘事件处理
   const handleKeyDown = (event: KeyboardEvent) => {
+    // 处理ESC键
+    if (event.key === 'Escape') {
+      // 阻止默认的ESC键行为（防止关闭抽屉）
+      event.preventDefault();
+      event.stopPropagation();
+      
+      // 如果在地图编辑模式下
+      if (addMapFileDrawerVisible) {
+        // 如果正在连线模式，退出连线模式
+        if (isConnecting || continuousConnecting) {
+          exitConnectingMode();
+        }
+        // 切换到选择工具
+        console.log('⌨️ [工具切换] 检测到ESC键，切换到选择工具');
+        setSelectedTool('select');
+      }
+      return;
+    }
+    
+    // 处理撤销重做快捷键 (Ctrl+Z/Cmd+Z 撤销, Ctrl+Y/Cmd+Y 重做)
+    // Mac系统使用metaKey (Command键)，Windows/Linux使用ctrlKey
+    if (addMapFileDrawerVisible && (event.ctrlKey || event.metaKey)) {
+      if (event.key === 'z' || event.key === 'Z') {
+        event.preventDefault();
+        handleUndo();
+        return;
+      }
+      if (event.key === 'y' || event.key === 'Y') {
+        event.preventDefault();
+        handleRedo();
+        return;
+      }
+    }
+    
     // 处理空格键拖动 - 移除addMapFileDrawerVisible限制，允许在任何时候使用空格键
     if (event.code === 'Space' && !isSpacePressed) {
       event.preventDefault();
@@ -2684,10 +2958,13 @@ const MapManagement: React.FC = () => {
     // 只在地图编辑模式下且选择工具激活时处理键盘事件
     if (addMapFileDrawerVisible && selectedTool === 'select') {
       if (event.key === 'Delete' || event.key === 'Backspace') {
-        event.preventDefault();        // 优先删除选中的点，如果没有选中的点则删除选中的线
-        if (selectedPoints.length > 0) {          handleDeleteSelectedPoints();
-        } else if (selectedLines.length > 0) {          handleDeleteSelectedLines();
-        } else {        }
+        event.preventDefault();
+        // 优先删除选中的点，如果没有选中的点则删除选中的线
+        if (selectedPoints.length > 0) {
+          handleDeleteSelectedPoints();
+        } else if (selectedLines.length > 0) {
+          handleDeleteSelectedLines();
+        }
       }
     }
   };
@@ -2711,7 +2988,7 @@ const MapManagement: React.FC = () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keyup', handleKeyUp);
     };
-  }, [addMapFileDrawerVisible, selectedTool, selectedPoints, selectedLines, isSpacePressed]);
+  }, [addMapFileDrawerVisible, selectedTool, selectedPoints, selectedLines, isSpacePressed, isConnecting, continuousConnecting, historyIndex, history.length]);
   
   // 测试代码已删除 - 不再自动添加测试点
   
@@ -2847,7 +3124,8 @@ const MapManagement: React.FC = () => {
           <g 
             key={line.id} 
             onClick={(e) => handleLineClick(e, line.id)}
-            onDoubleClick={() => handleLineDoubleClick(line)} 
+            onDoubleClick={() => handleLineDoubleClick(line)}
+            onContextMenu={(e) => handleLineContextMenu(e, line.id)}
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
             {/* 当前线 */}
@@ -2878,7 +3156,8 @@ const MapManagement: React.FC = () => {
           <g 
             key={line.id} 
             onClick={(e) => handleLineClick(e, line.id)}
-            onDoubleClick={() => handleLineDoubleClick(line)} 
+            onDoubleClick={() => handleLineDoubleClick(line)}
+            onContextMenu={(e) => handleLineContextMenu(e, line.id)}
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
             <line
@@ -2908,7 +3187,8 @@ const MapManagement: React.FC = () => {
           <g 
             key={line.id} 
             onClick={(e) => handleLineClick(e, line.id)}
-            onDoubleClick={() => handleLineDoubleClick(line)} 
+            onDoubleClick={() => handleLineDoubleClick(line)}
+            onContextMenu={(e) => handleLineContextMenu(e, line.id)}
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
             <path
@@ -2943,7 +3223,8 @@ const MapManagement: React.FC = () => {
           <g 
             key={line.id} 
             onClick={(e) => handleLineClick(e, line.id)}
-            onDoubleClick={() => handleLineDoubleClick(line)} 
+            onDoubleClick={() => handleLineDoubleClick(line)}
+            onContextMenu={(e) => handleLineContextMenu(e, line.id)}
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
             <path
@@ -5970,10 +6251,41 @@ const MapManagement: React.FC = () => {
                           handleSelectionStart(syntheticEvent);
                         }
                       }}
+                      onMouseMove={(e) => {
+                        // 在连线模式下更新鼠标位置
+                        if (isConnecting && connectingStartPoint) {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          const x = (e.clientX - rect.left - canvasOffset.x) / canvasScale;
+                          const y = (e.clientY - rect.top - canvasOffset.y) / canvasScale;
+                          setMousePosition({ x, y });
+                        }
+                      }}
                     >
                       {(() => {
                         console.log('📊 mapLines data:', mapLines);
                         return mapLines.map(line => renderLine(line));
+                      })()}
+                      
+                      {/* 临时跟随线条 - 连线模式下显示 */}
+                      {isConnecting && connectingStartPoint && mousePosition && (() => {
+                        // 在连续连线模式下，优先使用lastConnectedPoint作为起点
+                        const startPointId = lastConnectedPoint || connectingStartPoint;
+                        const startPoint = mapPoints.find(p => p.id === startPointId);
+                        if (!startPoint) return null;
+                        
+                        return (
+                          <line
+                            x1={startPoint.x}
+                            y1={startPoint.y}
+                            x2={mousePosition.x}
+                            y2={mousePosition.y}
+                            stroke="#1890ff"
+                            strokeWidth="2"
+                            strokeDasharray="5,5"
+                            opacity="0.7"
+                            style={{ pointerEvents: 'none' }}
+                          />
+                        );
                       })()}
                     </svg>
                     
@@ -6158,15 +6470,18 @@ const MapManagement: React.FC = () => {
                     type="text"
                     icon={<UndoOutlined />}
                     size="small"
+                    onClick={handleUndo}
+                    disabled={historyIndex <= 0}
                     style={{
                       width: '32px',
                       height: '32px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      border: 'none'
+                      border: 'none',
+                      color: historyIndex <= 0 ? '#d9d9d9' : '#1890ff'
                     }}
-                    title="撤销"
+                    title="撤销 (Ctrl+Z / Cmd+Z)"
                   />
                   
                   {/* 重做工具 */}
@@ -6174,15 +6489,18 @@ const MapManagement: React.FC = () => {
                     type="text"
                     icon={<RedoOutlined />}
                     size="small"
+                    onClick={handleRedo}
+                    disabled={historyIndex >= history.length - 1}
                     style={{
                       width: '32px',
                       height: '32px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      border: 'none'
+                      border: 'none',
+                      color: historyIndex >= history.length - 1 ? '#d9d9d9' : '#1890ff'
                     }}
-                    title="重做"
+                    title="重做 (Ctrl+Y / Cmd+Y)"
                   />
                   
                   {/* 分隔线 */}
@@ -6443,6 +6761,7 @@ const MapManagement: React.FC = () => {
                                               type="text" 
                                               size="small" 
                                               danger
+                                              onClick={() => handleRemoveMapPoint(point.id)}
                                               style={{ 
                                                 opacity: 0, 
                                                 transition: 'opacity 0.2s',
@@ -6478,6 +6797,13 @@ const MapManagement: React.FC = () => {
                                       {mapLines.map((line, index) => {
                                         const startPoint = mapPoints.find(p => p.id === line.startPointId);
                                         const endPoint = mapPoints.find(p => p.id === line.endPointId);
+                                        
+                                        // 根据线条类型确定方向符号
+                                        let directionSymbol = '-->';
+                                        if (line.type === 'double-line') {
+                                          directionSymbol = '<-->';
+                                        }
+                                        
                                         return (
                                           <div 
                                             key={line.id} 
@@ -6498,7 +6824,7 @@ const MapManagement: React.FC = () => {
                                               e.currentTarget.style.backgroundColor = 'transparent';
                                             }}
                                           >
-                                            <span>{line.name} ({startPoint?.name} → {endPoint?.name})</span>
+                                            <span>{line.name}({startPoint?.name}{directionSymbol}{endPoint?.name})</span>
                                           </div>
                                         );
                                       })}
@@ -7514,6 +7840,178 @@ const MapManagement: React.FC = () => {
               showCount
             />
           </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 线条右键菜单 */}
+      {lineContextMenuVisible && (
+        <div
+          style={{
+            position: 'fixed',
+            left: contextMenuPosition.x,
+            top: contextMenuPosition.y,
+            zIndex: 9999,
+            backgroundColor: '#fff',
+            border: '1px solid #d9d9d9',
+            borderRadius: '6px',
+            boxShadow: '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
+            padding: '4px 0',
+            minWidth: '120px'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            style={{
+              padding: '5px 12px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              lineHeight: '22px',
+              color: 'rgba(0, 0, 0, 0.88)',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f5f5f5';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+            onClick={handleOpenPathGroupSelect}
+          >
+            加入路径组
+          </div>
+        </div>
+      )}
+
+      {/* 点击其他地方关闭右键菜单 */}
+      {lineContextMenuVisible && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9998
+          }}
+          onClick={handleCloseContextMenu}
+        />
+      )}
+
+      {/* 路径组选择弹窗 */}
+      <Modal
+        title={`将 ${contextMenuLineIds.length} 条线加入路径组`}
+        open={pathGroupSelectModalVisible}
+        onOk={handleAddLinesToPathGroup}
+        onCancel={handleClosePathGroupSelect}
+        okText="确认加入"
+        cancelText="取消"
+        width={500}
+      >
+        <Form
+          form={pathGroupSelectForm}
+          layout="vertical"
+          style={{ marginTop: '16px' }}
+        >
+          <Form.Item
+            label="选择路径组"
+            name="pathGroupId"
+            rules={[{ required: true, message: '请选择路径组' }]}
+          >
+            <Select
+               placeholder="请选择路径组"
+               style={{ width: '100%' }}
+             >
+               {pathGroups.map(group => (
+                 <Select.Option key={group.id} value={group.id}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <span>{group.name}</span>
+                     <span style={{ color: '#666', fontSize: '12px' }}>({group.paths.length} 条路径)</span>
+                   </div>
+                 </Select.Option>
+               ))}
+             </Select>
+          </Form.Item>
+          
+          {/* 显示选中路径组的路径详情 */}
+          <Form.Item shouldUpdate>
+             {({ getFieldValue }: { getFieldValue: (name: string) => any }) => {
+              const selectedGroupId = getFieldValue('pathGroupId');
+              const selectedGroup = pathGroups.find(g => g.id === selectedGroupId);
+              
+              if (selectedGroup && selectedGroup.paths.length > 0) {
+                return (
+                  <div style={{ marginTop: '16px' }}>
+                    <div style={{ marginBottom: '8px', fontWeight: 500, color: '#666' }}>
+                      {selectedGroup.name} 中的路径：
+                    </div>
+                    <div style={{ 
+                      maxHeight: '120px', 
+                      overflowY: 'auto', 
+                      border: '1px solid #f0f0f0', 
+                      borderRadius: '6px', 
+                      padding: '8px',
+                      backgroundColor: '#fafafa'
+                    }}>
+                      {selectedGroup.paths.map((path, index) => (
+                        <div key={path.id} style={{ 
+                          padding: '4px 0', 
+                          borderBottom: index < selectedGroup.paths.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '13px'
+                        }}>
+                          <span style={{ color: '#1890ff', fontWeight: 500 }}>{path.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            }}
+          </Form.Item>
+          
+          <div style={{ textAlign: 'center', marginTop: '16px' }}>
+            <Popover
+              title="新增路径组"
+              open={addPathGroupPopoverVisible}
+              onOpenChange={setAddPathGroupPopoverVisible}
+              content={
+                <div style={{ width: '250px' }}>
+                  <Input
+                     placeholder="请输入路径名称（不超过6个字符）"
+                     value={newPathGroupName}
+                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPathGroupName(e.target.value)}
+                     maxLength={6}
+                     showCount
+                     style={{ marginBottom: '12px' }}
+                   />
+                  <div style={{ textAlign: 'right' }}>
+                    <Space>
+                      <Button size="small" onClick={handleCancelCreatePathGroup}>
+                        取消
+                      </Button>
+                      <Button 
+                        type="primary" 
+                        size="small" 
+                        onClick={handleCreateNewPathGroup}
+                        disabled={!newPathGroupName.trim()}
+                      >
+                        确认
+                      </Button>
+                    </Space>
+                  </div>
+                </div>
+              }
+              trigger="click"
+              placement="top"
+            >
+              <Button 
+                type="dashed" 
+                icon={<PlusOutlined />}
+              >
+                新增路径
+              </Button>
+            </Popover>
+          </div>
         </Form>
       </Modal>
     </div>
