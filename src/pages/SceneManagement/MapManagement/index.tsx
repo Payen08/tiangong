@@ -24,13 +24,13 @@ import {
   Modal,
   Popover,
   Radio,
+  Select,
   Tooltip,
   Checkbox,
   Progress,
   Alert,
   List,
   Collapse,
-  Select,
 } from 'antd';
 import type { RadioChangeEvent } from 'antd';
 import type { ChangeEvent } from 'react';
@@ -2245,7 +2245,7 @@ const MapManagement: React.FC = () => {
       const newPoint = {
         id: `point_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: `n${pointCounter}`,
-        type: '站点', // 默认类型
+        type: '节点', // 默认类型
         x: x,
         y: y,
         direction: 0 // 默认方向
@@ -2308,8 +2308,8 @@ const MapManagement: React.FC = () => {
          const pointMinY = Math.min(...selectedPointsData.map(p => p.y - pointRadius));
          const pointMaxY = Math.max(...selectedPointsData.map(p => p.y + pointRadius));
          
-         // 添加一些边距使框选框更明显
-         const padding = 15;
+         // 添加少量边距让框选框紧贴圆圈边缘
+         const padding = 3;
          const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
          const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
          
@@ -2586,8 +2586,8 @@ const MapManagement: React.FC = () => {
           const pointMinY = Math.min(...selectedPointsData.map(p => p.y - pointRadius));
           const pointMaxY = Math.max(...selectedPointsData.map(p => p.y + pointRadius));
           
-          // 添加一些边距使框选框更明显
-          const padding = 15;
+          // 添加少量边距让框选框紧贴圆圈边缘
+          const padding = 3;
           const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
           const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
           
@@ -2718,14 +2718,15 @@ const MapManagement: React.FC = () => {
   // 获取点类型对应的颜色
   const getPointColor = (type: string) => {
     const colorMap: Record<string, string> = {
-      '站点': '#1890ff',      // 蓝色
-      '充电点': '#52c41a',    // 绿色
-      '停靠点': '#faad14',    // 黄色
-      '电梯点': '#13c2c2',    // 青色
-      '自动门': '#b37feb',    // 浅紫色
-      '其他': '#8c8c8c'
+      '节点': '#91d5ff',      // 淡蓝色
+      '站点': '#1890ff',      // 蓝色（与连线颜色一致）
+      '充电点': '#b7eb8f',    // 淡绿色
+      '停靠点': '#ffd666',    // 淡黄色
+      '电梯点': '#87e8de',    // 淡青色
+      '自动门': '#d3adf7',    // 淡紫色
+      '其他': '#d9d9d9'       // 淡灰色
     };
-    return colorMap[type] || '#8c8c8c';
+    return colorMap[type] || '#d9d9d9';
   };
 
   // 获取更深的颜色用于描边
@@ -3137,8 +3138,8 @@ const MapManagement: React.FC = () => {
         const pointMinY = Math.min(...selectedPointsData.map(p => p.y - pointRadius));
         const pointMaxY = Math.max(...selectedPointsData.map(p => p.y + pointRadius));
         
-        // 添加边距
-        const padding = 15;
+        // 添加少量边距让框选框紧贴圆圈边缘
+        const padding = 3;
         const dynamicStart = { x: pointMinX - padding, y: pointMinY - padding };
         const dynamicEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
         
@@ -5993,9 +5994,9 @@ const MapManagement: React.FC = () => {
                             width: '16px',
                             height: '16px',
                             borderRadius: '50%',
-                            background: getPointColor(point.type),
-                            border: isPointSelected(point.id) ? '3px solid #1890ff' : `2px solid ${getDarkerColor(getPointColor(point.type))}`,
-                            boxShadow: isPointSelected(point.id) ? '0 0 8px rgba(24, 144, 255, 0.6)' : '0 4px 12px rgba(0, 0, 0, 0.15)',
+                            background: point.type === '节点' ? 'transparent' : getPointColor(point.type),
+                            border: `2px solid ${getPointColor(point.type)}`,  // 移除选中时的蓝色描边
+                            boxShadow: 'none',
                             cursor: getPointCursor(point.id),
                             zIndex: 10,
                             transform: isPointSelected(point.id) ? 'scale(1.2)' : 'scale(1)',
@@ -6007,37 +6008,51 @@ const MapManagement: React.FC = () => {
                           onMouseEnter={() => setHoveredPoint(point.id)}
                           onMouseLeave={() => setHoveredPoint(null)}
                         >
-                          {/* 方向指示器 - 圆形内包含箭头 */}
-                          <div
-                            style={{
-                              position: 'absolute',
-                              top: '50%',
-                              left: '50%',
-                              width: '12px',
-                              height: '12px',
-                              borderRadius: '50%',
-                              background: 'rgba(24, 144, 255, 0.2)',
-                              transformOrigin: '50% 50%',
-                              transform: `translate(-50%, -50%)`,
-                              zIndex: 1,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                          >
-                            {/* 箭头 */}
+                          {/* 方向指示器 - 圆形内包含箭头（节点类型不显示箭头） */}
+                          {point.type !== '节点' && (
                             <div
                               style={{
-                                width: '0',
-                                height: '0',
-                                borderLeft: '2px solid transparent',
-                                borderRight: '2px solid transparent',
-                                borderBottom: '3px solid #ffffff',
-                                transform: `rotate(${(point.direction || 0)}deg)`,
-                                transformOrigin: '50% 66%'
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                width: '12px',
+                                height: '12px',
+                                borderRadius: '50%',
+                                background: 'rgba(24, 144, 255, 0.2)',
+                                transformOrigin: '50% 50%',
+                                transform: `translate(-50%, -50%)`,
+                                zIndex: 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
                               }}
-                            />
-                          </div>
+                            >
+                              {/* 箭头图标 */}
+                              <svg
+                                width="10"
+                                height="10"
+                                viewBox="0 0 10 10"
+                                style={{
+                                  transform: `rotate(${(point.direction || 0)}deg)`,
+                                  transformOrigin: '50% 50%'
+                                }}
+                              >
+                                <defs>
+                                  <linearGradient id="arrowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
+                                    <stop offset="100%" stopColor="#f0f0f0" stopOpacity="1" />
+                                  </linearGradient>
+                                </defs>
+                                <path
+                                  d="M5 1 L8.5 4 L6.5 4 L6.5 8.5 L3.5 8.5 L3.5 4 L1.5 4 Z"
+                                  fill="url(#arrowGradient)"
+                                  stroke="#e0e0e0"
+                                  strokeWidth="0.3"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -6254,7 +6269,7 @@ const MapManagement: React.FC = () => {
                               >
                                 <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
                                   <rect x="2" y="2" width="10" height="10" fill="none" stroke="#1890ff" strokeWidth="1.5" rx="1"/>
-                                  <polygon points="12,6 15,9 12,12" fill="#1890ff"/>
+                                  <path d="M12 7 L15 9 L12 11 L13 9 Z" fill="#1890ff"/>
                                 </svg>
                                 选择工具
                               </Button>
@@ -6298,8 +6313,8 @@ const MapManagement: React.FC = () => {
                               >
                                 <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
                                   <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
-                                  <polygon points="1,8 4,6 4,10" fill="#1890ff"/>
-                                  <polygon points="15,8 12,6 12,10" fill="#1890ff"/>
+                                  <path d="M1 8 L4 6.5 L3.5 8 L4 9.5 Z" fill="#1890ff"/>
+                                  <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
                                 </svg>
                                 双向直线
                               </Button>
@@ -6321,7 +6336,7 @@ const MapManagement: React.FC = () => {
                               >
                                 <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
                                   <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
-                                  <polygon points="15,8 12,6 12,10" fill="#1890ff"/>
+                                  <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
                                 </svg>
                                 单向直线
                               </Button>
@@ -6343,8 +6358,8 @@ const MapManagement: React.FC = () => {
                               >
                                 <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
                                   <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
-                                  <polygon points="1,8 4,6 4,10" fill="#1890ff"/>
-                                  <polygon points="15,8 12,6 12,10" fill="#1890ff"/>
+                                  <path d="M1 8 L4 6.5 L3.5 8 L4 9.5 Z" fill="#1890ff"/>
+                                  <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
                                 </svg>
                                 双向贝塞尔曲线
                               </Button>
@@ -6366,7 +6381,7 @@ const MapManagement: React.FC = () => {
                               >
                                 <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
                                   <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
-                                  <polygon points="15,8 12,6 12,10" fill="#1890ff"/>
+                                  <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
                                 </svg>
                                 单向贝塞尔曲线
                               </Button>
@@ -7172,7 +7187,15 @@ const MapManagement: React.FC = () => {
             ]}
             style={{ marginBottom: 16 }}
           >
-            <Input placeholder="请输入点名称" />
+            <Input 
+              placeholder="请输入点名称" 
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                  // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点
+                  if (e.key === 'Delete' || e.key === 'Backspace') {
+                    e.stopPropagation();
+                  }
+                }}
+            />
           </Form.Item>
           
           <Form.Item
@@ -7181,13 +7204,14 @@ const MapManagement: React.FC = () => {
             rules={[{ required: true, message: '请选择点类型' }]}
             style={{ marginBottom: 16 }}
           >
-            <Radio.Group>
-              <Radio value="站点">站点</Radio>
-              <Radio value="充电点">充电点</Radio>
-              <Radio value="停靠点">停靠点</Radio>
-              <Radio value="电梯点">电梯点</Radio>
-              <Radio value="自动门">自动门</Radio>
-            </Radio.Group>
+            <Select placeholder="请选择点类型">
+              <Select.Option value="节点">节点</Select.Option>
+              <Select.Option value="站点">站点</Select.Option>
+              <Select.Option value="充电点">充电点</Select.Option>
+              <Select.Option value="停靠点">停靠点</Select.Option>
+              <Select.Option value="电梯点">电梯点</Select.Option>
+              <Select.Option value="自动门">自动门</Select.Option>
+            </Select>
           </Form.Item>
           
           <Form.Item
@@ -7216,6 +7240,12 @@ const MapManagement: React.FC = () => {
                suffix="°"
                min={-180}
                max={180}
+               onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                 // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点
+                 if (e.key === 'Delete' || e.key === 'Backspace') {
+                   e.stopPropagation();
+                 }
+               }}
              />
           </Form.Item>
           
@@ -7315,7 +7345,15 @@ const MapManagement: React.FC = () => {
                 ]}
                 style={{ marginBottom: 16 }}
               >
-                <Input placeholder="请输入线名称" />
+                <Input 
+                  placeholder="请输入线名称" 
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点和线
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                      e.stopPropagation();
+                    }
+                  }}
+                />
               </Form.Item>
             </Col>
           </Row>
