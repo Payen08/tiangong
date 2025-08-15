@@ -203,7 +203,8 @@ const MapManagement: React.FC = () => {
   const [addMapFileStep, setAddMapFileStep] = useState(1); // 1: 基本信息, 2: 地图编辑
   const [addMapFileForm] = Form.useForm();
   const [mapFileUploadedImage, setMapFileUploadedImage] = useState<any>(null);
-  const [addMapFileLoading, setAddMapFileLoading] = useState(false);
+  const [submitAndNextLoading, setSubmitAndNextLoading] = useState(false);
+  const [submitAndExitLoading, setSubmitAndExitLoading] = useState(false);
   const [currentMapFileName, setCurrentMapFileName] = useState<string>(''); // 当前地图文件名称
   
   // 地图信息相关状态
@@ -1984,6 +1985,9 @@ const MapManagement: React.FC = () => {
     try {
       await addMapFileForm.validateFields();
       setAddMapFileStep(2);
+      // 设置地图编辑器的初始状态
+      setInitialMapState({ points: mapPoints, lines: mapLines });
+      setHasUnsavedChanges(false);
     } catch (error) {
       console.log('表单验证失败:', error);
     }
@@ -1995,7 +1999,7 @@ const MapManagement: React.FC = () => {
 
   const handleAddMapFileSubmit = async (values: any) => {
     try {
-      setAddMapFileLoading(true);
+      setSubmitAndExitLoading(true);
       // 模拟API调用
       await new Promise(resolve => setTimeout(resolve, 1000));
       
@@ -2026,7 +2030,92 @@ const MapManagement: React.FC = () => {
     } catch (error) {
       message.error('添加失败，请重试');
     } finally {
-      setAddMapFileLoading(false);
+      setSubmitAndExitLoading(false);
+    }
+  };
+
+  // 提交并下一步：创建地图文件并进入地图编辑器
+  const handleSubmitAndNext = async () => {
+    try {
+      const values = await addMapFileForm.validateFields();
+      setSubmitAndNextLoading(true);
+      
+      // 模拟API调用
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const newMapFile: MapFile = {
+        id: `file_${Date.now()}`,
+        name: values.mapFileName,
+        thumbnail: mapFileUploadedImage?.url || 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
+        status: 'inactive',
+        format: 'PNG',
+      };
+      
+      // 将新地图文件添加到对应地图的文件列表中
+      if (selectedMap) {
+        setMapFiles(prev => {
+          const updatedFiles = { ...prev };
+          const currentMapFiles = updatedFiles[selectedMap.id] || [];
+          updatedFiles[selectedMap.id] = [newMapFile, ...currentMapFiles];
+          return updatedFiles;
+        });
+      }
+      
+      // 进入地图编辑器（下一步）
+      setAddMapFileStep(2);
+      // 设置地图初始状态
+      setInitialMapState({
+        points: [],
+        lines: []
+      });
+      setHasUnsavedChanges(false);
+      
+      message.success('地图文件创建成功，进入编辑器！');
+    } catch (error) {
+      message.error('创建失败，请重试');
+    } finally {
+      setSubmitAndExitLoading(false);
+    }
+  };
+
+  // 提交并退出到地图列表：创建地图文件并退出
+  const handleCreateAndExit = async () => {
+    try {
+      const values = await addMapFileForm.validateFields();
+      setSubmitAndExitLoading(true);
+      
+      // 模拟API调用
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const newMapFile: MapFile = {
+        id: `file_${Date.now()}`,
+        name: values.mapFileName,
+        thumbnail: mapFileUploadedImage?.url || 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
+        status: 'inactive',
+        format: 'PNG',
+      };
+      
+      // 将新地图文件添加到对应地图的文件列表中
+      if (selectedMap) {
+        setMapFiles(prev => {
+          const updatedFiles = { ...prev };
+          const currentMapFiles = updatedFiles[selectedMap.id] || [];
+          updatedFiles[selectedMap.id] = [newMapFile, ...currentMapFiles];
+          return updatedFiles;
+        });
+      }
+      
+      // 退出到地图列表
+      setAddMapFileDrawerVisible(false);
+      addMapFileForm.resetFields();
+      setMapFileUploadedImage(null);
+      setAddMapFileStep(1);
+      
+      message.success('地图文件创建成功！');
+    } catch (error) {
+      message.error('创建失败，请重试');
+    } finally {
+      setSubmitAndExitLoading(false);
     }
   };
 
@@ -2069,6 +2158,23 @@ const MapManagement: React.FC = () => {
     setActiveTabKey('tools'); // 重置为默认的绘图工具Tab
   };
   
+  // 地图编辑状态跟踪
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [initialMapState, setInitialMapState] = useState<{points: any[], lines: MapLine[]}>({points: [], lines: []});
+  
+  // 检查是否有未保存的修改
+  const checkForUnsavedChanges = () => {
+    const currentState = { points: mapPoints, lines: mapLines };
+    const hasChanges = JSON.stringify(currentState) !== JSON.stringify(initialMapState);
+    setHasUnsavedChanges(hasChanges);
+    return hasChanges;
+  };
+  
+  // 监听地图编辑状态变化
+  useEffect(() => {
+    checkForUnsavedChanges();
+  }, [mapPoints, mapLines, initialMapState]);
+  
   // 新的顶部工具栏处理函数
   const handleCancel = () => {
     Modal.confirm({
@@ -2081,14 +2187,31 @@ const MapManagement: React.FC = () => {
     });
   };
   
+  const handleGoBack = () => {
+    const hasChanges = checkForUnsavedChanges();
+    
+    if (hasChanges) {
+      // 有修改，先保存再返回
+      handleSave();
+      message.info('检测到地图有修改，已自动保存');
+    }
+    
+    // 返回上一步（回到基本信息步骤）
+    setAddMapFileStep(1);
+    message.success('已返回上一步');
+  };
+  
   const handleSave = () => {
-    // 保存当前地图编辑状态
+    // 保存当前地图编辑状态（不提交到后台）
+    const currentState = { points: mapPoints, lines: mapLines };
+    setInitialMapState(currentState);
+    setHasUnsavedChanges(false);
     message.success('地图已保存');
     console.log('保存地图数据:', { mapPoints, mapLines });
   };
   
   const handleSubmit = () => {
-    // 提交地图数据
+    // 提交地图数据到后台
     message.success('地图已提交');
     console.log('提交地图数据:', { mapPoints, mapLines });
   };
@@ -5654,7 +5777,7 @@ const MapManagement: React.FC = () => {
 
       {/* 新增地图文件侧滑抽屉 */}
       <Drawer
-        title={`新增地图文件${currentMapFileName ? ` - ${currentMapFileName}` : (selectedMap?.name ? ` - ${selectedMap.name}` : '')}`}
+        title="新增地图文件"
         placement="right"
         width="100vw"
         open={addMapFileDrawerVisible}
@@ -5666,7 +5789,7 @@ const MapManagement: React.FC = () => {
           header: { borderBottom: '1px solid #f0f0f0' }
         }}
         extra={
-          <Space>
+          <Space size={8}>
             <Button onClick={handleCloseAddMapFileDrawer}>
               取消
             </Button>
@@ -5676,13 +5799,28 @@ const MapManagement: React.FC = () => {
               </Button>
             )}
             {addMapFileStep === 1 ? (
-              <Button type="primary" onClick={handleAddMapFileNext}>
-                下一步
-              </Button>
+              <>
+                <Button 
+                  type="primary" 
+                  loading={submitAndExitLoading}
+                  onClick={handleCreateAndExit}
+                  style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                >
+                  提交并退出
+                </Button>
+                <Button 
+                   type="primary"
+                   loading={submitAndNextLoading}
+                   onClick={handleSubmitAndNext}
+                   style={{ background: '#1890ff', borderColor: '#1890ff' }}
+                 >
+                   提交并下一步
+                 </Button>
+              </>
             ) : (
               <Button 
                 type="primary" 
-                loading={addMapFileLoading}
+                loading={submitAndExitLoading}
                 onClick={() => addMapFileForm.submit()}
               >
                 完成
@@ -5720,21 +5858,39 @@ const MapManagement: React.FC = () => {
                 <Form.Item
                   label="上传PNG图片"
                   name="mapImage"
-                  rules={[
-                    { required: true, message: '请上传地图图片' }
-                  ]}
                 >
                   <Upload.Dragger
                     name="file"
                     multiple={false}
-                    accept=".png,.jpg,.jpeg"
-                    beforeUpload={() => false}
-                    onChange={handleMapFileImageUpload}
+                    accept=".png"
+                    beforeUpload={(file) => {
+                      const isPNG = file.type === 'image/png';
+                      if (!isPNG) {
+                        message.error('只能上传PNG格式的图片！');
+                        return false;
+                      }
+                      const isLt10M = file.size / 1024 / 1024 < 10;
+                      if (!isLt10M) {
+                        message.error('图片大小不能超过10MB！');
+                        return false;
+                      }
+                      // 直接处理文件，不进行实际上传
+                      const reader = new FileReader();
+                      reader.addEventListener('load', () => {
+                        setMapFileUploadedImage({
+                          url: reader.result as string,
+                          name: file.name
+                        });
+                      });
+                      reader.readAsDataURL(file);
+                      return false; // 阻止实际上传
+                    }}
+                    onChange={() => {}} // 空函数，因为我们在beforeUpload中处理
                     showUploadList={false}
                     style={{ background: '#fafafa' }}
                   >
                     {mapFileUploadedImage ? (
-                      <div style={{ padding: '20px' }}>
+                      <div style={{ padding: '20px', position: 'relative' }}>
                         <img 
                           src={mapFileUploadedImage.url} 
                           alt="预览" 
@@ -5748,7 +5904,58 @@ const MapManagement: React.FC = () => {
                         <div style={{ marginTop: '12px', color: '#666' }}>
                           {mapFileUploadedImage.name}
                         </div>
-                        <div style={{ marginTop: '8px', color: '#1890ff' }}>
+                        <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'center', gap: '12px' }}>
+                           <Button 
+                             type="link" 
+                             style={{ color: '#1890ff', padding: 0 }}
+                             onClick={(e: React.MouseEvent) => {
+                               e.stopPropagation();
+                               // 创建隐藏的文件输入元素来触发文件选择
+                               const input = document.createElement('input');
+                               input.type = 'file';
+                               input.accept = '.png';
+                               input.onchange = (event: any) => {
+                                 const file = event.target.files[0];
+                                 if (file) {
+                                   const isPNG = file.type === 'image/png';
+                                   if (!isPNG) {
+                                     message.error('只能上传PNG格式的图片！');
+                                     return;
+                                   }
+                                   const isLt10M = file.size / 1024 / 1024 < 10;
+                                   if (!isLt10M) {
+                                     message.error('图片大小不能超过10MB！');
+                                     return;
+                                   }
+                                   const reader = new FileReader();
+                                   reader.addEventListener('load', () => {
+                                     setMapFileUploadedImage({
+                                       url: reader.result as string,
+                                       name: file.name
+                                     });
+                                   });
+                                   reader.readAsDataURL(file);
+                                 }
+                               };
+                               input.click();
+                             }}
+                           >
+                             重新上传
+                           </Button>
+                           <Button 
+                             type="link" 
+                             danger
+                             style={{ padding: 0 }}
+                             onClick={(e: React.MouseEvent) => {
+                               e.stopPropagation();
+                               setMapFileUploadedImage(null);
+                               addMapFileForm.setFieldsValue({ mapImage: undefined });
+                             }}
+                           >
+                             删除图片
+                           </Button>
+                         </div>
+                        <div style={{ marginTop: '8px', color: '#1890ff', fontSize: '14px' }}>
                           点击或拖拽文件到此区域重新上传
                         </div>
                       </div>
@@ -5761,7 +5968,7 @@ const MapManagement: React.FC = () => {
                           点击或拖拽文件到此区域上传
                         </p>
                         <p className="ant-upload-hint" style={{ color: '#999' }}>
-                          支持 PNG、JPG、JPEG 格式，文件大小不超过 10MB
+                          仅支持 PNG 格式，文件大小不超过 10MB
                         </p>
                       </div>
                     )}
@@ -6145,17 +6352,10 @@ const MapManagement: React.FC = () => {
                       </Button>
                       <Button 
                         type="primary" 
-                        onClick={handleSave}
-                        style={{ background: '#52c41a', borderColor: '#52c41a', minWidth: '80px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                        onClick={handleGoBack}
+                        style={{ background: '#52c41a', borderColor: '#52c41a', minWidth: '100px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
                       >
-                        保存
-                      </Button>
-                      <Button 
-                        type="primary" 
-                        onClick={handleSubmit}
-                        style={{ background: '#1890ff', borderColor: '#1890ff', minWidth: '80px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
-                      >
-                        提交
+                        返回上一步
                       </Button>
                       <Button 
                         type="primary" 
