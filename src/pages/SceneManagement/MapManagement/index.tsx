@@ -240,8 +240,11 @@ const MapManagement: React.FC = () => {
     type: 'double-line' | 'single-line' | 'double-bezier' | 'single-bezier';
     color?: string;
     length?: number; // 线长度（像素）
-    pairedLineId?: string; // 配对线的ID（仅用于double-line类型的两条独立线）
-    direction?: 'forward' | 'backward'; // 线的方向（仅用于double-line类型）
+    // 贝塞尔曲线控制点（仅对贝塞尔曲线类型有效）
+    controlPoints?: {
+      cp1?: { x: number; y: number }; // 第一个控制点
+      cp2?: { x: number; y: number }; // 第二个控制点（双贝塞尔曲线使用）
+    };
   }
 
   // 地图编辑器状态
@@ -275,6 +278,77 @@ const MapManagement: React.FC = () => {
   const [lineEditModalVisible, setLineEditModalVisible] = useState(false); // 线编辑弹窗显示状态
   const [lineEditForm] = Form.useForm(); // 线编辑表单
   const [doubleLineClickCount, setDoubleLineClickCount] = useState<Record<string, number>>({}); // 双向直线的双击计数
+  
+  // 贝塞尔曲线控制手柄相关状态
+  const [selectedControlHandle, setSelectedControlHandle] = useState<{
+    lineId: string;
+    handleType: 'cp1' | 'cp2';
+  } | null>(null); // 选中的控制手柄
+  const [isDraggingControlHandle, setIsDraggingControlHandle] = useState(false); // 是否正在拖拽控制手柄
+  const [dragStartPosition, setDragStartPosition] = useState<{x: number, y: number} | null>(null); // 拖拽开始位置
+  
+  // 控制手柄事件处理函数
+  const handleControlHandleMouseDown = (e: React.MouseEvent, lineId: string, handleType: 'cp1' | 'cp2') => {
+    e.stopPropagation();
+    const rect = (e.currentTarget.closest('svg') as SVGElement)?.getBoundingClientRect();
+    if (!rect) return;
+    
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // 转换为画布坐标
+    const canvasX = (mouseX - canvasOffset.x) / canvasScale;
+    const canvasY = (mouseY - canvasOffset.y) / canvasScale;
+    
+    setSelectedControlHandle({ lineId, handleType });
+    setIsDraggingControlHandle(true);
+    setDragStartPosition({ x: canvasX, y: canvasY });
+    
+    console.log('🎯 Control handle mouse down:', { lineId, handleType, canvasX, canvasY });
+  };
+
+  // 控制手柄拖拽事件
+  const handleControlHandleDrag = (e: React.MouseEvent) => {
+    if (!isDraggingControlHandle || !selectedControlHandle || !dragStartPosition) return;
+    
+    const rect = (e.currentTarget as SVGElement).getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // 转换为画布坐标
+    const canvasX = (mouseX - canvasOffset.x) / canvasScale;
+    const canvasY = (mouseY - canvasOffset.y) / canvasScale;
+    
+    // 更新控制点位置
+    setMapLines(prevLines => 
+      prevLines.map(line => {
+        if (line.id === selectedControlHandle.lineId) {
+          const updatedLine = { ...line };
+          if (!updatedLine.controlPoints) {
+            updatedLine.controlPoints = {};
+          }
+          
+          if (selectedControlHandle.handleType === 'cp1') {
+            updatedLine.controlPoints.cp1 = { x: canvasX, y: canvasY };
+          } else {
+            updatedLine.controlPoints.cp2 = { x: canvasX, y: canvasY };
+          }
+          
+          return updatedLine;
+        }
+        return line;
+      })
+    );
+  };
+
+  // 控制手柄拖拽结束事件
+  const handleControlHandleDragEnd = () => {
+    setIsDraggingControlHandle(false);
+    setSelectedControlHandle(null);
+    setDragStartPosition(null);
+    console.log('🎯 Control handle drag end');
+  };
+  
   const [hoveredPoint, setHoveredPoint] = useState<string | null>(null); // 鼠标悬停的点ID
   const [continuousConnecting, setContinuousConnecting] = useState(false); // 连续连线模式
   const [lastConnectedPoint, setLastConnectedPoint] = useState<string | null>(null); // 上一个连接的点ID
@@ -400,29 +474,16 @@ const MapManagement: React.FC = () => {
   const [pathGroupForm] = Form.useForm();
 
   // 路径组状态管理
-  const [pathGroups, setPathGroups] = useState<PathGroup[]>([
-    {
-      id: 'path-group1',
-      name: '路径组1',
-      paths: [
-        { id: 'e1', name: 'e1', description: 'e1(n1<-->n2)', startNode: 'n1', endNode: 'n2' },
-        { id: 'e2', name: 'e2', description: 'e2(n3-->n4)', startNode: 'n3', endNode: 'n4' }
-      ]
-    },
-    {
-      id: 'path-group2',
-      name: '路径组2',
-      paths: [
-        { id: 'e1_pg2', name: 'e1', description: 'e1(n1<-->n2)', startNode: 'n1', endNode: 'n2' },
-        { id: 'e2_pg2', name: 'e2', description: 'e2(n3-->n4)', startNode: 'n3', endNode: 'n4' }
-      ]
-    }
-  ]);
+  const [pathGroups, setPathGroups] = useState<PathGroup[]>([]);
 
   // 线条右键菜单相关状态
   const [lineContextMenuVisible, setLineContextMenuVisible] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [contextMenuLineIds, setContextMenuLineIds] = useState<string[]>([]);
+  
+  // 框选区域右键菜单相关状态
+  const [selectionContextMenuVisible, setSelectionContextMenuVisible] = useState(false);
+  const [selectionContextMenuPosition, setSelectionContextMenuPosition] = useState({ x: 0, y: 0 });
   
   // 路径组选择弹窗相关状态
   const [pathGroupSelectModalVisible, setPathGroupSelectModalVisible] = useState(false);
@@ -640,6 +701,61 @@ const MapManagement: React.FC = () => {
     setContextMenuLineIds([]);
   };
 
+  // 处理框选区域右键菜单
+  const handleSelectionContextMenu = (e: React.MouseEvent) => {
+    // 只有在有选中元素且在框选区域内时才显示右键菜单
+    if (selectedPoints.length > 0 && selectionStart && selectionEnd) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // 获取框选区域内的线（路径）
+      const selectedLinesInSelection = getSelectedLinesInSelection();
+      
+      // 只有当框选区域内有线（路径）时才显示菜单
+      if (selectedLinesInSelection.length > 0) {
+        setSelectionContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setSelectionContextMenuVisible(true);
+      }
+    }
+  };
+
+  // 关闭框选区域右键菜单
+  const handleCloseSelectionContextMenu = () => {
+    setSelectionContextMenuVisible(false);
+  };
+
+  // 获取框选区域内的线（路径）
+  const getSelectedLinesInSelection = (): string[] => {
+    if (!selectionStart || !selectionEnd || selectedPoints.length === 0) {
+      return [];
+    }
+
+    // 获取框选区域内的点ID
+    const selectedPointIds = new Set(selectedPoints);
+    
+    // 找出连接框选区域内点的线
+    const linesInSelection = mapLines.filter(line => {
+      return selectedPointIds.has(line.startPointId) && selectedPointIds.has(line.endPointId);
+    });
+    
+    return linesInSelection.map(line => line.id);
+  };
+
+  // 处理框选区域内线条加入路径组
+  const handleAddSelectionToPathGroup = () => {
+    const selectedLinesInSelection = getSelectedLinesInSelection();
+    
+    if (selectedLinesInSelection.length > 0) {
+      // 设置要加入路径组的线条ID
+      setContextMenuLineIds(selectedLinesInSelection);
+      setSelectionContextMenuVisible(false);
+      setPathGroupSelectModalVisible(true);
+      pathGroupSelectForm.resetFields();
+    } else {
+      message.warning('框选区域内没有可加入路径组的线条');
+    }
+  };
+
   // 打开路径组选择弹窗
   const handleOpenPathGroupSelect = () => {
     setLineContextMenuVisible(false);
@@ -690,8 +806,25 @@ const MapManagement: React.FC = () => {
       const { pathGroupId } = values;
       
       if (pathGroupId) {
+        // 检查线条是否已经在其他路径组中
+        const allExistingPathIds = pathGroups.flatMap(group => group.paths.map(p => p.id));
+        const duplicateLines = contextMenuLineIds.filter(lineId => allExistingPathIds.includes(lineId));
+        
+        if (duplicateLines.length > 0) {
+          message.warning(`选中的线条中有 ${duplicateLines.length} 条已存在于其他路径组中，将跳过重复的线条`);
+        }
+        
+        // 过滤掉已存在的线条
+        const validLineIds = contextMenuLineIds.filter(lineId => !allExistingPathIds.includes(lineId));
+        
+        if (validLineIds.length === 0) {
+          message.warning('所有选中的线条都已存在于路径组中');
+          handleClosePathGroupSelect();
+          return;
+        }
+        
         // 将选中的线条加入到路径组
-        const linesToAdd = contextMenuLineIds.map(lineId => {
+        const linesToAdd = validLineIds.map(lineId => {
           const line = mapLines.find(l => l.id === lineId);
           // 获取线条的起始和结束节点名称
           const startPoint = getPointById(line?.startPointId || '');
@@ -700,12 +833,10 @@ const MapManagement: React.FC = () => {
           const endNode = endPoint?.name || 'n2';
           const lineName = line?.name || lineId;
           
-          // 根据线条类型和方向决定箭头格式
+          // 根据线条类型决定箭头格式
           let arrow = '-->';
           if (line?.type === 'double-line') {
             arrow = '<-->';
-          } else if (line?.direction === 'backward') {
-            arrow = '<--';
           }
           
           return {
@@ -719,19 +850,16 @@ const MapManagement: React.FC = () => {
         
         setPathGroups(prev => prev.map(group => {
           if (group.id === pathGroupId) {
-            // 避免重复添加
-            const existingPathIds = group.paths.map(p => p.id);
-            const newPaths = linesToAdd.filter(path => !existingPathIds.includes(path.id));
             return {
               ...group,
-              paths: [...group.paths, ...newPaths]
+              paths: [...group.paths, ...linesToAdd]
             };
           }
           return group;
         }));
         
         const groupName = pathGroups.find(g => g.id === pathGroupId)?.name || '路径组';
-        message.success(`已将 ${contextMenuLineIds.length} 条线加入到 ${groupName}`);
+        message.success(`已将 ${validLineIds.length} 条线加入到 ${groupName}`);
       }
       
       handleClosePathGroupSelect();
@@ -2030,7 +2158,7 @@ const MapManagement: React.FC = () => {
     } catch (error) {
       message.error('添加失败，请重试');
     } finally {
-      setSubmitAndExitLoading(false);
+      setSubmitAndNextLoading(false);
     }
   };
 
@@ -2068,13 +2196,18 @@ const MapManagement: React.FC = () => {
         points: [],
         lines: []
       });
+      // 将地图文件名称传递给地图编辑器
+      setMapInfo(prev => ({
+        ...prev,
+        mapName: values.mapFileName
+      }));
       setHasUnsavedChanges(false);
       
       message.success('地图文件创建成功，进入编辑器！');
     } catch (error) {
       message.error('创建失败，请重试');
     } finally {
-      setSubmitAndExitLoading(false);
+      setSubmitAndNextLoading(false);
     }
   };
 
@@ -2642,44 +2775,24 @@ const MapManagement: React.FC = () => {
         // 创建新的连线
         if (selectedTool === 'double-line') {
           
-          // 双向线：创建两条独立的单向线
-          const forwardLineId = `line_${Date.now()}_forward`;
-          const backwardLineId = `line_${Date.now()}_backward`;
-          
-          const forwardLine: MapLine = {
-            id: forwardLineId,
+          // 双向线：创建一条双向线
+          const newLine: MapLine = {
+            id: `line_${Date.now()}`,
             name: `e${lineCounter}`,
             startPointId: startPoint,
             endPointId: pointId,
             type: 'double-line',
             color: '#87CEEB',
-            length: Math.round(lineLength),
-            pairedLineId: backwardLineId,
-            direction: 'forward'
+            length: Math.round(lineLength)
           };
           
-          const backwardLine: MapLine = {
-            id: backwardLineId,
-            name: `e${lineCounter + 1}`,
-            startPointId: pointId,
-            endPointId: startPoint,
-            type: 'double-line',
-            color: '#87CEEB',
-            length: Math.round(lineLength),
-            pairedLineId: forwardLineId,
-            direction: 'backward'
-          };
+          // 更新线计数器
+          setLineCounter(prev => prev + 1);
           
-          // 更新线计数器（双向线占用两个名称）
-          setLineCounter(prev => prev + 2);
+          // 更新连线数据
+          setMapLines(prev => [...prev, newLine]);
           
-          // 更新连线数据（backward线先添加，forward线后添加，确保forward线在上层）
-          setMapLines(prev => {
-            const newLines = [...prev, backwardLine, forwardLine];
-            return newLines;
-          });
-          
-          message.success(`成功创建双向线条：${forwardLine.name} 和 ${backwardLine.name}`);
+          message.success(`成功创建双向线条：${newLine.name}`);
         } else {
           // 单向线：创建一条线
           const newLine: MapLine = {
@@ -3118,15 +3231,15 @@ const MapManagement: React.FC = () => {
   // 获取点类型对应的颜色
   const getPointColor = (type: string) => {
     const colorMap: Record<string, string> = {
-      '节点': '#91d5ff',      // 淡蓝色
+      '节点': '#1890ff',      // 蓝色
       '站点': '#1890ff',      // 蓝色（与连线颜色一致）
-      '充电点': '#b7eb8f',    // 淡绿色
-      '停靠点': '#ffd666',    // 淡黄色
-      '电梯点': '#87e8de',    // 淡青色
-      '自动门': '#d3adf7',    // 淡紫色
-      '其他': '#d9d9d9'       // 淡灰色
+      '充电点': '#52c41a',    // 绿色
+      '停靠点': '#faad14',    // 橙色
+      '电梯点': '#13c2c2',    // 青色
+      '自动门': '#722ed1',    // 紫色
+      '其他': '#8c8c8c'       // 灰色
     };
-    return colorMap[type] || '#d9d9d9';
+    return colorMap[type] || '#8c8c8c';
   };
 
   // 获取更深的颜色用于描边
@@ -3204,6 +3317,84 @@ const MapManagement: React.FC = () => {
     );
   };
 
+  // 渲染贝塞尔曲线控制手柄
+  const renderControlHandles = (line: MapLine, cp1: {x: number, y: number}, cp2?: {x: number, y: number}) => {
+    const handleSize = 6;
+    const lineColor = '#1890ff';
+    
+    return (
+      <g key={`control-handles-${line.id}`}>
+        {/* 控制点1的连接线和手柄 */}
+        <line
+          x1={line.startPointId ? getPointById(line.startPointId)?.x : 0}
+          y1={line.startPointId ? getPointById(line.startPointId)?.y : 0}
+          x2={cp1.x}
+          y2={cp1.y}
+          stroke={lineColor}
+          strokeWidth="1"
+          strokeDasharray="5,5"
+          style={{ pointerEvents: 'none' }}
+        />
+        <line
+          x1={line.endPointId ? getPointById(line.endPointId)?.x : 0}
+          y1={line.endPointId ? getPointById(line.endPointId)?.y : 0}
+          x2={cp1.x}
+          y2={cp1.y}
+          stroke={lineColor}
+          strokeWidth="1"
+          strokeDasharray="5,5"
+          style={{ pointerEvents: 'none' }}
+        />
+        <circle
+          cx={cp1.x}
+          cy={cp1.y}
+          r={handleSize}
+          fill={selectedControlHandle?.lineId === line.id && selectedControlHandle?.handleType === 'cp1' ? '#ff4d4f' : '#1890ff'}
+          stroke="#fff"
+          strokeWidth="2"
+          style={{ cursor: 'pointer' }}
+          onMouseDown={(e) => handleControlHandleMouseDown(e, line.id, 'cp1')}
+        />
+        
+        {/* 控制点2的连接线和手柄（仅双贝塞尔曲线） */}
+        {cp2 && (
+          <>
+            <line
+              x1={line.startPointId ? getPointById(line.startPointId)?.x : 0}
+              y1={line.startPointId ? getPointById(line.startPointId)?.y : 0}
+              x2={cp2.x}
+              y2={cp2.y}
+              stroke={lineColor}
+              strokeWidth="1"
+              strokeDasharray="5,5"
+              style={{ pointerEvents: 'none' }}
+            />
+            <line
+              x1={line.endPointId ? getPointById(line.endPointId)?.x : 0}
+              y1={line.endPointId ? getPointById(line.endPointId)?.y : 0}
+              x2={cp2.x}
+              y2={cp2.y}
+              stroke={lineColor}
+              strokeWidth="1"
+              strokeDasharray="5,5"
+              style={{ pointerEvents: 'none' }}
+            />
+            <circle
+              cx={cp2.x}
+              cy={cp2.y}
+              r={handleSize}
+              fill={selectedControlHandle?.lineId === line.id && selectedControlHandle?.handleType === 'cp2' ? '#ff4d4f' : '#1890ff'}
+              stroke="#fff"
+              strokeWidth="2"
+              style={{ cursor: 'pointer' }}
+              onMouseDown={(e) => handleControlHandleMouseDown(e, line.id, 'cp2')}
+            />
+          </>
+        )}
+      </g>
+     );
+   };
+
   const renderLine = (line: MapLine) => {
     console.log('🔗 renderLine called:', line);
     const startPoint = getPointById(line.startPointId);
@@ -3228,20 +3419,17 @@ const MapManagement: React.FC = () => {
       }
     });
 
-    const lineColor = line.color || '#87CEEB';
+    const lineColor = line.color || '#1890ff';
     const dx = endCoords.x - startCoords.x;
     const dy = endCoords.y - startCoords.y;
     const angle = Math.atan2(dy, dx);
     
     switch (line.type) {
       case 'double-line':
-        // 双向直线：每条线独立渲染，通过pairedLineId关联
+        // 双向直线：渲染一条带双向箭头的线
         const isSelected = isLineSelected(line.id);
         const selectedStroke = isSelected ? '#1890ff' : lineColor;
         const selectedStrokeWidth = isSelected ? '4' : '2';
-        
-        // 为backward方向的线添加透明度以显示重叠效果
-        const opacity = line.direction === 'backward' ? 0.7 : 1;
         
         return (
           <g 
@@ -3251,7 +3439,7 @@ const MapManagement: React.FC = () => {
             onContextMenu={(e) => handleLineContextMenu(e, line.id)}
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
-            {/* 当前线 */}
+            {/* 双向线 */}
             <line
               x1={startCoords.x}
               y1={startCoords.y}
@@ -3260,12 +3448,12 @@ const MapManagement: React.FC = () => {
               stroke={selectedStroke}
               strokeWidth={selectedStrokeWidth}
               style={{ 
-                filter: isSelected ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none',
-                opacity: opacity
+                filter: isSelected ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none'
               }}
             />
-            {/* 箭头指向终点 */}
-            {renderArrow(endCoords.x, endCoords.y, angle, selectedStroke, `${line.id}-arrow`)}
+            {/* 双向箭头：起点和终点都有箭头 */}
+            {renderArrow(endCoords.x, endCoords.y, angle, selectedStroke, `${line.id}-end-arrow`)}
+            {renderArrow(startCoords.x, startCoords.y, angle + Math.PI, selectedStroke, `${line.id}-start-arrow`)}
           </g>
         );
         
@@ -3298,7 +3486,7 @@ const MapManagement: React.FC = () => {
         );
         
       case 'double-bezier':
-        // 双向贝塞尔曲线，双向箭头
+        // 双向贝塞尔曲线，使用三次贝塞尔曲线（C命令）实现真正的S形曲线
         const midX = (startCoords.x + endCoords.x) / 2;
         const midY = (startCoords.y + endCoords.y) / 2;
         const controlOffset = 50 * canvasScale; // 控制点偏移也需要根据缩放调整
@@ -3306,6 +3494,17 @@ const MapManagement: React.FC = () => {
         const selectedStrokeDoubleBezier = isSelectedDoubleBezier ? '#1890ff' : lineColor;
         const selectedStrokeWidthDoubleBezier = isSelectedDoubleBezier ? '4' : '2';
         
+        // 使用存储的控制点或默认控制点
+        // cp1: 起始点的控制点，cp2: 结束点的控制点
+        const controlPoint1 = line.controlPoints?.cp1 || { x: startCoords.x + (endCoords.x - startCoords.x) * 0.3, y: startCoords.y - controlOffset };
+        const controlPoint2 = line.controlPoints?.cp2 || { x: startCoords.x + (endCoords.x - startCoords.x) * 0.7, y: endCoords.y + controlOffset };
+        
+        // 计算三次贝塞尔曲线在端点的切线角度
+        // 起始点切线角度：从起始点指向第一个控制点
+        const startTangentAngleDouble = Math.atan2(controlPoint1.y - startCoords.y, controlPoint1.x - startCoords.x);
+        // 结束点切线角度：从第二个控制点指向结束点
+        const endTangentAngleDouble = Math.atan2(endCoords.y - controlPoint2.y, endCoords.x - controlPoint2.x);
+        
         return (
           <g 
             key={line.id} 
@@ -3314,33 +3513,37 @@ const MapManagement: React.FC = () => {
             onContextMenu={(e) => handleLineContextMenu(e, line.id)}
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
+            {/* 使用三次贝塞尔曲线（C命令）绘制单条曲线 */}
             <path
-              d={`M ${startCoords.x} ${startCoords.y} Q ${midX} ${midY - controlOffset} ${endCoords.x} ${endCoords.y}`}
+              d={`M ${startCoords.x} ${startCoords.y} C ${controlPoint1.x} ${controlPoint1.y} ${controlPoint2.x} ${controlPoint2.y} ${endCoords.x} ${endCoords.y}`}
               stroke={selectedStrokeDoubleBezier}
               strokeWidth={selectedStrokeWidthDoubleBezier}
               fill="none"
               style={{ filter: isSelectedDoubleBezier ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
             />
-            <path
-              d={`M ${startCoords.x} ${startCoords.y} Q ${midX} ${midY + controlOffset} ${endCoords.x} ${endCoords.y}`}
-              stroke={selectedStrokeDoubleBezier}
-              strokeWidth={selectedStrokeWidthDoubleBezier}
-              fill="none"
-              style={{ filter: isSelectedDoubleBezier ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
-            />
-            {/* 双向箭头 */}
-            {renderArrow(endCoords.x, endCoords.y, angle, selectedStrokeDoubleBezier, `${line.id}-end-arrow`)}
-            {renderArrow(startCoords.x, startCoords.y, angle + Math.PI, selectedStrokeDoubleBezier, `${line.id}-start-arrow`)}
+            {/* 控制手柄 - 仅在选中时显示 */}
+            {isSelectedDoubleBezier && renderControlHandles(line, controlPoint1, controlPoint2)}
+            {/* 双向箭头 - 使用曲线切线角度 */}
+            {renderArrow(startCoords.x, startCoords.y, startTangentAngleDouble + Math.PI, selectedStrokeDoubleBezier, `${line.id}-start-arrow`)}
+            {renderArrow(endCoords.x, endCoords.y, endTangentAngleDouble, selectedStrokeDoubleBezier, `${line.id}-end-arrow`)}
           </g>
         );
         
       case 'single-bezier':
-        // 单向贝塞尔曲线，单向箭头指向终点
-        const controlX = (startCoords.x + endCoords.x) / 2;
-        const controlY = (startCoords.y + endCoords.y) / 2 - 30 * canvasScale; // 控制点偏移也需要根据缩放调整
+        // 单向贝塞尔曲线，使用三次贝塞尔曲线（C命令）支持两个控制点绘制S形
+        const controlOffset_single = 50 * canvasScale; // 控制点偏移也需要根据缩放调整
         const isSelectedSingleBezier = isLineSelected(line.id);
         const selectedStrokeSingleBezier = isSelectedSingleBezier ? '#1890ff' : lineColor;
         const selectedStrokeWidthSingleBezier = isSelectedSingleBezier ? '4' : '2';
+        
+        // 使用存储的控制点或默认控制点
+        // cp1: 起始点的控制点，cp2: 结束点的控制点
+        const controlPoint1_single = line.controlPoints?.cp1 || { x: startCoords.x + (endCoords.x - startCoords.x) * 0.3, y: startCoords.y - controlOffset_single };
+        const controlPoint2_single = line.controlPoints?.cp2 || { x: startCoords.x + (endCoords.x - startCoords.x) * 0.7, y: endCoords.y + controlOffset_single };
+        
+        // 计算三次贝塞尔曲线在终点处的切线角度
+        // 结束点切线角度：从第二个控制点指向结束点
+        const endTangentAngleSingle = Math.atan2(endCoords.y - controlPoint2_single.y, endCoords.x - controlPoint2_single.x);
         
         return (
           <g 
@@ -3350,15 +3553,18 @@ const MapManagement: React.FC = () => {
             onContextMenu={(e) => handleLineContextMenu(e, line.id)}
             style={{ cursor: 'pointer', pointerEvents: 'auto' }}
           >
+            {/* 使用三次贝塞尔曲线（C命令）绘制单条曲线 */}
             <path
-              d={`M ${startCoords.x} ${startCoords.y} Q ${controlX} ${controlY} ${endCoords.x} ${endCoords.y}`}
+              d={`M ${startCoords.x} ${startCoords.y} C ${controlPoint1_single.x} ${controlPoint1_single.y} ${controlPoint2_single.x} ${controlPoint2_single.y} ${endCoords.x} ${endCoords.y}`}
               stroke={selectedStrokeSingleBezier}
               strokeWidth={selectedStrokeWidthSingleBezier}
               fill="none"
               style={{ filter: isSelectedSingleBezier ? 'drop-shadow(0 0 8px rgba(24, 144, 255, 0.6))' : 'none' }}
             />
-            {/* 单向箭头指向终点 */}
-            {renderArrow(endCoords.x, endCoords.y, angle, selectedStrokeSingleBezier, `${line.id}-arrow`)}
+            {/* 控制手柄 - 仅在选中时显示，支持两个控制点 */}
+            {isSelectedSingleBezier && renderControlHandles(line, controlPoint1_single, controlPoint2_single)}
+            {/* 单向箭头指向终点 - 使用曲线切线角度 */}
+            {renderArrow(endCoords.x, endCoords.y, endTangentAngleSingle, selectedStrokeSingleBezier, `${line.id}-arrow`)}
           </g>
         );
         
@@ -3369,41 +3575,13 @@ const MapManagement: React.FC = () => {
   
   // 线双击事件处理
   const handleLineDoubleClick = (line: MapLine) => {
-    // 如果是双向直线，实现双击切换功能
-    if (line.type === 'double-line' && line.pairedLineId) {
-      // 获取当前双击计数（基于配对线组）
-      const pairKey = [line.id, line.pairedLineId].sort().join('_');
-      const currentCount = doubleLineClickCount[pairKey] || 0;
-      const newCount = currentCount + 1;
-      
-      // 更新双击计数
-      setDoubleLineClickCount(prev => ({
-        ...prev,
-        [pairKey]: newCount
-      }));
-      
-      // 确定要编辑的线：奇数次编辑forward线，偶数次编辑backward线
-      let targetLine: MapLine;
-      if (newCount % 2 === 1) {
-        // 第一次双击：编辑forward线
-        targetLine = line.direction === 'forward' ? line : mapLines.find(l => l.id === line.pairedLineId) || line;
-      } else {
-        // 第二次双击：编辑backward线
-        targetLine = line.direction === 'backward' ? line : mapLines.find(l => l.id === line.pairedLineId) || line;
-      }
-      
-      setEditingLine(targetLine);
-      
-      // 根据方向设置表单
-      const directionText = targetLine.direction === 'forward' ? '第一条线（A→B）' : '第二条线（B→A）';
-      
+    // 如果是双向直线，直接编辑
+    if (line.type === 'double-line') {
+      setEditingLine(line);
       lineEditForm.setFieldsValue({
-        name: targetLine.name,
-        type: 'execution',
-        direction: directionText
+        name: line.name,
+        type: 'execution'
       });
-      
-      message.info(`正在编辑双向直线的${directionText}`);
     } else if (line.type === 'single-line') {
       // 单向直线：检查是否有重叠的其他单向线
       const overlappingLines = mapLines.filter(l => 
@@ -5806,7 +5984,7 @@ const MapManagement: React.FC = () => {
                   onClick={handleCreateAndExit}
                   style={{ background: '#52c41a', borderColor: '#52c41a' }}
                 >
-                  提交并退出
+                  提交
                 </Button>
                 <Button 
                    type="primary"
@@ -5814,7 +5992,7 @@ const MapManagement: React.FC = () => {
                    onClick={handleSubmitAndNext}
                    style={{ background: '#1890ff', borderColor: '#1890ff' }}
                  >
-                   提交并下一步
+                   下一步
                  </Button>
               </>
             ) : (
@@ -5877,10 +6055,37 @@ const MapManagement: React.FC = () => {
                       // 直接处理文件，不进行实际上传
                       const reader = new FileReader();
                       reader.addEventListener('load', () => {
-                        setMapFileUploadedImage({
-                          url: reader.result as string,
-                          name: file.name
-                        });
+                        const imageUrl = reader.result as string;
+                        
+                        // 创建Image对象获取图片尺寸
+                        const img = new Image();
+                        img.onload = () => {
+                          const imageWidth = img.width;
+                          const imageHeight = img.height;
+                          const resolution = 0.05; // 分辨率：0.05米/像素
+                          
+                          // 根据图片尺寸和分辨率计算地图实际长宽
+                          const mapWidth = imageWidth * resolution;
+                          const mapHeight = imageHeight * resolution;
+                          
+                          // 更新mapInfo中的长宽数据
+                          setMapInfo(prev => ({
+                            ...prev,
+                            width: Math.round(mapWidth * 100) / 100, // 保留2位小数
+                            height: Math.round(mapHeight * 100) / 100, // 保留2位小数
+                            resolution: resolution
+                          }));
+                          
+                          setMapFileUploadedImage({
+                            url: imageUrl,
+                            name: file.name,
+                            width: imageWidth,
+                            height: imageHeight,
+                            mapWidth: mapWidth,
+                            mapHeight: mapHeight
+                          });
+                        };
+                        img.src = imageUrl;
                       });
                       reader.readAsDataURL(file);
                       return false; // 阻止实际上传
@@ -6360,9 +6565,9 @@ const MapManagement: React.FC = () => {
                       <Button 
                         type="primary" 
                         onClick={handleSubmitAndExit}
-                        style={{ background: '#1890ff', borderColor: '#1890ff', minWidth: '100px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                        style={{ background: '#1890ff', borderColor: '#1890ff', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
                       >
-                        提交并退出
+                        提交
                       </Button>
                     </div>
                   </div>
@@ -6374,12 +6579,13 @@ const MapManagement: React.FC = () => {
                       flex: 1,
                       position: 'relative',
                       overflow: 'hidden',
-                      background: '#fff',
+                      background: '#f5f5f5',
                       cursor: (dragTool || isSpacePressed) ? 'grab' : (isDragging ? 'grabbing' : getCanvasCursor()),
                       userSelect: 'none'  // 防止文本选择
                     }}
                     onClick={(dragTool || isSpacePressed) ? undefined : handleCanvasClick}
                     onMouseDown={(dragTool || isSpacePressed) ? handleCanvasDrag : handleSelectionStart}
+                    onContextMenu={handleSelectionContextMenu}
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
@@ -6398,7 +6604,8 @@ const MapManagement: React.FC = () => {
                       `,
                       backgroundSize: '20px 20px',
                       opacity: 0.5,
-                      pointerEvents: 'none'  // 确保网格不会阻挡鼠标事件
+                      pointerEvents: 'none',  // 确保网格不会阻挡鼠标事件
+                      zIndex: 2
                     }}></div>
                     
                     {/* 画布变换容器 */}
@@ -6412,6 +6619,32 @@ const MapManagement: React.FC = () => {
                       transformOrigin: 'center center',
                       transition: isDragging ? 'none' : 'transform 0.2s ease'
                     }}>
+                    
+                    {/* PNG图片背景层 - 在画布变换容器内部，最底层 */}
+                    {mapFileUploadedImage && (
+                      <div style={{
+                        position: 'absolute',
+                        left: '50%',
+                        top: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        zIndex: 1,
+                        pointerEvents: 'none'
+                      }}>
+                        <img 
+                          src={mapFileUploadedImage.url}
+                          alt="地图背景"
+                          style={{
+                            maxWidth: '100vw', // 限制最大宽度为视口宽度
+                            maxHeight: '100vh', // 限制最大高度为视口高度
+                            width: 'auto', // 保持宽高比
+                            height: 'auto', // 保持宽高比
+                            opacity: 1.0,
+                            userSelect: 'none',
+                            pointerEvents: 'none'
+                          }}
+                        />
+                      </div>
+                    )}
                     
                     {/* 框选区域 */}
                     <div style={getSelectionBoxStyle()}></div>
@@ -6458,6 +6691,17 @@ const MapManagement: React.FC = () => {
                           const x = (e.clientX - rect.left - canvasOffset.x) / canvasScale;
                           const y = (e.clientY - rect.top - canvasOffset.y) / canvasScale;
                           setMousePosition({ x, y });
+                        }
+                        
+                        // 处理控制手柄拖拽
+                        if (isDraggingControlHandle && selectedControlHandle) {
+                          handleControlHandleDrag(e);
+                        }
+                      }}
+                      onMouseUp={() => {
+                        // 处理控制手柄拖拽结束
+                        if (isDraggingControlHandle) {
+                          handleControlHandleDragEnd();
                         }
                       }}
                     >
@@ -7790,11 +8034,7 @@ const MapManagement: React.FC = () => {
       
       {/* 线属性编辑弹窗 */}
       <Modal
-        title={
-          editingLine?.type === 'double-line' && editingLine?.direction
-            ? `双向直线属性 - ${editingLine.direction === 'forward' ? '第一条线（A→B）' : '第二条线（B→A）'}`
-            : '线属性'
-        }
+        title={'线属性'}
         open={lineEditModalVisible}
         onCancel={() => {
           setLineEditModalVisible(false);
@@ -8094,6 +8334,60 @@ const MapManagement: React.FC = () => {
             zIndex: 9998
           }}
           onClick={handleCloseContextMenu}
+        />
+      )}
+
+      {/* 框选区域右键菜单 */}
+      {selectionContextMenuVisible && (
+        <div
+          style={{
+            position: 'fixed',
+            left: selectionContextMenuPosition.x,
+            top: selectionContextMenuPosition.y,
+            zIndex: 9999,
+            backgroundColor: '#fff',
+            border: '1px solid #d9d9d9',
+            borderRadius: '6px',
+            boxShadow: '0 6px 16px 0 rgba(0, 0, 0, 0.08), 0 3px 6px -4px rgba(0, 0, 0, 0.12), 0 9px 28px 8px rgba(0, 0, 0, 0.05)',
+            padding: '4px 0',
+            minWidth: '120px'
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            style={{
+              padding: '5px 12px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              lineHeight: '22px',
+              color: 'rgba(0, 0, 0, 0.88)',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f5f5f5';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+            onClick={handleAddSelectionToPathGroup}
+          >
+            加入到路径组
+          </div>
+        </div>
+      )}
+
+      {/* 点击其他地方关闭框选区域右键菜单 */}
+      {selectionContextMenuVisible && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 9998
+          }}
+          onClick={handleCloseSelectionContextMenu}
         />
       )}
 
