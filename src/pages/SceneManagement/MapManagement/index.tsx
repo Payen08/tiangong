@@ -287,6 +287,13 @@ const MapManagement: React.FC = () => {
   const [isDraggingControlHandle, setIsDraggingControlHandle] = useState(false); // 是否正在拖拽控制手柄
   const [dragStartPosition, setDragStartPosition] = useState<{x: number, y: number} | null>(null); // 拖拽开始位置
   
+  // 点拖拽相关状态
+  const [isDraggingPoint, setIsDraggingPoint] = useState(false); // 是否正在拖拽点
+  const [draggingPointId, setDraggingPointId] = useState<string | null>(null); // 正在拖拽的点ID
+  const [pointDragStart, setPointDragStart] = useState<{x: number, y: number} | null>(null); // 点拖拽开始位置
+  const [isDraggingSelection, setIsDraggingSelection] = useState(false); // 是否正在拖拽选中的元素组
+  const [selectionDragStart, setSelectionDragStart] = useState<{x: number, y: number} | null>(null); // 选中元素组拖拽开始位置
+  
   // 控制手柄事件处理函数
   const handleControlHandleMouseDown = (e: React.MouseEvent, lineId: string, handleType: 'cp1' | 'cp2') => {
     e.stopPropagation();
@@ -347,6 +354,261 @@ const MapManagement: React.FC = () => {
     setSelectedControlHandle(null);
     setDragStartPosition(null);
     console.log('🎯 Control handle drag end');
+  };
+  
+  // 点拖拽开始事件
+  const handlePointMouseDown = (e: React.MouseEvent, pointId: string) => {
+    // 只有在选择工具模式下才允许拖拽
+    if (selectedTool !== 'select') return;
+    
+    e.stopPropagation();
+    
+    const rect = (e.currentTarget.closest('.canvas-container') as HTMLElement)?.getBoundingClientRect();
+    if (!rect) return;
+    
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // 转换为画布坐标
+    const canvasX = (mouseX - canvasOffset.x) / canvasScale;
+    const canvasY = (mouseY - canvasOffset.y) / canvasScale;
+    
+    // 如果点击的点不在选中列表中，则选中它
+    if (!selectedPoints.includes(pointId)) {
+      setSelectedPoints([pointId]);
+    }
+    
+    setIsDraggingPoint(true);
+    setDraggingPointId(pointId);
+    setPointDragStart({ x: canvasX, y: canvasY });
+    
+    console.log('🎯 Point drag start:', { pointId, canvasX, canvasY });
+  };
+  
+  // 点拖拽移动事件
+  const handlePointDrag = (e: React.MouseEvent) => {
+    if (!isDraggingPoint || !draggingPointId || !pointDragStart) return;
+    
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // 转换为画布坐标
+    const canvasX = (mouseX - canvasOffset.x) / canvasScale;
+    const canvasY = (mouseY - canvasOffset.y) / canvasScale;
+    
+    // 计算移动距离
+    const deltaX = canvasX - pointDragStart.x;
+    const deltaY = canvasY - pointDragStart.y;
+    
+    // 更新所有选中点的位置
+    setMapPoints(prevPoints => 
+      prevPoints.map(point => {
+        if (selectedPoints.includes(point.id)) {
+          return {
+            ...point,
+            x: point.x + deltaX,
+            y: point.y + deltaY
+          };
+        }
+        return point;
+      })
+    );
+    
+    // 更新连接到移动点的线条
+    setMapLines(prevLines => 
+      prevLines.map(line => {
+        let needsUpdate = false;
+        let updatedLine = { ...line };
+        
+        // 检查线的起点或终点是否是被移动的点
+        if (selectedPoints.includes(line.startPointId) || selectedPoints.includes(line.endPointId)) {
+          needsUpdate = true;
+          
+          // 如果是贝塞尔曲线，需要同时更新控制点
+          if ((line.type === 'single-bezier' || line.type === 'double-bezier') && line.controlPoints) {
+            updatedLine.controlPoints = {
+              ...line.controlPoints,
+              cp1: line.controlPoints.cp1 ? {
+                x: line.controlPoints.cp1.x + deltaX,
+                y: line.controlPoints.cp1.y + deltaY
+              } : line.controlPoints.cp1,
+              cp2: line.controlPoints.cp2 ? {
+                x: line.controlPoints.cp2.x + deltaX,
+                y: line.controlPoints.cp2.y + deltaY
+              } : line.controlPoints.cp2
+            };
+          }
+        }
+        
+        return needsUpdate ? updatedLine : line;
+      })
+    );
+    
+    // 更新拖拽起始位置
+    setPointDragStart({ x: canvasX, y: canvasY });
+  };
+  
+  // 点拖拽结束事件
+  const handlePointDragEnd = () => {
+    setIsDraggingPoint(false);
+    setDraggingPointId(null);
+    setPointDragStart(null);
+    console.log('🎯 Point drag end');
+  };
+
+  // 处理框选区域拖拽开始
+  const handleSelectionMouseDown = (event: React.MouseEvent) => {
+    if (selectedTool !== 'select' || selectedPoints.length === 0 || !canvasRef.current) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const canvasCoords = screenToCanvasCoordinates(event.clientX, event.clientY, canvasRef.current);
+    setIsDraggingSelection(true);
+    setSelectionDragStart(canvasCoords);
+    console.log('🎯 Selection drag start:', canvasCoords);
+  };
+
+  // 处理框选区域拖拽移动
+  const handleSelectionDrag = (event: React.MouseEvent) => {
+    if (!isDraggingSelection || !selectionDragStart || selectedPoints.length === 0 || !canvasRef.current) return;
+    
+    const currentCanvasCoords = screenToCanvasCoordinates(event.clientX, event.clientY, canvasRef.current);
+    const deltaX = currentCanvasCoords.x - selectionDragStart.x;
+    const deltaY = currentCanvasCoords.y - selectionDragStart.y;
+    
+    // 更新选中点的位置
+    setMapPoints(prevPoints => 
+      prevPoints.map(point => {
+        if (selectedPoints.includes(point.id)) {
+          return {
+            ...point,
+            x: point.x + deltaX,
+            y: point.y + deltaY
+          };
+        }
+        return point;
+      })
+    );
+    
+    // 更新连接到这些点的线
+    setMapLines(prevLines => 
+      prevLines.map(line => {
+        const isStartPointSelected = selectedPoints.includes(line.startPointId);
+        const isEndPointSelected = selectedPoints.includes(line.endPointId);
+        
+        if (isStartPointSelected || isEndPointSelected) {
+          let updatedLine = { ...line };
+          
+          // 如果是贝塞尔曲线，同步更新控制点
+             if ((line.type === 'single-bezier' || line.type === 'double-bezier') && line.controlPoints) {
+               updatedLine.controlPoints = {
+                 ...line.controlPoints,
+                 ...(line.controlPoints.cp1 && {
+                   cp1: {
+                     x: line.controlPoints.cp1.x + deltaX,
+                     y: line.controlPoints.cp1.y + deltaY
+                   }
+                 }),
+                 ...(line.controlPoints.cp2 && {
+                   cp2: {
+                     x: line.controlPoints.cp2.x + deltaX,
+                     y: line.controlPoints.cp2.y + deltaY
+                   }
+                 })
+               };
+             }
+          
+          return updatedLine;
+        }
+        return line;
+      })
+    );
+    
+    // 更新拖拽起始位置
+    setSelectionDragStart(currentCanvasCoords);
+  };
+
+  // 处理框选区域拖拽结束
+  const handleSelectionDragEnd = () => {
+    setIsDraggingSelection(false);
+    setSelectionDragStart(null);
+    console.log('🎯 Selection drag end');
+  };
+  
+  // 处理方向键移动选中元素
+  const handleArrowKeyMove = (key: string) => {
+    const moveDistance = 5; // 每次移动的像素距离
+    let deltaX = 0;
+    let deltaY = 0;
+    
+    switch (key) {
+      case 'ArrowUp':
+        deltaY = -moveDistance;
+        break;
+      case 'ArrowDown':
+        deltaY = moveDistance;
+        break;
+      case 'ArrowLeft':
+        deltaX = -moveDistance;
+        break;
+      case 'ArrowRight':
+        deltaX = moveDistance;
+        break;
+    }
+    
+    // 移动选中的点
+    if (selectedPoints.length > 0) {
+      setMapPoints(prevPoints => 
+        prevPoints.map(point => {
+          if (selectedPoints.includes(point.id)) {
+            return {
+              ...point,
+              x: point.x + deltaX,
+              y: point.y + deltaY
+            };
+          }
+          return point;
+        })
+      );
+      
+      // 同时更新连接到这些点的线
+      setMapLines(prevLines => 
+        prevLines.map(line => {
+          const isStartPointSelected = selectedPoints.includes(line.startPointId);
+          const isEndPointSelected = selectedPoints.includes(line.endPointId);
+          
+          if (isStartPointSelected || isEndPointSelected) {
+            let updatedLine = { ...line };
+            
+            // 如果是贝塞尔曲线，同步更新控制点
+            if ((line.type === 'single-bezier' || line.type === 'double-bezier') && line.controlPoints) {
+              updatedLine.controlPoints = {
+                ...line.controlPoints,
+                ...(line.controlPoints.cp1 && {
+                  cp1: {
+                    x: line.controlPoints.cp1.x + deltaX,
+                    y: line.controlPoints.cp1.y + deltaY
+                  }
+                }),
+                ...(line.controlPoints.cp2 && {
+                  cp2: {
+                    x: line.controlPoints.cp2.x + deltaX,
+                    y: line.controlPoints.cp2.y + deltaY
+                  }
+                })
+              };
+            }
+            
+            return updatedLine;
+          }
+          return line;
+        })
+      );
+    }
+    
+    console.log(`🎯 Arrow key move: ${key}, delta: (${deltaX}, ${deltaY})`);
   };
   
   const [hoveredPoint, setHoveredPoint] = useState<string | null>(null); // 鼠标悬停的点ID
@@ -1241,6 +1503,116 @@ const MapManagement: React.FC = () => {
         updateTime: '2024-01-15 20:00:25',
         updatedBy: '系统',
         lastConnectTime: '2024-01-15 19:58:20'
+      },
+      // 电梯设备
+      {
+        id: 'elevator_001',
+        deviceName: 'ELEV-001',
+        deviceKey: 'elev_001_key',
+        deviceType: '电梯设备',
+        productName: '货运电梯A',
+        isEnabled: true,
+        currentStatus: '空闲',
+        isOnline: true,
+        relatedMap: '物流中心',
+        mapPosition: '1F-3F',
+        ipAddress: '192.168.1.201',
+        port: '8080',
+        batteryLevel: 0,
+        updateTime: '2024-01-15 18:00:10',
+        updatedBy: '设备管理员',
+        lastConnectTime: '2024-01-15 17:58:05'
+      },
+      {
+        id: 'elevator_002',
+        deviceName: 'ELEV-002',
+        deviceKey: 'elev_002_key',
+        deviceType: '电梯设备',
+        productName: '客运电梯B',
+        isEnabled: true,
+        currentStatus: '执行中',
+        isOnline: true,
+        relatedMap: '办公大楼',
+        mapPosition: '1F-10F',
+        ipAddress: '192.168.1.202',
+        port: '8080',
+        batteryLevel: 0,
+        updateTime: '2024-01-15 17:45:30',
+        updatedBy: '维保人员',
+        lastConnectTime: '2024-01-15 17:43:25'
+      },
+      {
+        id: 'elevator_003',
+        deviceName: 'ELEV-003',
+        deviceKey: 'elev_003_key',
+        deviceType: '电梯设备',
+        productName: '载货升降机',
+        isEnabled: false,
+        currentStatus: '异常',
+        isOnline: false,
+        relatedMap: '仓储区域',
+        mapPosition: '地下1F-2F',
+        ipAddress: '192.168.1.203',
+        port: '8080',
+        batteryLevel: 0,
+        updateTime: '2024-01-15 08:20:45',
+        updatedBy: '安全检查员',
+        lastConnectTime: '2024-01-15 07:15:30'
+      },
+      // 自动门设备
+      {
+        id: 'autodoor_001',
+        deviceName: 'DOOR-001',
+        deviceKey: 'autodoor_001_key',
+        deviceType: '自动门设备',
+        productName: '感应式自动门A',
+        isEnabled: true,
+        currentStatus: '正常',
+        isOnline: true,
+        relatedMap: '办公大楼',
+        mapPosition: '1F入口',
+        ipAddress: '192.168.1.211',
+        port: '8080',
+        batteryLevel: 0,
+        updateTime: '2024-01-15 18:30:15',
+        updatedBy: '设备管理员',
+        lastConnectTime: '2024-01-15 18:28:10'
+      },
+      {
+        id: 'autodoor_002',
+        deviceName: 'DOOR-002',
+        deviceKey: 'autodoor_002_key',
+        deviceType: '自动门设备',
+        productName: '旋转门控制器',
+        isEnabled: true,
+        currentStatus: '正常',
+        isOnline: true,
+        relatedMap: '物流中心',
+        mapPosition: '主入口',
+        ipAddress: '192.168.1.212',
+        port: '8080',
+        batteryLevel: 0,
+        updateTime: '2024-01-15 17:20:30',
+        updatedBy: '维保人员',
+        lastConnectTime: '2024-01-15 17:18:25'
+      },
+      {
+        id: 'autodoor_003',
+        deviceName: 'DOOR-003',
+        deviceKey: 'autodoor_003_key',
+        deviceType: '自动门设备',
+        productName: '平移式自动门',
+        isEnabled: false,
+        currentStatus: '维护中',
+        isOnline: false,
+        relatedMap: '仓储区域',
+        mapPosition: '货物通道',
+        ipAddress: '192.168.1.213',
+        port: '8080',
+        batteryLevel: 0,
+        updateTime: '2024-01-15 09:45:20',
+        updatedBy: '安全检查员',
+        lastConnectTime: '2024-01-15 08:30:15'
       }
     ];
     setRobotDevices(mockRobotDevices);
@@ -2544,8 +2916,10 @@ const MapManagement: React.FC = () => {
   };
 
   // 工具选择处理
-  const handleToolSelect = (toolType: string) => {    // 检查是否是连线工具
-    const isLineToolSelected = ['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(toolType);    setSelectedTool(toolType);
+  const handleToolSelect = (toolType: string) => {
+    // 检查是否是连线工具
+    const isLineToolSelected = ['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(toolType);
+    setSelectedTool(toolType);
     
     // 切换工具时关闭拖动模式
     if (dragTool) {
@@ -3202,6 +3576,12 @@ const MapManagement: React.FC = () => {
           handleDeleteSelectedLines();
         }
       }
+      
+      // 处理方向键移动选中元素
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        event.preventDefault();
+        handleArrowKeyMove(event.key);
+      }
     }
   };
   
@@ -3235,8 +3615,11 @@ const MapManagement: React.FC = () => {
       '站点': '#1890ff',      // 蓝色（与连线颜色一致）
       '充电点': '#52c41a',    // 绿色
       '停靠点': '#faad14',    // 橙色
+      '临停点': '#ff7875',    // 红色（带方向）
+      '归位点': '#9254de',    // 紫色（带方向）
       '电梯点': '#13c2c2',    // 青色
-      '自动门': '#722ed1',    // 紫色
+      '自动门': '#722ed1',    // 深紫色
+      '切换点': '#d4b106',    // 金黄色
       '其他': '#8c8c8c'       // 灰色
     };
     return colorMap[type] || '#8c8c8c';
@@ -3575,12 +3958,16 @@ const MapManagement: React.FC = () => {
   
   // 线双击事件处理
   const handleLineDoubleClick = (line: MapLine) => {
+    if (selectedTool !== 'select') {
+      return;
+    }
+    
     // 如果是双向直线，直接编辑
     if (line.type === 'double-line') {
       setEditingLine(line);
       lineEditForm.setFieldsValue({
         name: line.name,
-        type: 'execution'
+        type: line.type // 使用实际的路径类型值
       });
     } else if (line.type === 'single-line') {
       // 单向直线：检查是否有重叠的其他单向线
@@ -3617,7 +4004,7 @@ const MapManagement: React.FC = () => {
         
         lineEditForm.setFieldsValue({
           name: targetLine.name,
-          type: 'execution',
+          type: targetLine.type, // 使用实际的路径类型值
           direction: `第${lineNumber}条线（共${totalLines}条重叠线）`
         });
         
@@ -3627,7 +4014,7 @@ const MapManagement: React.FC = () => {
         setEditingLine(line);
         lineEditForm.setFieldsValue({
           name: line.name,
-          type: 'execution'
+          type: line.type // 使用实际的路径类型值
         });
       }
     } else {
@@ -3635,7 +4022,7 @@ const MapManagement: React.FC = () => {
        setEditingLine(line);
        lineEditForm.setFieldsValue({
            name: line.name,
-           type: 'bezier'
+           type: line.type // 使用实际的路径类型值
          });
      }
     
@@ -3647,21 +4034,16 @@ const MapManagement: React.FC = () => {
     if (!editingLine) return;
     
     try {
-      // 根据线类型更新线的type字段
-      const newType = values.type === 'execution' ? 
-        (editingLine.type.includes('double') ? 'double-line' : 'single-line') :
-        (editingLine.type.includes('double') ? 'double-bezier' : 'single-bezier');
-      
-      // 更新线数据
+      // 更新线数据，直接使用用户选择的路径类型
       setMapLines(prev => prev.map(line => 
         line.id === editingLine.id ? {
           ...line,
           name: values.name,
-          type: newType
+          type: values.type // 直接使用选择的路径类型值
         } : line
       ));
       
-      message.success('线属性保存成功');
+      message.success('路径属性保存成功');
       setLineEditModalVisible(false);
       setEditingLine(null);
       lineEditForm.resetFields();
@@ -3743,9 +4125,10 @@ const MapManagement: React.FC = () => {
           height: Math.max(screenHeight, 1),
           border: '2px dashed #1890ff',
           background: 'rgba(24, 144, 255, 0.1)',
-          pointerEvents: 'none' as const,
+          pointerEvents: 'auto' as const,  // 允许交互
           zIndex: 5,
-          boxSizing: 'border-box' as const
+          boxSizing: 'border-box' as const,
+          cursor: 'move'  // 显示移动光标
         };
         return style;
       }
@@ -3807,9 +4190,10 @@ const MapManagement: React.FC = () => {
       height: finalHeight,
       border: '2px dashed #1890ff',  // 蓝色虚线边框
       background: 'rgba(24, 144, 255, 0.1)',  // 半透明背景
-      pointerEvents: 'none' as const,
+      pointerEvents: (selectedPoints.length > 0 ? 'auto' : 'none') as React.CSSProperties['pointerEvents'],  // 有选中点时允许交互
       zIndex: 5,
-      boxSizing: 'border-box' as const
+      boxSizing: 'border-box' as const,
+      cursor: selectedPoints.length > 0 ? 'move' : 'default'  // 有选中点时显示移动光标
     };
     return style;
   };
@@ -6591,23 +6975,6 @@ const MapManagement: React.FC = () => {
                     onTouchEnd={handleTouchEnd}
                     onWheel={handleWheel}
                   >
-                    {/* 固定网格背景 - 铺满整个画布，不随拖动消失 */}
-                    <div style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      backgroundImage: `
-                        linear-gradient(to right, #e8e8e8 1px, transparent 1px),
-                        linear-gradient(to bottom, #e8e8e8 1px, transparent 1px)
-                      `,
-                      backgroundSize: '20px 20px',
-                      opacity: 0.5,
-                      pointerEvents: 'none',  // 确保网格不会阻挡鼠标事件
-                      zIndex: 2
-                    }}></div>
-                    
                     {/* 画布变换容器 */}
                     <div style={{
                       position: 'absolute',
@@ -6620,6 +6987,23 @@ const MapManagement: React.FC = () => {
                       transition: isDragging ? 'none' : 'transform 0.2s ease'
                     }}>
                     
+                    {/* 网格背景 - 在画布变换容器内部，跟随画布缩放 */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '-50%',
+                      left: '-50%',
+                      width: '200%',
+                      height: '200%',
+                      backgroundImage: `
+                        linear-gradient(to right, #e8e8e8 1px, transparent 1px),
+                        linear-gradient(to bottom, #e8e8e8 1px, transparent 1px)
+                      `,
+                      backgroundSize: '20px 20px',
+                      opacity: 0.5,
+                      pointerEvents: 'none',  // 确保网格不会阻挡鼠标事件
+                      zIndex: 1
+                    }}></div>
+                    
                     {/* PNG图片背景层 - 在画布变换容器内部，最底层 */}
                     {mapFileUploadedImage && (
                       <div style={{
@@ -6627,7 +7011,7 @@ const MapManagement: React.FC = () => {
                         left: '50%',
                         top: '50%',
                         transform: 'translate(-50%, -50%)',
-                        zIndex: 1,
+                        zIndex: 0,
                         pointerEvents: 'none'
                       }}>
                         <img 
@@ -6647,7 +7031,10 @@ const MapManagement: React.FC = () => {
                     )}
                     
                     {/* 框选区域 */}
-                    <div style={getSelectionBoxStyle()}></div>
+                    <div 
+                      style={getSelectionBoxStyle()}
+                      onMouseDown={handleSelectionMouseDown}
+                    ></div>
                     
                     {/* 连线SVG层 */}
                     <svg
@@ -6658,7 +7045,7 @@ const MapManagement: React.FC = () => {
                         width: '100%',
                         height: '100%',
                         pointerEvents: 'auto', // 允许SVG接收事件
-                        zIndex: 5
+                        zIndex: 10
                       }}
                       onClick={(e) => {
                         // 只有点击SVG空白区域时才触发画布点击
@@ -6697,11 +7084,31 @@ const MapManagement: React.FC = () => {
                         if (isDraggingControlHandle && selectedControlHandle) {
                           handleControlHandleDrag(e);
                         }
+                        
+                        // 处理点拖拽
+                        if (isDraggingPoint && draggingPointId) {
+                          handlePointDrag(e);
+                        }
+                        
+                        // 处理框选区域拖拽
+                        if (isDraggingSelection) {
+                          handleSelectionDrag(e);
+                        }
                       }}
                       onMouseUp={() => {
                         // 处理控制手柄拖拽结束
                         if (isDraggingControlHandle) {
                           handleControlHandleDragEnd();
+                        }
+                        
+                        // 处理点拖拽结束
+                        if (isDraggingPoint) {
+                          handlePointDragEnd();
+                        }
+                        
+                        // 处理框选区域拖拽结束
+                        if (isDraggingSelection) {
+                          handleSelectionDragEnd();
                         }
                       }}
                     >
@@ -6754,13 +7161,14 @@ const MapManagement: React.FC = () => {
                             border: `2px solid ${getPointColor(point.type)}`,  // 移除选中时的蓝色描边
                             boxShadow: 'none',
                             cursor: getPointCursor(point.id),
-                            zIndex: 10,
+                            zIndex: 1001,
                             transform: isPointSelected(point.id) ? 'scale(1.2)' : 'scale(1)',
                             transition: 'all 0.2s ease'
                           }}
                           title={`${point.name} (${point.type})`}
                           onClick={(e) => handlePointClick(e, point.id)}
                           onDoubleClick={(e) => handlePointDoubleClick(e, point)}
+                          onMouseDown={(e) => handlePointMouseDown(e, point.id)}
                           onMouseEnter={() => setHoveredPoint(point.id)}
                           onMouseLeave={() => setHoveredPoint(null)}
                         >
@@ -7917,16 +8325,23 @@ const MapManagement: React.FC = () => {
       <Modal
         title="编辑点属性"
         open={pointEditModalVisible}
+        zIndex={2000}
         onCancel={() => {
           setPointEditModalVisible(false);
           setEditingPoint(null);
-          pointEditForm.resetFields();
+          // 延迟重置表单，避免闪现
+          setTimeout(() => {
+            pointEditForm.resetFields();
+          }, 100);
         }}
         footer={[
           <Button key="cancel" onClick={() => {
             setPointEditModalVisible(false);
             setEditingPoint(null);
-            pointEditForm.resetFields();
+            // 延迟重置表单，避免闪现
+            setTimeout(() => {
+              pointEditForm.resetFields();
+            }, 100);
           }}>
             取消
           </Button>,
@@ -7935,6 +8350,11 @@ const MapManagement: React.FC = () => {
           </Button>
         ]}
         width={500}
+        bodyStyle={{
+          maxHeight: '70vh',
+          overflowY: 'auto',
+          padding: '24px'
+        }}
       >
         <Form
           form={pointEditForm}
@@ -7979,44 +8399,317 @@ const MapManagement: React.FC = () => {
               <Select.Option value="站点">站点</Select.Option>
               <Select.Option value="充电点">充电点</Select.Option>
               <Select.Option value="停靠点">停靠点</Select.Option>
+              <Select.Option value="临停点">临停点</Select.Option>
+              <Select.Option value="归位点">归位点</Select.Option>
               <Select.Option value="电梯点">电梯点</Select.Option>
               <Select.Option value="自动门">自动门</Select.Option>
+              <Select.Option value="切换点">切换点</Select.Option>
             </Select>
           </Form.Item>
           
+          {/* 根据点类型显示不同的字段 */}
           <Form.Item
-             name="direction"
-             label="方向角度"
-             rules={[
-               { required: true, message: '请输入方向角度' },
-               { 
-                 validator: (_: any, value: any) => {
-                   const num = Number(value);
-                   if (isNaN(num)) {
-                     return Promise.reject(new Error('请输入有效的数字'));
-                   }
-                   if (num < -180 || num > 180) {
-                     return Promise.reject(new Error('角度范围为-180到180度'));
-                   }
-                   return Promise.resolve();
-                 }
-               }
-             ]}
-             style={{ marginBottom: 16 }}
-           >
-             <Input
-               type="number"
-               placeholder="请输入方向角度 (-180到180度)"
-               suffix="°"
-               min={-180}
-               max={180}
-               onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                 // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点
-                 if (e.key === 'Delete' || e.key === 'Backspace') {
-                   e.stopPropagation();
-                 }
-               }}
-             />
+            noStyle
+            shouldUpdate={(prevValues: any, currentValues: any) => prevValues.type !== currentValues.type}
+          >
+            {({ getFieldValue }: any) => {
+              const pointType = getFieldValue('type');
+              
+              // 如果是节点类型，不显示任何额外字段
+              if (pointType === '节点') {
+                return null;
+              }
+              
+              // 如果是站点类型或切换点类型，显示方向相关字段
+              if (pointType === '站点' || pointType === '切换点') {
+                return (
+                  <>
+                    {/* 方向角度字段 */}
+                    <Form.Item
+                      name="direction"
+                      label="方向角度"
+                      rules={[
+                        { required: true, message: '请输入方向角度' },
+                        { 
+                          validator: (_: any, value: any) => {
+                            const num = Number(value);
+                            if (isNaN(num)) {
+                              return Promise.reject(new Error('请输入有效的数字'));
+                            }
+                            if (num < -180 || num > 180) {
+                              return Promise.reject(new Error('角度范围为-180到180度'));
+                            }
+                            return Promise.resolve();
+                          }
+                        }
+                      ]}
+                      style={{ marginBottom: 16 }}
+                    >
+                      <Input
+                        type="number"
+                        placeholder="请输入方向角度 (-180到180度)"
+                        suffix="°"
+                        min={-180}
+                        max={180}
+                        onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                          // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点
+                          if (e.key === 'Delete' || e.key === 'Backspace') {
+                            e.stopPropagation();
+                          }
+                        }}
+                      />
+                    </Form.Item>
+                    
+                    {/* 是否禁止调头字段 */}
+                    <Form.Item
+                      name="noUturn"
+                      label="是否禁止调头"
+                      initialValue={false}
+                      style={{ marginBottom: 16 }}
+                    >
+                      <Select placeholder="请选择是否禁止调头">
+                        <Select.Option value={false}>否</Select.Option>
+                        <Select.Option value={true}>是</Select.Option>
+                      </Select>
+                    </Form.Item>
+                  </>
+                );
+              }
+              
+              return (
+                <>
+                  {/* 充电点专用字段：是否可作为停靠点使用 */}
+                  {pointType === '充电点' && (
+                    <Form.Item
+                      name="canBeUsedAsDockingPoint"
+                      label="是否可作为停靠点使用"
+                      initialValue={false}
+                      style={{ marginBottom: 16 }}
+                      tooltip="如果开启，则充电点也可以作为停靠点使用，也就是这个点可以作为停靠点又可以作为充电点"
+                    >
+                      <Select placeholder="请选择是否可作为停靠点使用">
+                        <Select.Option value={false}>否</Select.Option>
+                        <Select.Option value={true}>是</Select.Option>
+                      </Select>
+                    </Form.Item>
+                  )}
+                  
+                  {/* 充电点专用字段：关联机器人 */}
+                  {pointType === '充电点' && (
+                    <Form.Item
+                      name="relatedRobots"
+                      label="关联机器人"
+                      style={{ marginBottom: 16 }}
+                      tooltip="选择可以使用此充电点的机器人设备，支持多选"
+                    >
+                      <Select
+                        mode="multiple"
+                        placeholder="请选择关联的机器人设备"
+                        allowClear
+                        showSearch
+                        filterOption={(input: string, option: any) =>
+                           (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                         }
+                        options={robotDevices
+                          .filter(robot => robot.deviceType === '机器人设备' && robot.isEnabled)
+                          .map(robot => ({
+                            value: robot.id,
+                            label: `${robot.deviceName} (${robot.productName})`,
+                            disabled: !robot.isOnline
+                          }))
+                        }
+                        maxTagCount={3}
+                        maxTagTextLength={10}
+                      />
+                    </Form.Item>
+                  )}
+                  
+                  {/* 停靠点专用字段：关联机器人 */}
+                  {pointType === '停靠点' && (
+                    <Form.Item
+                      name="relatedRobots"
+                      label="关联机器人"
+                      style={{ marginBottom: 16 }}
+                      tooltip="选择可以使用此停靠点的机器人设备，支持多选"
+                    >
+                      <Select
+                        mode="multiple"
+                        placeholder="请选择关联的机器人设备"
+                        allowClear
+                        showSearch
+                        filterOption={(input: string, option: any) =>
+                           (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                         }
+                        options={robotDevices
+                          .filter(robot => robot.deviceType === '机器人设备' && robot.isEnabled)
+                          .map(robot => ({
+                            value: robot.id,
+                            label: `${robot.deviceName} (${robot.productName})`,
+                            disabled: !robot.isOnline
+                          }))
+                        }
+                        maxTagCount={3}
+                        maxTagTextLength={10}
+                      />
+                    </Form.Item>
+                  )}
+                  
+                  {/* 电梯点专用字段 */}
+                  {pointType === '电梯点' && (
+                    <>
+                      {/* 电梯内/外字段 */}
+                      <Form.Item
+                        name="elevatorLocation"
+                        label="电梯内/外"
+                        rules={[{ required: true, message: '请选择电梯内/外' }]}
+                        style={{ marginBottom: 16 }}
+                      >
+                        <Select placeholder="请选择电梯内/外">
+                          <Select.Option value="电梯内">电梯内</Select.Option>
+                          <Select.Option value="电梯外">电梯外</Select.Option>
+                        </Select>
+                      </Form.Item>
+                      
+                      {/* 电梯设备字段 */}
+                      <Form.Item
+                        name="elevatorDevice"
+                        label="电梯设备"
+                        rules={[{ required: true, message: '请选择电梯设备' }]}
+                        style={{ marginBottom: 16 }}
+                        tooltip="选择关联的电梯设备"
+                      >
+                        <Select
+                          placeholder="请选择电梯设备"
+                          allowClear
+                          showSearch
+                          filterOption={(input: string, option: any) =>
+                             (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                           }
+                          options={robotDevices
+                            .filter(device => device.deviceType === '电梯设备' && device.isEnabled)
+                            .map(device => ({
+                              value: device.id,
+                              label: `${device.deviceName} (${device.productName})`,
+                              disabled: !device.isOnline
+                            }))
+                          }
+                        />
+                      </Form.Item>
+                      
+                      {/* 电梯门字段 */}
+                      <Form.Item
+                        name="elevatorDoor"
+                        label="电梯门"
+                        rules={[{ required: true, message: '请选择电梯门' }]}
+                        style={{ marginBottom: 16 }}
+                      >
+                        <Select placeholder="请选择电梯门">
+                          <Select.Option value="A门">A门</Select.Option>
+                          <Select.Option value="B门">B门</Select.Option>
+                          <Select.Option value="C门">C门</Select.Option>
+                          <Select.Option value="D门">D门</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </>
+                  )}
+                  
+                  {/* 自动门专用字段 */}
+                  {pointType === '自动门' && (
+                    <>
+                      {/* 自动门设备字段 */}
+                      <Form.Item
+                        name="autoDoorDevice"
+                        label="自动门设备"
+                        rules={[{ required: true, message: '请选择自动门设备' }]}
+                        style={{ marginBottom: 16 }}
+                        tooltip="选择关联的自动门设备"
+                      >
+                        <Select
+                          placeholder="请选择自动门设备"
+                          allowClear
+                          showSearch
+                          filterOption={(input: string, option: any) =>
+                             (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                           }
+                          options={robotDevices
+                            .filter(device => device.deviceType === '自动门设备' && device.isEnabled)
+                            .map(device => ({
+                              value: device.id,
+                              label: `${device.deviceName} (${device.productName})`,
+                              disabled: !device.isOnline
+                            }))
+                          }
+                        />
+                      </Form.Item>
+                      
+                      {/* 自动门字段 */}
+                      <Form.Item
+                        name="autoDoorType"
+                        label="自动门"
+                        rules={[{ required: true, message: '请选择自动门' }]}
+                        style={{ marginBottom: 16 }}
+                      >
+                        <Select placeholder="请选择自动门">
+                          <Select.Option value="A门">A门</Select.Option>
+                          <Select.Option value="B门">B门</Select.Option>
+                          <Select.Option value="C门">C门</Select.Option>
+                          <Select.Option value="D门">D门</Select.Option>
+                        </Select>
+                      </Form.Item>
+                    </>
+                  )}
+                  
+                  {/* 方向角度字段 - 除节点外的所有类型都显示 */}
+                  <Form.Item
+                    name="direction"
+                    label="方向角度"
+                    rules={[
+                      { required: true, message: '请输入方向角度' },
+                      { 
+                        validator: (_: any, value: any) => {
+                          const num = Number(value);
+                          if (isNaN(num)) {
+                            return Promise.reject(new Error('请输入有效的数字'));
+                          }
+                          if (num < -180 || num > 180) {
+                            return Promise.reject(new Error('角度范围为-180到180度'));
+                          }
+                          return Promise.resolve();
+                        }
+                      }
+                    ]}
+                    style={{ marginBottom: 16 }}
+                  >
+                    <Input
+                      type="number"
+                      placeholder="请输入方向角度 (-180到180度)"
+                      suffix="°"
+                      min={-180}
+                      max={180}
+                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                        // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点
+                        if (e.key === 'Delete' || e.key === 'Backspace') {
+                          e.stopPropagation();
+                        }
+                      }}
+                    />
+                  </Form.Item>
+                  
+                  {/* 是否禁止调头字段 - 除节点外的所有类型都显示 */}
+                  <Form.Item
+                    name="noUturn"
+                    label="是否禁止调头"
+                    initialValue={false}
+                    style={{ marginBottom: 16 }}
+                  >
+                    <Select placeholder="请选择是否禁止调头">
+                      <Select.Option value={false}>否</Select.Option>
+                      <Select.Option value={true}>是</Select.Option>
+                    </Select>
+                  </Form.Item>
+                </>
+              );
+            }}
           </Form.Item>
           
           <div style={{ 
@@ -8034,8 +8727,9 @@ const MapManagement: React.FC = () => {
       
       {/* 线属性编辑弹窗 */}
       <Modal
-        title={'线属性'}
+        title={'路径属性'}
         open={lineEditModalVisible}
+        zIndex={2000}
         onCancel={() => {
           setLineEditModalVisible(false);
           setEditingLine(null);
@@ -8053,127 +8747,86 @@ const MapManagement: React.FC = () => {
             保存
           </Button>
         ]}
-        width={600}
+        width={500}
+        bodyStyle={{
+          maxHeight: '70vh',
+          overflowY: 'auto',
+          padding: '24px'
+        }}
       >
-        {/* 线编辑切换提示 */}
-        {editingLine?.type === 'double-line' && (
-          <Alert
-            message="双向直线编辑提示"
-            description="双击双向直线可以在第一条线（A→B）和第二条线（B→A）之间切换编辑。当前正在编辑的方向已在下方显示。"
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-          />
-        )}
-        {editingLine?.type === 'single-line' && lineEditForm.getFieldValue('direction')?.includes('重叠线') && (
-          <Alert
-            message="重叠线编辑提示"
-            description="双击重叠的线可以在多条重叠线之间切换编辑。当前正在编辑的线信息已在下方显示。"
-            type="info"
-            showIcon
-            style={{ marginBottom: 16 }}
-          />
-        )}
+
         
         <Form
           form={lineEditForm}
           layout="vertical"
           onFinish={handleSaveLineEdit}
         >
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="线ID"
-                style={{ marginBottom: 16 }}
-              >
-                <Input value={editingLine?.id} disabled style={{ color: '#666' }} />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="name"
-                label="线名称"
-                rules={[
-                  { required: true, message: '请输入线名称' },
-                  { max: 20, message: '线名称不能超过20个字符' },
-                  {
-                     validator: async (_: any, value: string) => {
-                       if (value && editingLine) {
-                         const existingLine = mapLines.find(line => 
-                           line.name === value && line.id !== editingLine.id
-                         );
-                         if (existingLine) {
-                           throw new Error('线名称不能重复');
-                         }
-                       }
+          <Form.Item
+            label="路径ID"
+            style={{ marginBottom: 16 }}
+          >
+            <Input value={editingLine?.id} disabled style={{ color: '#666' }} />
+          </Form.Item>
+          
+          <Form.Item
+            name="name"
+            label="路径名称"
+            rules={[
+              { required: true, message: '请输入路径名称' },
+              { max: 20, message: '路径名称不能超过20个字符' },
+              {
+                 validator: async (_: any, value: string) => {
+                   if (value && editingLine) {
+                     const existingLine = mapLines.find(line => 
+                       line.name === value && line.id !== editingLine.id
+                     );
+                     if (existingLine) {
+                       throw new Error('路径名称不能重复');
                      }
                    }
-                ]}
-                style={{ marginBottom: 16 }}
-              >
-                <Input 
-                  placeholder="请输入线名称" 
-                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                    // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点和线
-                    if (e.key === 'Delete' || e.key === 'Backspace') {
-                      e.stopPropagation();
-                    }
-                  }}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
+                 }
+               }
+            ]}
+            style={{ marginBottom: 16 }}
+          >
+            <Input 
+              placeholder="请输入路径名称" 
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点和线
+                if (e.key === 'Delete' || e.key === 'Backspace') {
+                  e.stopPropagation();
+                }
+              }}
+            />
+          </Form.Item>
           
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="type"
-                label="线类型"
-                rules={[{ required: true, message: '请选择线类型' }]}
-                style={{ marginBottom: 16 }}
-              >
-                <Radio.Group>
-                  <Radio value="execution">执行</Radio>
-                  <Radio value="bezier">贝塞尔曲线</Radio>
-                </Radio.Group>
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item
+            name="type"
+            label="路径类型"
+            rules={[{ required: true, message: '请选择路径类型' }]}
+            style={{ marginBottom: 16 }}
+          >
+            <Select placeholder="请选择路径类型">
+              <Select.Option value="single-line">单向直线</Select.Option>
+              <Select.Option value="double-line">双向直线</Select.Option>
+              <Select.Option value="single-bezier">单向贝塞尔曲线</Select.Option>
+              <Select.Option value="double-bezier">双向贝塞尔曲线</Select.Option>
+            </Select>
+          </Form.Item>
           
-          {/* 方向显示（双向直线或重叠单向线） */}
-          {(editingLine?.type === 'double-line' || 
-            (editingLine?.type === 'single-line' && lineEditForm.getFieldValue('direction'))) && (
-            <Row gutter={16}>
-              <Col span={24}>
-                <Form.Item
-                  name="direction"
-                  label="当前编辑方向"
-                  style={{ marginBottom: 16 }}
-                >
-                  <Input 
-                    disabled 
-                    style={{ 
-                      color: '#1890ff', 
-                      fontWeight: 'bold',
-                      background: '#f0f8ff',
-                      border: '1px solid #1890ff'
-                    }} 
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
-          )}
+
           
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                label="线长度"
-                style={{ marginBottom: 16 }}
-              >
-                <Input value={`${editingLine?.length || 0} 像素`} disabled style={{ color: '#666' }} />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item
+            label="路径长度"
+            style={{ marginBottom: 16 }}
+          >
+            <Input 
+              value={`${((editingLine?.length || 0) * 0.05).toFixed(2)} m`} 
+              disabled 
+              style={{ color: '#666' }} 
+              addonAfter="实际距离"
+            />
+          </Form.Item>
           
           <div style={{ 
             background: '#f5f5f5', 
