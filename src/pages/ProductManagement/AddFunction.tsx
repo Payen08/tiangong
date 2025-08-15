@@ -11,9 +11,6 @@ import {
   Col,
   Space,
   message,
-  Radio,
-  Switch,
-  InputNumber,
   Divider,
   Typography,
 } from 'antd';
@@ -1222,7 +1219,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         <div>
           <Text strong>值配置</Text>
           <div style={{ marginTop: 8 }}>
-            {valueConfigItems.map((item, index) => (
+            {valueConfigItems.map((item) => (
               <Row key={item.id} gutter={16} style={{ marginBottom: 8 }}>
                 <Col xs={8} sm={6} md={6} lg={6} xl={6}>
                   <Input value={item.value} disabled />
@@ -1256,7 +1253,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
             </Button>
           </div>
           <div>
-            {valueConfigItems.map((item, index) => (
+            {valueConfigItems.map((item) => (
               <Row key={item.id} gutter={16} style={{ marginBottom: 8 }}>
                 <Col xs={8} sm={6} md={5} lg={5} xl={5}>
                   <Input
@@ -1296,7 +1293,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         <div>
           <Text strong style={{ marginBottom: 8, display: 'block' }}>值配置</Text>
           <div>
-            {valueConfigItems.map((item, index) => (
+            {valueConfigItems.map((item) => (
               <Row key={item.id} gutter={16} style={{ marginBottom: 8 }}>
                 <Col xs={8} sm={6} md={5} lg={5} xl={5}>
                   <Input
@@ -1438,7 +1435,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       return (
         <Form.Item label="值配置与寄存器映射">
           <div>
-            {valueConfigItems.map((item, index) => (
+            {valueConfigItems.map((item) => (
               <div key={item.id} style={{ marginBottom: 16, border: '1px solid #d9d9d9', borderRadius: 6, padding: 12 }}>
                 {/* 值配置基本信息 */}
                 <Row gutter={16} style={{ marginBottom: 8 }}>
@@ -1466,7 +1463,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                     </Button>
                   </div>
                   
-                  {(item.registerMappings || []).map((mapping, mappingIndex) => (
+                  {(item.registerMappings || []).map((mapping) => (
                     <div key={mapping.id} style={{ marginBottom: 8, padding: 8, backgroundColor: '#fafafa', borderRadius: 4 }}>
                       <Row gutter={8}>
                         <Col span={5}>
@@ -1601,7 +1598,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       return (
         <Form.Item label="值配置与采集卡映射">
           <div>
-            {valueConfigItems.map((item, index) => (
+            {valueConfigItems.map((item) => (
               <div key={item.id} style={{ marginBottom: 16, border: '1px solid #d9d9d9', borderRadius: 6, padding: 12 }}>
                 {/* 值配置基本信息 */}
                 <Row gutter={16} style={{ marginBottom: 8 }}>
@@ -1629,7 +1626,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
                     </Button>
                   </div>
                   
-                  {(item.pinMappings || []).map((mapping, mappingIndex) => (
+                  {(item.pinMappings || []).map((mapping) => (
                     <div key={mapping.id} style={{ marginBottom: 8, padding: 8, backgroundColor: '#fafafa', borderRadius: 4 }}>
                       <Row gutter={8}>
                         <Col span={8}>
@@ -1706,7 +1703,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       return (
         <Form.Item label="值配置">
           <div>
-            {valueConfigItems.map((item, index) => (
+            {valueConfigItems.map((item) => (
               <Row key={item.id} gutter={16} style={{ marginBottom: 8 }}>
                 <Col span={8}>
                   <Input value={item.value} disabled style={{ backgroundColor: '#f5f5f5' }} />
@@ -1729,7 +1726,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       return (
         <Form.Item label="值配置">
           <div>
-            {valueConfigItems.map((item, index) => (
+            {valueConfigItems.map((item) => (
               <Row key={item.id} gutter={16} style={{ marginBottom: 8 }}>
                 <Col span={8}>
                   <Input

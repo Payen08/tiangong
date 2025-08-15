@@ -21,7 +21,6 @@ import {
   SearchOutlined,
   EditOutlined,
   DeleteOutlined,
-  EyeOutlined,
   ReloadOutlined,
   MoreOutlined,
   CopyOutlined,
@@ -762,23 +761,7 @@ const ProductManagement: React.FC = () => {
     });
   };
 
-  const handleView = (record: Product) => {
-    Modal.info({
-      title: '产品详情',
-      content: (
-        <div>
-          <p><strong>产品名称：</strong>{record.productName}</p>
-          <p><strong>产品Key：</strong>{record.productKey}</p>
-          <p><strong>产品类型：</strong>{record.productType}</p>
-          <p><strong>通讯协议：</strong>{record.protocol}</p>
-          <p><strong>关联设备数：</strong>{record.deviceCount}</p>
-          <p><strong>更新时间：</strong>{record.updateTime}</p>
-          <p><strong>更新人：</strong>{record.updatedBy}</p>
-        </div>
-      ),
-      width: 500,
-    });
-  };
+
 
   const handleModalOk = async () => {
     try {

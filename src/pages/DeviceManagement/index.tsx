@@ -61,7 +61,6 @@ const DeviceManagement: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<string | undefined>(undefined);
   const [selectedDeviceType, setSelectedDeviceType] = useState<string | undefined>(undefined);
-  const [selectedStatus, setSelectedStatus] = useState<string | undefined>(undefined);
   const [selectedOnlineStatus, setSelectedOnlineStatus] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -97,41 +96,8 @@ const DeviceManagement: React.FC = () => {
     return '其他设备';
   };
 
-  // 根据设备类型筛选对应的产品
-  const getProductsByDeviceType = (deviceType: string): string[] => {
-    switch (deviceType) {
-      case '机器人设备':
-        return productNames.filter(product => 
-          product.includes('AGV') || product.includes('AMR') || product.includes('MCR')
-        );
-      case '生产设备':
-        return productNames.filter(product => 
-          product.includes('CNC') || product.includes('生产线')
-        );
-      case '电梯设备':
-        return productNames.filter(product => 
-          product.includes('电梯') || product.includes('升降机')
-        );
-      case '自动门设备':
-        return productNames.filter(product => 
-          product.includes('门') || product.includes('卷帘')
-        );
-      case '虚拟设备':
-        return productNames.filter(product => 
-          product.includes('虚拟')
-        );
-      case '其他设备':
-        return productNames.filter(product => 
-          !product.includes('AGV') && !product.includes('AMR') && !product.includes('MCR') &&
-          !product.includes('CNC') && !product.includes('生产线') &&
-          !product.includes('电梯') && !product.includes('升降机') &&
-          !product.includes('门') && !product.includes('卷帘') &&
-          !product.includes('虚拟')
-        );
-      default:
-        return productNames;
-    }
-  };
+
+
 
   // 当选择产品时，自动设置对应的设备类型
   React.useEffect(() => {

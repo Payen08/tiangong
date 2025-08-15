@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Card,
   Table,
@@ -25,7 +24,7 @@ import {
   Popover,
   Radio,
   Select,
-  Tooltip,
+
   Checkbox,
   Progress,
   Alert,
@@ -39,22 +38,15 @@ import {
   DeleteOutlined,
   MoreOutlined,
   SettingOutlined,
-  PlayCircleOutlined,
-  PauseCircleOutlined,
   SyncOutlined,
-  ExportOutlined,
   EyeOutlined,
   FileImageOutlined,
-  DownloadOutlined,
   PlusOutlined,
   UploadOutlined,
   ExclamationCircleOutlined,
   ImportOutlined,
-  CloudDownloadOutlined,
   FolderOpenOutlined,
   RobotOutlined,
-  WifiOutlined,
-  DisconnectOutlined,
   LeftOutlined,
   RightOutlined,
   CheckCircleOutlined,
@@ -68,18 +60,10 @@ import {
   RedoOutlined,
   RotateLeftOutlined,
   HomeOutlined,
-  SaveOutlined,
-  CheckOutlined,
-  SearchOutlined,
-  SendOutlined,
-  CloseOutlined,
   NodeIndexOutlined,
   ShareAltOutlined,
   AppstoreOutlined,
   GroupOutlined,
-  EnvironmentOutlined,
-  LineOutlined,
-  BranchesOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -147,7 +131,6 @@ interface SyncResult {
 }
 
 const MapManagement: React.FC = () => {
-  const navigate = useNavigate();
   const [selectedMap, setSelectedMap] = useState<MapData | null>(null);
   const [loading, setLoading] = useState(false);
   const [mapFiles, setMapFiles] = useState<Record<string, MapFile[]>>({});
@@ -189,14 +172,10 @@ const MapManagement: React.FC = () => {
   // 同步进度相关状态
   const [syncProgressModalVisible, setSyncProgressModalVisible] = useState(false);
   const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
-  const [showSyncProgress, setShowSyncProgress] = useState(false);
-  const [syncResults, setSyncResults] = useState<SyncResult[]>([]);
+
   const [allSyncCompleted, setAllSyncCompleted] = useState(false);
   
-  // 地图名称搜索相关状态
-  const [searchMapName, setSearchMapName] = useState<string>('');
-  const [searchedMapFiles, setSearchedMapFiles] = useState<MapFile[]>([]);
-  const [isSearchMode, setIsSearchMode] = useState(false);
+  // 地图名称搜索相关状态已移除
   
   // 新增地图文件相关状态
   const [addMapFileDrawerVisible, setAddMapFileDrawerVisible] = useState(false);
@@ -205,7 +184,7 @@ const MapManagement: React.FC = () => {
   const [mapFileUploadedImage, setMapFileUploadedImage] = useState<any>(null);
   const [submitAndNextLoading, setSubmitAndNextLoading] = useState(false);
   const [submitAndExitLoading, setSubmitAndExitLoading] = useState(false);
-  const [currentMapFileName, setCurrentMapFileName] = useState<string>(''); // 当前地图文件名称
+
   
   // 地图信息相关状态
   const [mapInfo, setMapInfo] = useState({
@@ -251,7 +230,7 @@ const MapManagement: React.FC = () => {
   const [selectedTool, setSelectedTool] = useState<string>('select'); // 当前选中的工具，默认选中选择工具
   const [mapType, setMapType] = useState<'topology' | 'grayscale'>('topology'); // 地图类型：拓扑地图或黑白底图
   const [currentMode, setCurrentMode] = useState<'edit' | 'view'>('edit'); // 当前模式：编辑模式或阅览模式
-  const [exitEditModalVisible, setExitEditModalVisible] = useState(false); // 退出编辑模式确认弹窗
+
   // 预设节点数据 - 已清空测试数据
   const defaultMapPoints: any[] = [];
   
@@ -725,7 +704,7 @@ const MapManagement: React.FC = () => {
     console.log(`🎯 Arrow key move: ${key}, delta: (${deltaX}, ${deltaY})`);
   };
   
-  const [hoveredPoint, setHoveredPoint] = useState<string | null>(null); // 鼠标悬停的点ID
+  const [, setHoveredPoint] = useState<string | null>(null); // 鼠标悬停的点ID
   const [continuousConnecting, setContinuousConnecting] = useState(false); // 连续连线模式
   const [lastConnectedPoint, setLastConnectedPoint] = useState<string | null>(null); // 上一个连接的点ID
   const [mousePosition, setMousePosition] = useState<{x: number, y: number} | null>(null); // 鼠标在画布上的位置
@@ -746,7 +725,7 @@ const MapManagement: React.FC = () => {
   const [canvasScale, setCanvasScale] = useState(1); // 画布缩放比例
   const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 }); // 画布偏移量
   const [isDragging, setIsDragging] = useState(false); // 是否正在拖动画布
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 }); // 拖动起始位置
+  // 拖动起始位置 - 已移除未使用的变量
   const [dragTool, setDragTool] = useState(false); // 是否激活拖动工具
   const [isSpacePressed, setIsSpacePressed] = useState(false); // 是否按住空格键
   const [isCanvasClicked, setIsCanvasClicked] = useState(false); // 画布是否被点击过
@@ -1318,47 +1297,7 @@ const MapManagement: React.FC = () => {
   };
 
   // 专门的坐标转换验证函数
-  const debugCoordinateTransformation = (screenX: number, screenY: number, canvasElement: HTMLDivElement) => {
-    const rect = canvasElement.getBoundingClientRect();
-    const relativeX = screenX - rect.left;
-    const relativeY = screenY - rect.top;
-    
-    // 修复后的转换逻辑
-    const canvasX = (relativeX / canvasScale) - canvasOffset.x;
-    const canvasY = (relativeY / canvasScale) - canvasOffset.y;
-    
-    // 反向验证：画布坐标转回屏幕坐标
-    const backToRelativeX = (canvasX + canvasOffset.x) * canvasScale;
-    const backToRelativeY = (canvasY + canvasOffset.y) * canvasScale;
-    const backToScreenX = backToRelativeX + rect.left;
-    const backToScreenY = backToRelativeY + rect.top;
-    
-    console.log('🔍 [坐标转换验证] 详细分析 (修复后):', {
-      '1_输入屏幕坐标': `{x: ${screenX}, y: ${screenY}}`,
-      '2_画布边界信息': {
-        left: rect.left.toFixed(2),
-        top: rect.top.toFixed(2),
-        width: rect.width.toFixed(2),
-        height: rect.height.toFixed(2)
-      },
-      '3_相对画布坐标': `{x: ${relativeX.toFixed(2)}, y: ${relativeY.toFixed(2)}}`,
-      '4_当前画布状态': {
-        canvasScale: canvasScale.toFixed(3),
-        canvasOffset: `{x: ${canvasOffset.x.toFixed(2)}, y: ${canvasOffset.y.toFixed(2)}}`
-      },
-      '5_转换后画布坐标': `{x: ${canvasX.toFixed(2)}, y: ${canvasY.toFixed(2)}}`,
-      '6_反向验证': {
-        backToRelative: `{x: ${backToRelativeX.toFixed(2)}, y: ${backToRelativeY.toFixed(2)}}`,
-        backToScreen: `{x: ${backToScreenX.toFixed(2)}, y: ${backToScreenY.toFixed(2)}}`
-      },
-      '7_坐标转换误差': {
-        x_error: Math.abs(screenX - backToScreenX).toFixed(2),
-        y_error: Math.abs(screenY - backToScreenY).toFixed(2)
-      }
-    });
-    
-    return { canvasX, canvasY, backToScreenX, backToScreenY };
-  };
+  // 调试坐标转换函数已移除
 
   // 画布坐标转屏幕坐标函数
   const canvasToScreenCoordinates = (canvasX: number, canvasY: number) => {
@@ -1909,7 +1848,7 @@ const MapManagement: React.FC = () => {
   };
 
   // 列宽调整函数
-  const adjustColumnWidths = (columns: ColumnsType<MapData>, mobile: boolean) => {
+  const adjustColumnWidths = (columns: ColumnsType<MapData>) => {
     return columns.map((col: any) => ({
       ...col,
       width: col.width ? getColumnWidth(col.width as number) : undefined,
@@ -2046,64 +1985,12 @@ const MapManagement: React.FC = () => {
     return mapFiles[mapId] || [];
   };
 
-  // 根据地图名称获取地图文件数据
-  const getMapFilesByName = (mapName: string): MapFile[] => {
-    // 首先根据地图名称找到对应的地图数据
-    const targetMap = mapData.find(map => map.name === mapName);
-    if (!targetMap) {
-      console.warn(`未找到名称为 "${mapName}" 的地图`);
-      return [];
-    }
-    
-    // 根据地图ID获取地图文件
-    return getMapFiles(targetMap.id);
-  };
+  // 根据地图名称获取地图文件数据 - 已移除未使用的函数
 
-  // 加载地图文件数据（根据地图名称）
-  const loadMapFilesByName = async (mapName: string): Promise<MapFile[]> => {
-    try {
-      setLoading(true);
-      
-      // 模拟API调用延迟
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // 获取地图文件数据
-      const files = getMapFilesByName(mapName);
-      
-      if (files.length === 0) {
-        message.info(`地图 "${mapName}" 暂无文件数据`);
-      } else {
-        message.success(`成功加载地图 "${mapName}" 的 ${files.length} 个文件`);
-      }
-      
-      return files;
-    } catch (error) {
-      console.error('加载地图文件失败:', error);
-      message.error('加载地图文件失败，请重试');
-      return [];
-    } finally {
-      setLoading(false);
-    }
-  };
+  // 加载地图文件数据函数已移除
 
   // 处理地图名称搜索
-  const handleSearchMapFiles = async () => {
-    if (!searchMapName.trim()) {
-      message.warning('请输入地图名称');
-      return;
-    }
-    
-    const files = await loadMapFilesByName(searchMapName.trim());
-    setSearchedMapFiles(files);
-    setIsSearchMode(true);
-  };
-
-  // 清除搜索结果
-  const handleClearSearch = () => {
-    setSearchMapName('');
-    setSearchedMapFiles([]);
-    setIsSearchMode(false);
-  };
+  // 搜索和清除搜索函数已移除
 
   // 基础表格列配置
   const baseColumns: ColumnsType<MapData> = [
@@ -2308,7 +2195,7 @@ const MapManagement: React.FC = () => {
   const filteredColumns = isMobile ? mobileColumns : baseColumns;
   
   // 应用动态列宽调整
-  const desktopColumns = adjustColumnWidths(filteredColumns, isMobile);
+  const desktopColumns = adjustColumnWidths(filteredColumns);
 
   // 获取表格配置
   const tableConfig = getTableConfig(isMobile, isLargeScreen, desktopColumns.length);
@@ -2400,7 +2287,6 @@ const MapManagement: React.FC = () => {
     // 关闭同步选择抽屉，打开同步进度弹窗
     setMapSyncDrawerVisible(false);
     setSyncProgressModalVisible(true);
-    setShowSyncProgress(true);
     
     // 初始化同步状态
     const initialStatuses: SyncStatus[] = selectedSyncRobots.map(robotId => {
@@ -2414,7 +2300,6 @@ const MapManagement: React.FC = () => {
     });
     
     setSyncStatuses(initialStatuses);
-    setSyncResults([]);
     setAllSyncCompleted(false);
     
     // 开始同步过程
@@ -2426,7 +2311,7 @@ const MapManagement: React.FC = () => {
     const results: SyncResult[] = [];
     
     // 模拟并发同步
-    const syncPromises = statuses.map(async (status, index) => {
+    const syncPromises = statuses.map(async (status) => {
       // 设置开始时间和状态
       const startTime = new Date().toLocaleTimeString();
       setSyncStatuses(prev => prev.map(s => 
@@ -2486,7 +2371,6 @@ const MapManagement: React.FC = () => {
     await Promise.all(syncPromises);
     
     // 设置同步结果
-    setSyncResults(results);
     setAllSyncCompleted(true);
     
     // 显示汇总消息
@@ -2521,9 +2405,7 @@ const MapManagement: React.FC = () => {
   // 关闭同步进度弹窗
   const handleCloseSyncProgress = () => {
     setSyncProgressModalVisible(false);
-    setShowSyncProgress(false);
     setSyncStatuses([]);
-    setSyncResults([]);
     setAllSyncCompleted(false);
     
     // 重置同步相关状态
@@ -2532,21 +2414,9 @@ const MapManagement: React.FC = () => {
     setSelectedSyncMapFiles([]);
   };
 
-  const handleEnable = (record: MapData) => {
-    console.log('启用地图:', record);
-  };
+  // handleEnable函数已移除
 
-  const handleSync = (record: MapData) => {
-    console.log('同步地图:', record);
-  };
-
-  const handleExport = (record: MapData) => {
-    console.log('导出地图:', record);
-  };
-
-  const handleDownload = (file: MapFile) => {
-    console.log('下载文件:', file);
-  };
+  // 同步、导出、下载函数已移除
 
   const handleDeleteFile = (file: MapFile) => {
     console.log('删除文件:', file);
@@ -2575,9 +2445,7 @@ const MapManagement: React.FC = () => {
     });
   };
 
-  const handleSyncFile = (file: MapFile) => {
-    console.log('同步文件:', file);
-  };
+  // 同步文件函数已移除
 
   const handleViewDetails = (file: MapFile) => {
     console.log('查看详情:', file);
@@ -2595,17 +2463,7 @@ const MapManagement: React.FC = () => {
     setMapFileUploadedImage(null);
   };
 
-  const handleAddMapFileNext = async () => {
-    try {
-      await addMapFileForm.validateFields();
-      setAddMapFileStep(2);
-      // 设置地图编辑器的初始状态
-      setInitialMapState({ points: mapPoints, lines: mapLines });
-      setHasUnsavedChanges(false);
-    } catch (error) {
-      console.log('表单验证失败:', error);
-    }
-  };
+  // handleAddMapFileNext函数已移除
 
   const handleAddMapFilePrev = () => {
     setAddMapFileStep(1);
@@ -2617,7 +2475,6 @@ const MapManagement: React.FC = () => {
       // 模拟API调用
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const now = new Date();
       const newMapFile: MapFile = {
         id: `file_${Date.now()}`,
         name: values.mapFileName,
@@ -2738,29 +2595,14 @@ const MapManagement: React.FC = () => {
     }
   };
 
-  const handleMapFileImageUpload = (info: any) => {
-    if (info.file.status === 'uploading') {
-      return;
-    }
-    if (info.file.status === 'done') {
-      // 模拟上传成功
-      const reader = new FileReader();
-      reader.addEventListener('load', () => {
-        setMapFileUploadedImage({
-          url: reader.result,
-          name: info.file.name
-        });
-      });
-      reader.readAsDataURL(info.file.originFileObj);
-    }
-  };
+  // handleMapFileImageUpload函数已移除
 
   const handleCloseAddMapFileDrawer = () => {
     setAddMapFileDrawerVisible(false);
     addMapFileForm.resetFields();
     setMapFileUploadedImage(null);
     setAddMapFileStep(1);
-    setCurrentMapFileName(''); // 重置地图文件名称
+    // 重置地图文件名称
     // 重置地图编辑器状态
     setSelectedTool('select'); // 重置为默认的选择工具
     setMapType('topology'); // 重置为默认的拓扑地图
@@ -2778,7 +2620,7 @@ const MapManagement: React.FC = () => {
   };
   
   // 地图编辑状态跟踪
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [, setHasUnsavedChanges] = useState(false);
   const [initialMapState, setInitialMapState] = useState<{points: any[], lines: MapLine[]}>({points: [], lines: []});
   
   // 检查是否有未保存的修改
@@ -2829,11 +2671,7 @@ const MapManagement: React.FC = () => {
     console.log('保存地图数据:', { mapPoints, mapLines });
   };
   
-  const handleSubmit = () => {
-    // 提交地图数据到后台
-    message.success('地图已提交');
-    console.log('提交地图数据:', { mapPoints, mapLines });
-  };
+  // handleSubmit函数已移除
   
   const handleSubmitAndExit = () => {
     // 提交并退出
@@ -2846,7 +2684,7 @@ const MapManagement: React.FC = () => {
 
   // 模式切换处理函数
   const handleExitEditMode = () => {
-    setExitEditModalVisible(true);
+    // 退出编辑模式
   };
 
   const handleEnterEditMode = () => {
@@ -2854,16 +2692,9 @@ const MapManagement: React.FC = () => {
     message.success('已进入编辑模式');
   };
 
-  const handleConfirmExitEdit = () => {
-    // 这里可以添加提交地图编辑数据的逻辑
-    setCurrentMode('view');
-    setExitEditModalVisible(false);
-    message.success('已退出编辑模式，地图数据已提交');
-  };
+  // handleConfirmExitEdit函数已移除
 
-  const handleCancelExitEdit = () => {
-    setExitEditModalVisible(false);
-  };
+  // 取消退出编辑函数 - 已移除未使用的函数
 
   // 搜索处理函数
   const handleSearch = (value: string) => {
@@ -3169,7 +3000,7 @@ const MapManagement: React.FC = () => {
   
   // 点击点元素处理
   const handlePointClick = (event: React.MouseEvent, pointId: string) => {
-    const clickedPoint = mapPoints.find(p => p.id === pointId);    event.stopPropagation();
+    event.stopPropagation();
     
     // 连线工具模式处理
     if (['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(selectedTool)) {      handlePointConnection(pointId);
@@ -3413,9 +3244,7 @@ const MapManagement: React.FC = () => {
   };
   
   // 框选移动处理（现在由全局事件处理，这个函数保留但不使用）
-  const handleSelectionMove = (event: React.MouseEvent<HTMLDivElement>) => {
-    // 这个函数现在由全局事件监听处理，保留以防需要
-  };
+  // 框选移动处理函数 - 已移除未使用的函数
   
   // 框选结束处理（带状态参数）
   const handleSelectionEndWithState = (wasSelecting: boolean, startPos: {x: number, y: number} | null, endPos: {x: number, y: number} | null) => {
@@ -3488,9 +3317,7 @@ const MapManagement: React.FC = () => {
   };
   
   // 框选结束处理（兼容旧接口）
-  const handleSelectionEnd = () => {
-    handleSelectionEndWithState(isSelecting, selectionStart, selectionEnd);
-  };
+  // 框选结束处理函数 - 已移除未使用的函数
 
   // 保存点编辑
   const handleSavePointEdit = (values: any) => {
@@ -3740,26 +3567,7 @@ const MapManagement: React.FC = () => {
   };
 
   // 获取更深的颜色用于描边
-  const getDarkerColor = (color: string) => {
-    // 将十六进制颜色转换为RGB
-    const hex = color.replace('#', '');
-    const r = parseInt(hex.substr(0, 2), 16);
-    const g = parseInt(hex.substr(2, 2), 16);
-    const b = parseInt(hex.substr(4, 2), 16);
-    
-    // 将RGB值减少30%使颜色更深
-    const darkerR = Math.floor(r * 0.7);
-    const darkerG = Math.floor(g * 0.7);
-    const darkerB = Math.floor(b * 0.7);
-    
-    // 转换回十六进制
-    const toHex = (n: number) => {
-      const hex = n.toString(16);
-      return hex.length === 1 ? '0' + hex : hex;
-    };
-    
-    return `#${toHex(darkerR)}${toHex(darkerG)}${toHex(darkerB)}`;
-  };
+  // 颜色加深函数 - 已移除未使用的函数
   
   // 获取鼠标样式
   const getCanvasCursor = () => {
@@ -3774,7 +3582,7 @@ const MapManagement: React.FC = () => {
   };
   
   // 获取点的鼠标样式
-  const getPointCursor = (pointId: string) => {
+  const getPointCursor = () => {
     if (selectedTool === 'select') {
       return 'pointer';
     } else if (['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(selectedTool)) {
@@ -3984,8 +3792,6 @@ const MapManagement: React.FC = () => {
         
       case 'double-bezier':
         // 双向贝塞尔曲线，使用三次贝塞尔曲线（C命令）实现真正的S形曲线
-        const midX = (startCoords.x + endCoords.x) / 2;
-        const midY = (startCoords.y + endCoords.y) / 2;
         const controlOffset = 50 * canvasScale; // 控制点偏移也需要根据缩放调整
         const isSelectedDoubleBezier = isLineSelected(line.id);
         const selectedStrokeDoubleBezier = isSelectedDoubleBezier ? '#1890ff' : lineColor;
@@ -4907,14 +4713,14 @@ const MapManagement: React.FC = () => {
                 </Button>
               </div>
 
-              {(selectedMap || isSearchMode) ? (
+              {selectedMap ? (
         <Card 
-          title={isSearchMode ? `搜索结果 - ${searchMapName}` : `地图文件 - ${selectedMap?.name}`}
+          title={`地图文件 - ${selectedMap?.name}`}
           style={{ marginBottom: 16 }}
         >
-          {(isSearchMode ? searchedMapFiles : getMapFiles(selectedMap?.id || '')).length > 0 ? (
+          {getMapFiles(selectedMap?.id || '').length > 0 ? (
             <Row gutter={[16, 16]}>
-              {(isSearchMode ? searchedMapFiles : getMapFiles(selectedMap?.id || '')).map((file) => (
+              {getMapFiles(selectedMap?.id || '').map((file: MapFile) => (
                 <Col xs={12} sm={8} md={6} lg={8} xl={6} key={file.id}>
                   <Card
                     size="small"
@@ -4959,7 +4765,7 @@ const MapManagement: React.FC = () => {
                                     <Switch
                                       size="small"
                                       checked={file.status === 'active'}
-                                      disabled={isSearchMode}
+                                      disabled={false}
                                       onChange={(checked) => {
                                         if (checked && selectedMap) {
                                           handleEnableFile(file, selectedMap.id);
@@ -6520,7 +6326,6 @@ const MapManagement: React.FC = () => {
                   <Input 
                     placeholder="请输入地图名称" 
                     size="large"
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCurrentMapFileName(e.target.value)}
                   />
                 </Form.Item>
 
@@ -7267,7 +7072,7 @@ const MapManagement: React.FC = () => {
                             background: point.type === '节点' ? 'transparent' : getPointColor(point.type),
                             border: `2px solid ${getPointColor(point.type)}`,  // 移除选中时的蓝色描边
                             boxShadow: 'none',
-                            cursor: getPointCursor(point.id),
+                            cursor: getPointCursor(),
                             zIndex: 1001,
                             transform: isPointSelected(point.id) ? 'scale(1.2)' : 'scale(1)',
                             transition: 'all 0.2s ease'
@@ -7753,7 +7558,7 @@ const MapManagement: React.FC = () => {
                                   ),
                                   children: (
                                     <div style={{ paddingLeft: '16px' }}>
-                                      {mapLines.map((line, index) => {
+                                      {mapLines.map((line) => {
                                         const startPoint = mapPoints.find(p => p.id === line.startPointId);
                                         const endPoint = mapPoints.find(p => p.id === line.endPointId);
                                         
@@ -8966,7 +8771,7 @@ const MapManagement: React.FC = () => {
         title={editingNetworkGroup ? '编辑路网组' : '新增路网组'}
         open={isNetworkGroupModalVisible}
         onOk={() => {
-           networkGroupForm.validateFields().then((values: any) => {
+           networkGroupForm.validateFields().then(() => {
              handleSaveNetworkGroup();
            }).catch((info: any) => {
              console.log('Validate Failed:', info);
@@ -9007,7 +8812,7 @@ const MapManagement: React.FC = () => {
         title={editingPathGroup ? '编辑路径组' : '新增路径组'}
         open={isPathGroupModalVisible}
         onOk={() => {
-           pathGroupForm.validateFields().then((values: any) => {
+           pathGroupForm.validateFields().then(() => {
              handleSavePathGroup();
            }).catch((info: any) => {
              console.log('Validate Failed:', info);

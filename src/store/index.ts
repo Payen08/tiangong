@@ -47,5 +47,5 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set) => ({
   collapsed: false,
-  toggleSidebar: () => set((state) => ({ collapsed: !state.collapsed })),
+  toggleSidebar: () => set((state: AppState) => ({ collapsed: !state.collapsed })),
 }));
