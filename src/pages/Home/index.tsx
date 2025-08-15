@@ -1,12 +1,11 @@
 import React from 'react';
-import { Card, Row, Col, Statistic, Button, List, Tag } from 'antd';
+import { Card, Row, Col, Statistic, List, Tag } from 'antd';
 import {
   UserOutlined,
   TeamOutlined,
   SafetyOutlined,
   SettingOutlined,
   PlusOutlined,
-  EditOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store';
@@ -69,7 +68,13 @@ const Home: React.FC = () => {
     },
   ];
 
-  const recentActivities = [
+  interface Activity {
+    title: string;
+    time: string;
+    type: string;
+  }
+
+  const recentActivities: Activity[] = [
     {
       title: '用户 张三 登录系统',
       time: '2024-01-15 10:30:00',
@@ -173,7 +178,7 @@ const Home: React.FC = () => {
           <Card title="最近活动" className="h-full">
             <List
               dataSource={recentActivities}
-              renderItem={(item) => (
+              renderItem={(item: Activity) => (
                 <List.Item>
                   <div className="flex items-center justify-between w-full">
                     <div className="flex-1">
