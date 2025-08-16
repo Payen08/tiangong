@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Card,
   Table,
@@ -226,6 +226,16 @@ const MapManagement: React.FC = () => {
     };
   }
 
+  // 区域数据类型
+  interface MapArea {
+    id: string;
+    name: string; // 区域名称，从a1开始
+    points: { x: number; y: number }[]; // 区域的顶点坐标
+    fillColor: string; // 填充颜色
+    strokeColor: string; // 描边颜色
+    opacity: number; // 透明度
+  }
+
   // 地图编辑器状态
   const [selectedTool, setSelectedTool] = useState<string>('select'); // 当前选中的工具，默认选中选择工具
   const [mapType, setMapType] = useState<'topology' | 'grayscale'>('topology'); // 地图类型：拓扑地图或黑白底图
@@ -239,15 +249,27 @@ const MapManagement: React.FC = () => {
 
   const [mapPoints, setMapPoints] = useState<any[]>(defaultMapPoints); // 地图上的点
   const [mapLines, setMapLines] = useState<MapLine[]>(defaultMapLines); // 地图上的连线
+  const [mapAreas, setMapAreas] = useState<MapArea[]>([]); // 地图上的区域
   const [pointCounter, setPointCounter] = useState(1); // 点名称计数器
+  const [areaCounter, setAreaCounter] = useState(1); // 区域名称计数器
   const [selectedPoints, setSelectedPoints] = useState<string[]>([]); // 选中的点ID列表
   const [selectedLines, setSelectedLines] = useState<string[]>([]); // 选中的线ID列表
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]); // 选中的区域ID列表
+  const [selectedVertices, setSelectedVertices] = useState<{areaId: string, vertexIndex: number}[]>([]); // 选中的区域顶点列表
   const [isSelecting, setIsSelecting] = useState(false); // 是否正在框选
   const [selectionStart, setSelectionStart] = useState<{x: number, y: number} | null>(null); // 框选起始点
   const [selectionEnd, setSelectionEnd] = useState<{x: number, y: number} | null>(null); // 框选结束点
   const [editingPoint, setEditingPoint] = useState<any | null>(null); // 正在编辑的点
   const [pointEditModalVisible, setPointEditModalVisible] = useState(false); // 点编辑弹窗显示状态
   const [pointEditForm] = Form.useForm(); // 点编辑表单
+  
+  // 区域绘制相关状态
+  const [isDrawingArea, setIsDrawingArea] = useState(false); // 是否正在绘制区域
+  const [currentAreaPoints, setCurrentAreaPoints] = useState<{x: number, y: number}[]>([]); // 当前正在绘制的区域点
+  const [isCompletingArea, setIsCompletingArea] = useState(false); // 是否正在完成区域创建（防止状态重置）
+  const [editingArea, setEditingArea] = useState<MapArea | null>(null); // 正在编辑的区域
+  const [areaEditModalVisible, setAreaEditModalVisible] = useState(false); // 区域编辑弹窗显示状态
+  const [areaEditForm] = Form.useForm(); // 区域编辑表单
   
   // 连线相关状态
   const [isConnecting, setIsConnecting] = useState(false); // 是否正在连线
@@ -268,6 +290,11 @@ const MapManagement: React.FC = () => {
   
   // 点拖拽相关状态
   const [isDraggingPoint, setIsDraggingPoint] = useState(false); // 是否正在拖拽点
+  
+  // 鼠标位置状态
+  const [mousePosition, setMousePosition] = useState<{x: number, y: number} | null>(null); // 鼠标在画布上的位置
+  const mousePositionRef = useRef<{x: number, y: number} | null>(null); // 实时鼠标位置引用
+  const [forceRender, setForceRender] = useState(0); // 强制重新渲染计数器
   const [draggingPointId, setDraggingPointId] = useState<string | null>(null); // 正在拖拽的点ID
   const [pointDragStart, setPointDragStart] = useState<{x: number, y: number} | null>(null); // 点拖拽开始位置
   const [pointsInitialPositions, setPointsInitialPositions] = useState<Record<string, {x: number, y: number}>>({});  // 存储拖拽开始时所有选中点的初始位置
@@ -594,11 +621,61 @@ const MapManagement: React.FC = () => {
       按键: key,
       移动距离: { deltaX, deltaY },
       选中点数量: selectedPoints.length,
-      选中点ID: selectedPoints
+      选中点ID: selectedPoints,
+      选中区域数量: selectedAreas.length,
+      选中区域ID: selectedAreas
     });
     
+    // 移动选中的顶点（优先级最高）
+    if (selectedVertices.length > 0) {
+      console.log('🔧 [调试移动] 开始移动选中的顶点');
+      
+      setMapAreas(prevAreas => 
+        prevAreas.map(area => {
+          // 检查这个区域是否有选中的顶点
+          const hasSelectedVertices = selectedVertices.some(vertex => vertex.areaId === area.id);
+          
+          if (hasSelectedVertices) {
+            const updatedArea = {
+              ...area,
+              points: area.points.map((point, index) => {
+                // 检查当前顶点是否被选中
+                const isVertexSelected = selectedVertices.some(
+                  vertex => vertex.areaId === area.id && vertex.vertexIndex === index
+                );
+                
+                if (isVertexSelected) {
+                  const newPoint = {
+                    x: point.x + deltaX,
+                    y: point.y + deltaY
+                  };
+                  
+                  console.log('🔧 [调试移动] 顶点移动:', {
+                    区域ID: area.id,
+                    顶点索引: index,
+                    原位置: point,
+                    新位置: newPoint
+                  });
+                  
+                  return newPoint;
+                }
+                return point;
+              })
+            };
+            
+            return updatedArea;
+          }
+          return area;
+        })
+      );
+      
+      // 保存到历史记录
+      saveToHistory();
+      
+      console.log('🔧 [调试移动] 顶点移动完成');
+    }
     // 移动选中的点
-    if (selectedPoints.length > 0) {
+    else if (selectedPoints.length > 0) {
       // 记录移动前的点位置
       const beforePoints = mapPoints.filter(point => selectedPoints.includes(point.id));
       console.log('🔧 [调试移动] 移动前点位置:', beforePoints.map(p => ({ id: p.id, x: p.x, y: p.y })));
@@ -700,6 +777,38 @@ const MapManagement: React.FC = () => {
         return updatedPoints;
       });
     }
+    // 移动选中的区域（优先级最低）
+    else if (selectedAreas.length > 0) {
+      console.log('🔧 [调试移动] 开始移动选中的区域');
+      
+      setMapAreas(prevAreas => 
+        prevAreas.map(area => {
+          if (selectedAreas.includes(area.id)) {
+            const updatedArea = {
+              ...area,
+              points: area.points.map(point => ({
+                x: point.x + deltaX,
+                y: point.y + deltaY
+              }))
+            };
+            
+            console.log('🔧 [调试移动] 区域移动:', {
+              区域ID: area.id,
+              原始点: area.points,
+              新位置点: updatedArea.points
+            });
+            
+            return updatedArea;
+          }
+          return area;
+        })
+      );
+      
+      // 保存到历史记录
+      saveToHistory();
+      
+      console.log('🔧 [调试移动] 区域移动完成');
+    }
     
     console.log(`🎯 Arrow key move: ${key}, delta: (${deltaX}, ${deltaY})`);
   };
@@ -707,7 +816,14 @@ const MapManagement: React.FC = () => {
   const [, setHoveredPoint] = useState<string | null>(null); // 鼠标悬停的点ID
   const [continuousConnecting, setContinuousConnecting] = useState(false); // 连续连线模式
   const [lastConnectedPoint, setLastConnectedPoint] = useState<string | null>(null); // 上一个连接的点ID
-  const [mousePosition, setMousePosition] = useState<{x: number, y: number} | null>(null); // 鼠标在画布上的位置
+  
+  // 监听mousePosition变化，强制重新渲染虚线
+  useEffect(() => {
+    if (mousePosition && (isConnecting || continuousConnecting) && (connectingStartPoint || lastConnectedPoint)) {
+      console.log('🔄 调试连线 - mousePosition更新，触发虚线重新渲染:', mousePosition);
+      setForceRender(prev => prev + 1);
+    }
+  }, [mousePosition, isConnecting, continuousConnecting, connectingStartPoint, lastConnectedPoint]);
   
   // 撤销重做相关状态
   interface HistoryState {
@@ -1057,7 +1173,52 @@ const MapManagement: React.FC = () => {
   };
 
   // 处理框选区域右键菜单
+  // 完成区域绘制
+  const completeAreaDrawing = () => {
+    if (currentAreaPoints.length >= 3) {
+      // 创建新区域
+      const newArea = {
+        id: `area_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: `区域${areaCounter}`,
+        points: [...currentAreaPoints],
+        fillColor: '#ff9999', // 浅肉色填充
+        strokeColor: '#cc6666', // 深肉色描边
+        opacity: 0.3
+      };
+      
+      console.log('🎯 [区域绘制] 完成区域绘制', {
+        区域ID: newArea.id,
+        区域名称: newArea.name,
+        点数: newArea.points.length,
+        点坐标: newArea.points
+      });
+      
+      // 保存历史记录
+      saveToHistory();
+      
+      // 添加到区域列表
+      setMapAreas(prev => [...prev, newArea]);
+      setAreaCounter(prev => prev + 1);
+      
+      // 重置绘制状态
+      setIsDrawingArea(false);
+      setCurrentAreaPoints([]);
+      
+      message.success(`区域 "${newArea.name}" 创建成功`);
+    } else {
+      message.warning('区域至少需要3个点才能完成绘制');
+    }
+  };
+
   const handleSelectionContextMenu = (e: React.MouseEvent) => {
+    // 如果正在绘制区域且有足够的点，右键完成绘制
+    if (selectedTool === 'area' && isDrawingArea && currentAreaPoints.length >= 3) {
+      e.preventDefault();
+      e.stopPropagation();
+      completeAreaDrawing();
+      return;
+    }
+    
     // 只有在有选中元素且在框选区域内时才显示右键菜单
     if (selectedPoints.length > 0 && selectionStart && selectionEnd) {
       e.preventDefault();
@@ -1259,6 +1420,7 @@ const MapManagement: React.FC = () => {
     setConnectingStartPoint(null);
     setLastConnectedPoint(null);
     setMousePosition(null); // 清除鼠标位置，隐藏临时线条
+    mousePositionRef.current = null; // 同时清除ref
   };
 
   // 框选状态引用
@@ -1333,7 +1495,23 @@ const MapManagement: React.FC = () => {
 
   // 根据ID获取点数据
   const getPointById = (pointId: string) => {
-    return mapPoints.find(point => point.id === pointId);
+    console.log('🔍 [getPointById] 查找点数据', {
+      searchingForId: pointId,
+      mapPointsLength: mapPoints.length,
+      mapPointsIds: mapPoints.map(p => p.id),
+      mapPointsData: mapPoints.map(p => ({ id: p.id, name: p.name, x: p.x, y: p.y })),
+      timestamp: new Date().toISOString()
+    });
+    
+    const foundPoint = mapPoints.find(point => point.id === pointId);
+    
+    console.log('🎯 [getPointById] 查找结果', {
+      searchingForId: pointId,
+      foundPoint: foundPoint ? { id: foundPoint.id, name: foundPoint.name, x: foundPoint.x, y: foundPoint.y } : null,
+      found: !!foundPoint
+    });
+    
+    return foundPoint;
   };
 
   // 监听ESC键处理逻辑 - 已合并到统一的键盘事件监听器中
@@ -2617,6 +2795,16 @@ const MapManagement: React.FC = () => {
     setPointEditModalVisible(false);
     pointEditForm.resetFields();
     setActiveTabKey('tools'); // 重置为默认的绘图工具Tab
+    // 重置区域相关状态（保留已完成的区域，只清空绘制状态）
+    // setMapAreas([]); // 注释掉：不清空已完成的区域
+    // setAreaCounter(1); // 注释掉：保持区域计数器
+    setSelectedAreas([]);
+    setIsDrawingArea(false);
+    setCurrentAreaPoints([]);
+    setMousePosition(null); // 清除鼠标位置，隐藏虚线
+    setEditingArea(null);
+    setAreaEditModalVisible(false);
+    areaEditForm.resetFields();
   };
   
   // 地图编辑状态跟踪
@@ -2862,6 +3050,14 @@ const MapManagement: React.FC = () => {
 
   // 工具选择处理
   const handleToolSelect = (toolType: string) => {
+    console.log('🔍 [工具切换调试] 开始切换工具', {
+      从工具: selectedTool,
+      到工具: toolType,
+      当前绘制状态: isDrawingArea,
+      当前区域点数: currentAreaPoints.length,
+      时间戳: new Date().toISOString()
+    });
+    
     // 检查是否是连线工具
     const isLineToolSelected = ['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(toolType);
     setSelectedTool(toolType);
@@ -2872,19 +3068,81 @@ const MapManagement: React.FC = () => {
     }
     
     // 切换工具时清除选择状态
-    if (toolType !== 'select') {      setSelectedPoints([]);
+    if (toolType !== 'select') {
+      setSelectedPoints([]);
       setSelectedLines([]);  // 添加清除线的选中状态
+      setSelectedAreas([]);  // 添加清除区域的选中状态
       setIsSelecting(false);
       setSelectionStart(null);
-      setSelectionEnd(null);    } else {    }
+      setSelectionEnd(null);
+    }
     
     // 如果选择了连线工具，重置连线状态
-    if (isLineToolSelected) {      // 重置连线相关状态
+    if (isLineToolSelected) {
+      // 重置连线相关状态
       setIsConnecting(false);
       setConnectingStartPoint(null);
       setContinuousConnecting(false);
-      setLastConnectedPoint(null);    } else if (isConnecting || continuousConnecting) {
-      // 如果当前处于连线模式但选择了非连线工具，退出连线模式      exitConnectingMode();
+      setLastConnectedPoint(null);
+    } else if (isConnecting || continuousConnecting) {
+      // 如果当前处于连线模式但选择了非连线工具，退出连线模式
+      exitConnectingMode();
+    }
+    
+    // 如果选择了区域工具，重置区域绘制状态
+    if (toolType === 'area') {
+      console.log('🔍 [工具切换调试] 选择区域工具，重置区域绘制状态');
+      // 重置区域绘制相关状态
+      setIsDrawingArea(false);
+      setCurrentAreaPoints([]);
+    } else if (isDrawingArea && !isCompletingArea) {
+      console.log('🔍 [工具切换调试] 选择非区域工具，退出区域绘制模式', {
+        当前绘制状态: isDrawingArea,
+        当前点数: currentAreaPoints.length,
+        目标工具: toolType,
+        正在完成区域: isCompletingArea
+      });
+      // 如果当前处于区域绘制模式但选择了非区域工具，且不在完成区域过程中，退出区域绘制模式
+      console.log('🔍 [工具切换调试] 开始重置区域绘制状态');
+      setIsDrawingArea(false);
+      console.log('🔍 [工具切换调试] isDrawingArea已重置为false');
+      setCurrentAreaPoints([]);
+      console.log('🔍 [工具切换调试] currentAreaPoints已清空');
+    } else if (isCompletingArea) {
+      console.log('🔍 [工具切换调试] 正在完成区域创建，跳过状态重置', {
+        当前绘制状态: isDrawingArea,
+        当前点数: currentAreaPoints.length,
+        目标工具: toolType,
+        正在完成区域标志: isCompletingArea,
+        跳过原因: '防止在区域创建过程中重置状态'
+      });
+    } else if (isDrawingArea) {
+      console.log('🔍 [工具切换调试] 意外情况：isDrawingArea为true但isCompletingArea也为true', {
+        当前绘制状态: isDrawingArea,
+        当前点数: currentAreaPoints.length,
+        目标工具: toolType,
+        正在完成区域: isCompletingArea
+      });
+    }
+    
+    console.log('🔍 [工具切换调试] 工具切换完成', {
+      新工具: toolType
+    });
+  };
+  
+  // 画布鼠标移动处理
+  const handleCanvasMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    const canvasElement = event.currentTarget;
+    const rect = canvasElement.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // 只在区域绘制模式下更新鼠标位置
+    if (selectedTool === 'area' && isDrawingArea) {
+      setMousePosition({ x, y });
+    } else {
+      // 清除鼠标位置，隐藏虚线
+      setMousePosition(null);
     }
   };
   
@@ -2973,6 +3231,42 @@ const MapManagement: React.FC = () => {
       
       setMapPoints(prev => [...prev, newPoint]);
       setPointCounter(prev => prev + 1);
+    } else if (selectedTool === 'area') {
+      // 区域绘制工具
+      const canvasElement = event.currentTarget;
+      const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+      
+      console.log('🎯 [区域绘制] 添加点', {
+        画布坐标: { x, y },
+        当前区域点数: currentAreaPoints.length,
+        是否正在绘制: isDrawingArea
+      });
+      
+      // 清除其他选中状态
+      if (selectedLines.length > 0) {
+        setSelectedLines([]);
+      }
+      if (selectedPoints.length > 0) {
+        setSelectedPoints([]);
+      }
+      
+      // 添加点到当前区域
+      const newAreaPoint = { x, y };
+      const updatedAreaPoints = [...currentAreaPoints, newAreaPoint];
+      setCurrentAreaPoints(updatedAreaPoints);
+      
+      // 如果是第一个点，开始绘制模式
+      if (!isDrawingArea) {
+        setIsDrawingArea(true);
+      }
+      
+      // 如果已有3个或更多点，可以完成区域绘制（双击或右键完成）
+      if (updatedAreaPoints.length >= 3) {
+        console.log('🎯 [区域绘制] 已有足够点数，可以完成区域绘制', {
+          点数: updatedAreaPoints.length,
+          提示: '双击或右键完成区域绘制'
+        });
+      }
     } else if (selectedTool === 'select') {
       // 选择工具：只有在非框选状态且没有选中点时才清除选择状态
       if (!isSelecting && selectedPoints.length === 0) {
@@ -2981,19 +3275,32 @@ const MapManagement: React.FC = () => {
           setSelectedLines([]);
         }
         
+        // 清除区域的选中状态
+        if (selectedAreas.length > 0) {
+          setSelectedAreas([]);
+        }
+        
         setSelectionStart(null);
         setSelectionEnd(null);
       } else if (!isSelecting && selectedPoints.length > 0) {
-        // 只清除线的选中状态，保留点的选中状态和框选坐标
+        // 只清除线和区域的选中状态，保留点的选中状态和框选坐标
         if (selectedLines.length > 0) {
           setSelectedLines([]);
+        }
+        
+        if (selectedAreas.length > 0) {
+          setSelectedAreas([]);
         }
       }
       // 框选进行中时不做任何处理
     } else {
-      // 其他工具模式：清除线的选中状态
+      // 其他工具模式：清除线和区域的选中状态
       if (selectedLines.length > 0) {
         setSelectedLines([]);
+      }
+      
+      if (selectedAreas.length > 0) {
+        setSelectedAreas([]);
       }
     }
   };
@@ -3065,12 +3372,23 @@ const MapManagement: React.FC = () => {
   };
 
   const handlePointConnection = (pointId: string) => {
+    console.log('🔗 调试连线 - 点击点:', pointId);
+    console.log('🔗 调试连线 - 当前状态:', {
+      isConnecting,
+      continuousConnecting,
+      connectingStartPoint,
+      lastConnectedPoint
+    });
+    
     if (!isConnecting && !continuousConnecting) {
       // 开始连线模式
       setIsConnecting(true);
-      setContinuousConnecting(true);
       setConnectingStartPoint(pointId);
-      setLastConnectedPoint(pointId);
+      // 清除之前的鼠标位置，确保虚线渲染状态正确
+      setMousePosition(null);
+      mousePositionRef.current = null; // 同时清除ref
+      console.log('🔗 调试连线 - 开始连线模式，已设置状态:', { isConnecting: true, connectingStartPoint: pointId });
+      // 第一次点击时不设置continuousConnecting和lastConnectedPoint，保持为null以便虚线正确显示
     } else if (continuousConnecting || (isConnecting && connectingStartPoint)) {
       // 连续连线模式
       // 优先使用lastConnectedPoint，如果没有则使用connectingStartPoint
@@ -3138,6 +3456,8 @@ const MapManagement: React.FC = () => {
         
         // 更新最后连接的点，为下一次连线做准备
         setLastConnectedPoint(pointId);
+        // 启用连续连线模式
+        setContinuousConnecting(true);
       } else {
         // 起始点和结束点相同，不创建连线
         if (startPoint === pointId) {
@@ -3162,6 +3482,22 @@ const MapManagement: React.FC = () => {
         direction: point.direction
       });
       setPointEditModalVisible(true);
+    }
+  };
+
+  // 区域双击编辑处理
+  const handleAreaDoubleClick = (event: React.MouseEvent, area: any) => {
+    event.stopPropagation();
+    
+    if (selectedTool === 'select') {
+      // 打开区域编辑弹窗
+      setEditingArea(area);
+      areaEditForm.setFieldsValue({
+        name: area.name,
+        type: area.type,
+        description: area.description
+      });
+      setAreaEditModalVisible(true);
     }
   };
 
@@ -3338,6 +3674,26 @@ const MapManagement: React.FC = () => {
     }
   };
 
+  // 保存区域编辑
+  const handleSaveAreaEdit = (values: any) => {
+    if (editingArea) {
+      // 保存历史记录（编辑区域之前）
+      saveToHistory();
+      
+      setMapAreas(prev => 
+        prev.map(area => 
+          area.id === editingArea.id 
+            ? { ...area, ...values }
+            : area
+        )
+      );
+      setAreaEditModalVisible(false);
+      setEditingArea(null);
+      areaEditForm.resetFields();
+      message.success('区域编辑成功');
+    }
+  };
+
   // 删除选中的点
   const handleDeleteSelectedPoints = () => {
     if (selectedPoints.length === 0) {
@@ -3387,6 +3743,28 @@ const MapManagement: React.FC = () => {
     setSelectionEnd(null);
     setIsSelecting(false);
     message.success(`已删除 ${deletedCount} 条线`);
+  };
+
+  // 删除选中的区域
+  const handleDeleteSelectedAreas = () => {
+    if (selectedAreas.length === 0) {
+      return;
+    }
+    
+    // 保存历史记录（删除区域之前）
+    saveToHistory();
+    
+    setMapAreas(prev => 
+      prev.filter(area => !selectedAreas.includes(area.id))
+    );
+    
+    const deletedCount = selectedAreas.length;
+    setSelectedAreas([]);
+    // 清除框选框显示
+    setSelectionStart(null);
+    setSelectionEnd(null);
+    setIsSelecting(false);
+    message.success(`已删除 ${deletedCount} 个区域`);
   };
 
   // 撤销重做核心逻辑函数
@@ -3463,6 +3841,16 @@ const MapManagement: React.FC = () => {
 
   // 键盘事件处理
   const handleKeyDown = (event: KeyboardEvent) => {
+    // 添加基础键盘事件调试日志
+    console.log('🎹 [键盘事件] 按键触发', {
+      按键: event.key,
+      当前工具: selectedTool,
+      是否正在绘制区域: isDrawingArea,
+      区域点数: currentAreaPoints.length,
+      是否正在完成区域: isCompletingArea,
+      时间戳: new Date().toISOString()
+    });
+    
     // 处理ESC键
     if (event.key === 'Escape') {
       // 阻止默认的ESC键行为（防止关闭抽屉）
@@ -3471,6 +3859,143 @@ const MapManagement: React.FC = () => {
       
       // 如果在地图编辑模式下
       if (addMapFileDrawerVisible) {
+        // 如果正在绘制区域，完成或取消区域绘制
+        if (isDrawingArea) {
+          console.log('🔍 [ESC键调试] 检测到ESC键，开始处理区域绘制', {
+            当前区域点数: currentAreaPoints.length,
+            当前绘制状态: isDrawingArea,
+            鼠标位置: mousePosition,
+            当前工具: selectedTool,
+            时间戳: new Date().toISOString()
+          });
+          
+          // 如果有足够的点（至少2个），创建区域
+          if (currentAreaPoints.length >= 2) {
+            console.log('🔍 [ESC键调试] 开始创建区域流程', {
+              点数: currentAreaPoints.length,
+              点坐标: currentAreaPoints,
+              当前工具: selectedTool
+            });
+            
+            console.log('🔍 [ESC键调试] 开始设置完成标志', {
+              当前isCompletingArea: isCompletingArea,
+              当前isDrawingArea: isDrawingArea,
+              当前工具: selectedTool
+            });
+            
+            // 设置正在完成区域标志，防止工具切换时重置状态
+            setIsCompletingArea(true);
+            
+            console.log('🔍 [ESC键调试] 完成标志已设置，开始创建区域对象');
+            
+            const newArea: MapArea = {
+              id: `area_${Date.now()}`,
+              name: `a${mapAreas.length + 1}`,
+              points: [...currentAreaPoints],
+              fillColor: '#ffcccb',
+              strokeColor: '#ff6b6b',
+              opacity: 0.3
+            };
+            
+            console.log('🔍 [ESC键调试] 区域对象创建完成，准备更新状态', {
+              新区域: newArea,
+              当前区域数量: mapAreas.length,
+              正在完成区域标志: true
+            });
+            
+            // 立即更新所有状态
+            setMapAreas(prev => {
+              const newAreas = [...prev, newArea];
+              console.log('🔍 [ESC键调试] 区域列表状态更新器被调用', {
+                旧数量: prev.length,
+                新数量: newAreas.length,
+                新增区域ID: newArea.id,
+                完整新区域列表: newAreas.map(a => ({ id: a.id, name: a.name, pointCount: a.points.length }))
+              });
+              return newAreas;
+            });
+            
+            console.log('🔍 [ESC键调试] 开始重置绘制状态');
+            setIsDrawingArea(false);
+            console.log('🔍 [ESC键调试] isDrawingArea已设置为false');
+            
+            setCurrentAreaPoints([]);
+            console.log('🔍 [ESC键调试] currentAreaPoints已清空');
+            
+            setMousePosition(null);
+            console.log('🔍 [ESC键调试] mousePosition已重置');
+            
+            // 添加到历史记录
+            console.log('🔍 [ESC键调试] 开始保存到历史记录');
+            saveToHistory();
+            console.log('🔍 [ESC键调试] 历史记录保存完成');
+            
+            message.success(`区域 "${newArea.name}" 创建成功`);
+            
+            // 延迟切换工具和重置完成标志，确保状态更新完成
+            console.log('🔍 [ESC键调试] 准备延迟切换工具', {
+              当前时间戳: Date.now(),
+              延迟时间: '10ms',
+              当前isCompletingArea: isCompletingArea
+            });
+            setTimeout(() => {
+              console.log('🔍 [ESC键调试] setTimeout回调执行开始', {
+                执行时间戳: Date.now(),
+                当前工具: selectedTool,
+                目标工具: 'select',
+                当前isCompletingArea: isCompletingArea,
+                当前isDrawingArea: isDrawingArea,
+                当前区域点数: currentAreaPoints.length
+              });
+              
+              console.log('🔍 [ESC键调试] 准备调用setSelectedTool("select")');
+              setSelectedTool('select');
+              console.log('🔍 [ESC键调试] setSelectedTool("select")已调用');
+              
+              console.log('🔍 [ESC键调试] 准备调用setIsCompletingArea(false)');
+              setIsCompletingArea(false);
+              console.log('🔍 [ESC键调试] setIsCompletingArea(false)已调用');
+              
+              console.log('🔍 [ESC键调试] 区域创建流程完全完成', {
+                完成时间戳: Date.now(),
+                最终状态: {
+                  工具: 'select',
+                  完成标志: false,
+                  绘制状态: false,
+                  区域点数: 0
+                }
+              });
+            }, 10); // 增加延迟时间到10ms
+            
+            console.log('🔍 [ESC键调试] 主要状态更新完成，等待工具切换', {
+              绘制状态: false,
+              区域点数: 0,
+              鼠标位置: null,
+              完成标志: true
+            });
+          } else {
+            console.log('🔍 [ESC键调试] 点数不足，取消绘制', {
+              当前点数: currentAreaPoints.length,
+              最少需要: 2
+            });
+            
+            // 点数不够，直接取消绘制
+            setIsDrawingArea(false);
+            setCurrentAreaPoints([]);
+            setMousePosition(null);
+            setSelectedTool('select');
+            
+            console.log('🔍 [ESC键调试] 取消绘制状态更新完成', {
+              绘制状态: false,
+              区域点数: 0,
+              鼠标位置: null,
+              工具: 'select'
+            });
+            
+            message.info('已取消区域绘制');
+          }
+          return;
+        }
         // 如果正在连线模式，退出连线模式
         if (isConnecting || continuousConnecting) {
           exitConnectingMode();
@@ -3478,6 +4003,36 @@ const MapManagement: React.FC = () => {
         // 切换到选择工具
         console.log('⌨️ [工具切换] 检测到ESC键，切换到选择工具');
         setSelectedTool('select');
+      }
+      return;
+    }
+    
+    // 处理Enter键
+    if (event.key === 'Enter') {
+      // 如果在地图编辑模式下且正在绘制区域
+      if (addMapFileDrawerVisible && isDrawingArea && currentAreaPoints.length >= 3) {
+        event.preventDefault();
+        console.log('⌨️ [区域绘制] 检测到Enter键，完成区域绘制');
+        
+        // 完成区域绘制
+         const newArea: MapArea = {
+           id: `area_${Date.now()}`,
+           name: `a${mapAreas.length + 1}`,
+           points: [...currentAreaPoints],
+           fillColor: '#ffcccb',
+           strokeColor: '#ff6b6b',
+           opacity: 0.3
+         };
+         
+         setMapAreas(prev => [...prev, newArea]);
+         setIsDrawingArea(false);
+         setCurrentAreaPoints([]);
+         setSelectedTool('select');
+         
+         // 添加到历史记录
+         saveToHistory();
+         
+         message.success(`区域 "${newArea.name}" 创建成功`);
       }
       return;
     }
@@ -3510,16 +4065,21 @@ const MapManagement: React.FC = () => {
     if (addMapFileDrawerVisible && selectedTool === 'select') {
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
-        // 优先删除选中的点，如果没有选中的点则删除选中的线
+        // 优先删除选中的点，然后是线，最后是区域
         if (selectedPoints.length > 0) {
           handleDeleteSelectedPoints();
         } else if (selectedLines.length > 0) {
           handleDeleteSelectedLines();
+        } else if (selectedAreas.length > 0) {
+          handleDeleteSelectedAreas();
         }
       }
-      
-      // 处理方向键移动选中元素
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+    }
+    
+    // 处理方向键移动选中元素（包括选中的顶点）
+    if (addMapFileDrawerVisible && selectedTool === 'select' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+      // 检查是否有任何选中的元素（点、线、区域或顶点）
+      if (selectedPoints.length > 0 || selectedLines.length > 0 || selectedAreas.length > 0 || selectedVertices.length > 0) {
         event.preventDefault();
         handleArrowKeyMove(event.key);
       }
@@ -3545,7 +4105,7 @@ const MapManagement: React.FC = () => {
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keyup', handleKeyUp);
     };
-  }, [addMapFileDrawerVisible, selectedTool, selectedPoints, selectedLines, isSpacePressed, isConnecting, continuousConnecting, historyIndex, history.length]);
+  }, [addMapFileDrawerVisible, selectedTool, selectedPoints, selectedLines, selectedAreas, selectedVertices, isSpacePressed, isConnecting, continuousConnecting, historyIndex, history.length, isDrawingArea, currentAreaPoints, isCompletingArea]);
   
   // 测试代码已删除 - 不再自动添加测试点
   
@@ -6880,7 +7440,9 @@ const MapManagement: React.FC = () => {
                       userSelect: 'none'  // 防止文本选择
                     }}
                     onClick={(dragTool || isSpacePressed) ? undefined : handleCanvasClick}
+                    onDoubleClick={(dragTool || isSpacePressed) ? undefined : (selectedTool === 'area' && isDrawingArea && currentAreaPoints.length >= 3) ? completeAreaDrawing : undefined}
                     onMouseDown={(dragTool || isSpacePressed) ? handleCanvasDrag : handleSelectionStart}
+                    onMouseMove={handleCanvasMouseMove}
                     onContextMenu={handleSelectionContextMenu}
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
@@ -6984,11 +7546,35 @@ const MapManagement: React.FC = () => {
                         }
                       }}
                       onMouseMove={(e) => {
+                        // 计算鼠标在画布上的位置
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const x = (e.clientX - rect.left - canvasOffset.x) / canvasScale;
+                        const y = (e.clientY - rect.top - canvasOffset.y) / canvasScale;
+                        
                         // 在连线模式下更新鼠标位置
-                        if (isConnecting && connectingStartPoint) {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          const x = (e.clientX - rect.left - canvasOffset.x) / canvasScale;
-                          const y = (e.clientY - rect.top - canvasOffset.y) / canvasScale;
+                        const shouldUpdateMousePosition = (isConnecting || continuousConnecting) && (connectingStartPoint || lastConnectedPoint);
+                        console.log('🖱️ 调试连线 - 鼠标移动条件检查:', {
+                          isConnecting,
+                          continuousConnecting,
+                          connectingStartPoint,
+                          lastConnectedPoint,
+                          shouldUpdateMousePosition,
+                          mouseCoords: { x, y }
+                        });
+                        
+                        if (shouldUpdateMousePosition) {
+                          console.log('🖱️ 调试连线 - 更新鼠标位置:', { x, y });
+                          const newMousePosition = { x, y };
+                          setMousePosition(newMousePosition);
+                          mousePositionRef.current = newMousePosition; // 立即更新ref
+                          // 立即触发强制重新渲染，确保虚线能及时显示
+                          setForceRender(prev => prev + 1);
+                        } else {
+                          console.log('🖱️ 调试连线 - 鼠标移动条件不满足，不更新位置');
+                        }
+                        
+                        // 在区域绘制模式下更新鼠标位置
+                        if (isDrawingArea && currentAreaPoints.length > 0) {
                           setMousePosition({ x, y });
                         }
                         
@@ -7005,6 +7591,12 @@ const MapManagement: React.FC = () => {
                         // 处理框选区域拖拽
                         if (isDraggingSelection) {
                           handleSelectionDrag(e);
+                        }
+                      }}
+                      onMouseLeave={() => {
+                        // 鼠标离开SVG区域时清除鼠标位置
+                        if (isConnecting || isDrawingArea) {
+                          setMousePosition(null);
                         }
                       }}
                       onMouseUp={() => {
@@ -7024,30 +7616,327 @@ const MapManagement: React.FC = () => {
                         }
                       }}
                     >
-                      {(() => {
-                        console.log('📊 mapLines data:', mapLines);
-                        return mapLines.map(line => renderLine(line));
-                      })()}
+                      {/* 渲染已完成的区域 - 放在最前面确保在底层 */}
+                      {mapAreas.map((area) => {
+                        if (area.points.length < 3) return null;
+                        
+                        // 构建SVG路径字符串
+                        const pathData = area.points.reduce((path, point, index) => {
+                          if (index === 0) {
+                            return `M ${point.x} ${point.y}`;
+                          } else {
+                            return `${path} L ${point.x} ${point.y}`;
+                          }
+                        }, '') + ' Z'; // Z命令闭合路径
+                        
+                        const isSelected = selectedAreas.includes(area.id);
+                        
+                        return (
+                          <g key={area.id}>
+                            {/* 区域填充 */}
+                            <path
+                              d={pathData}
+                              fill={area.fillColor || '#ffccc7'} // 浅肉色填充
+                              fillOpacity={area.opacity || 0.3}
+                              stroke={area.strokeColor || '#ff7875'} // 深肉色描边
+                              strokeWidth={isSelected ? '3' : '2'}
+                              strokeOpacity="0.8"
+                              style={{
+                                cursor: 'pointer',
+                                filter: isSelected ? 'drop-shadow(0 0 8px rgba(255, 120, 117, 0.6))' : 'none'
+                              }}
+                              onClick={(e) => {
+                                // 只有在选择工具模式下才阻止事件传播和处理区域选择
+                                if (selectedTool === 'select') {
+                                  e.stopPropagation();
+                                  setSelectedAreas(prev => 
+                                    prev.includes(area.id) 
+                                      ? prev.filter(id => id !== area.id)
+                                      : [...prev, area.id]
+                                  );
+                                } else {
+                                  // 在其他工具模式下，允许事件传播到画布，这样可以在区域内绘制点和线
+                                  // 不调用 e.stopPropagation()，让事件继续冒泡到SVG的onClick处理
+                                }
+                              }}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                handleAreaDoubleClick(e, area);
+                              }}
+                            />
+                            
+                            {/* 区域中心点标识（选中时显示） */}
+                            {isSelected && (() => {
+                              // 计算区域中心点
+                              const centerX = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
+                              const centerY = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
+                              
+                              return (
+                                <g>
+                                  <circle
+                                    cx={centerX}
+                                    cy={centerY}
+                                    r="6"
+                                    fill="#ff7875"
+                                    stroke="#ffffff"
+                                    strokeWidth="2"
+                                    opacity="0.9"
+                                  />
+                                  {/* 区域名称标签 */}
+                                  <text
+                                    x={centerX}
+                                    y={centerY - 15}
+                                    textAnchor="middle"
+                                    fontSize="12"
+                                    fill="#ff7875"
+                                    fontWeight="bold"
+                                    style={{ pointerEvents: 'none' }}
+                                  >
+                                    {area.name}
+                                  </text>
+                                </g>
+                              );
+                            })()}
+                            
+                            {/* 区域顶点编辑圆圈（选中时显示） */}
+                            {isSelected && area.points.map((point, index) => {
+                              const isVertexSelected = selectedVertices.some(
+                                v => v.areaId === area.id && v.vertexIndex === index
+                              );
+                              
+                              return (
+                                <circle
+                                  key={`${area.id}-vertex-${index}`}
+                                  cx={point.x}
+                                  cy={point.y}
+                                  r={isVertexSelected ? "6" : "4"}
+                                  fill={isVertexSelected ? "#ff7875" : "#ffffff"}
+                                  stroke="#ff7875"
+                                  strokeWidth={isVertexSelected ? "3" : "2"}
+                                  opacity="0.9"
+                                  style={{
+                                    cursor: 'pointer',
+                                    filter: isVertexSelected 
+                                      ? 'drop-shadow(0 2px 6px rgba(255, 120, 117, 0.4))' 
+                                      : 'drop-shadow(0 1px 3px rgba(0, 0, 0, 0.2))'
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    console.log(`🎯 [区域顶点] 点击了区域 ${area.id} 的第 ${index} 个顶点`, point);
+                                    
+                                    // 实现顶点选中逻辑
+                                    const vertexKey = { areaId: area.id, vertexIndex: index };
+                                    const isVertexSelected = selectedVertices.some(
+                                      v => v.areaId === area.id && v.vertexIndex === index
+                                    );
+                                    
+                                    if (e.ctrlKey || e.metaKey) {
+                                      // Ctrl/Cmd + 点击：多选顶点
+                                      if (isVertexSelected) {
+                                        setSelectedVertices(prev => prev.filter(
+                                          v => !(v.areaId === area.id && v.vertexIndex === index)
+                                        ));
+                                      } else {
+                                        setSelectedVertices(prev => [...prev, vertexKey]);
+                                      }
+                                    } else {
+                                      // 单击：选中单个顶点
+                                      setSelectedVertices([vertexKey]);
+                                      // 清除其他选中状态
+                                      setSelectedPoints([]);
+                                      setSelectedLines([]);
+                                      setSelectedAreas([]);
+                                    }
+                                    
+                                    console.log('🔄 [区域顶点] 顶点选中状态更新', {
+                                       areaId: area.id,
+                                       vertexIndex: index,
+                                       isSelected: !isVertexSelected,
+                                       totalSelected: selectedVertices.length
+                                     });
+                                   }}
+                                   onMouseEnter={(e) => {
+                                     const currentRadius = isVertexSelected ? '6' : '4';
+                                     e.currentTarget.setAttribute('r', String(parseInt(currentRadius) + 1));
+                                     if (!isVertexSelected) {
+                                       e.currentTarget.setAttribute('fill', '#ff7875');
+                                     }
+                                   }}
+                                   onMouseLeave={(e) => {
+                                     const currentRadius = isVertexSelected ? '6' : '4';
+                                     e.currentTarget.setAttribute('r', currentRadius);
+                                     if (!isVertexSelected) {
+                                       e.currentTarget.setAttribute('fill', '#ffffff');
+                                     }
+                                   }}
+                                 />
+                                );
+                              })}
+                            </g>
+                          );
+                        })}
+                        
+                        {/* 渲染线条 */}
+                        {(() => {
+                          console.log('📊 mapLines data:', mapLines);
+                          return mapLines.map(line => renderLine(line));
+                        })()}
+
                       
                       {/* 临时跟随线条 - 连线模式下显示 */}
-                      {isConnecting && connectingStartPoint && mousePosition && (() => {
+                      {(() => {
+                        // 检查虚线渲染条件
+                        const hasConnectingState = isConnecting || continuousConnecting;
+                        const hasStartPoint = connectingStartPoint || lastConnectedPoint;
+                        const shouldRenderDashedLine = hasConnectingState && hasStartPoint;
+                        
+                        console.log('📏 调试连线 - 虚线渲染条件检查:', {
+                          isConnecting,
+                          continuousConnecting,
+                          connectingStartPoint,
+                          lastConnectedPoint,
+                          mousePosition,
+                          hasConnectingState,
+                          hasStartPoint,
+                          shouldRenderDashedLine,
+                          forceRender // 添加强制渲染计数器到调试信息
+                        });
+                        
+                        if (!shouldRenderDashedLine) {
+                          console.log('📏 调试连线 - 虚线渲染条件不满足，跳过渲染');
+                          return null;
+                        }
+                        
                         // 在连续连线模式下，优先使用lastConnectedPoint作为起点
                         const startPointId = lastConnectedPoint || connectingStartPoint;
+                        console.log('📏 调试连线 - 选择起点:', { startPointId, lastConnectedPoint, connectingStartPoint });
                         const startPoint = mapPoints.find(p => p.id === startPointId);
-                        if (!startPoint) return null;
+                        if (!startPoint) {
+                          console.log('📏 调试连线 - 未找到起点:', startPointId);
+                          return null;
+                        }
+                        
+                        // 使用实时鼠标位置引用，避免React状态更新延迟
+                        const currentMousePosition = mousePositionRef.current;
+                        if (!currentMousePosition) {
+                          console.log('📏 调试连线 - 鼠标位置为空，等待鼠标移动');
+                          return null;
+                        }
+                        
+                        console.log('📏 调试连线 - 找到起点，开始渲染虚线:', startPoint, '实时鼠标位置:', currentMousePosition);
                         
                         return (
                           <line
                             x1={startPoint.x}
                             y1={startPoint.y}
-                            x2={mousePosition.x}
-                            y2={mousePosition.y}
+                            x2={currentMousePosition.x}
+                            y2={currentMousePosition.y}
                             stroke="#1890ff"
                             strokeWidth="2"
                             strokeDasharray="5,5"
                             opacity="0.7"
                             style={{ pointerEvents: 'none' }}
                           />
+                        );
+                      })()}
+                      
+                      {/* 区域绘制临时视觉反馈 */}
+                      {isDrawingArea && currentAreaPoints.length > 0 && (() => {
+                        const points = currentAreaPoints;
+                        
+                        return (
+                          <g>
+                            {/* 临时填充预览 - 当有2个或以上点且鼠标位置存在时 */}
+                            {points.length >= 2 && mousePosition && (() => {
+                              // 构建包含鼠标位置的临时路径
+                              const tempPoints = [...points, mousePosition];
+                              const pathData = tempPoints.reduce((path, point, index) => {
+                                if (index === 0) {
+                                  return `M ${point.x} ${point.y}`;
+                                } else {
+                                  return `${path} L ${point.x} ${point.y}`;
+                                }
+                              }, '') + ' Z'; // Z命令闭合路径
+                              
+                              return (
+                                <path
+                                  d={pathData}
+                                  fill="#ffccc7" // 浅肉色填充
+                                  fillOpacity="0.2"
+                                  stroke="#ff7875" // 深肉色描边
+                                  strokeWidth="2"
+                                  strokeDasharray="5,5"
+                                  strokeOpacity="0.6"
+                                  style={{ pointerEvents: 'none' }}
+                                />
+                              );
+                            })()}
+                            
+                            {/* 绘制已有点之间的连线 */}
+                            {points.map((point, index) => {
+                              if (index === 0) return null;
+                              const prevPoint = points[index - 1];
+                              return (
+                                <line
+                                  key={`area-line-${index}`}
+                                  x1={prevPoint.x}
+                                  y1={prevPoint.y}
+                                  x2={point.x}
+                                  y2={point.y}
+                                  stroke="#ff7875"
+                                  strokeWidth="2"
+                                  strokeDasharray="5,5"
+                                  opacity="0.8"
+                                  style={{ pointerEvents: 'none' }}
+                                />
+                              );
+                            })}
+                            
+                            {/* 如果有3个或更多点，绘制从最后一个点到第一个点的虚线（预览闭合效果） */}
+                            {points.length >= 3 && (
+                              <line
+                                x1={points[points.length - 1].x}
+                                y1={points[points.length - 1].y}
+                                x2={points[0].x}
+                                y2={points[0].y}
+                                stroke="#ff7875"
+                                strokeWidth="2"
+                                strokeDasharray="10,5"
+                                opacity="0.6"
+                                style={{ pointerEvents: 'none' }}
+                              />
+                            )}
+                            
+                            {/* 鼠标跟随线 - 从最后一个点到鼠标位置 */}
+                            {mousePosition && points.length > 0 && (
+                              <line
+                                x1={points[points.length - 1].x}
+                                y1={points[points.length - 1].y}
+                                x2={mousePosition.x}
+                                y2={mousePosition.y}
+                                stroke="#ff7875"
+                                strokeWidth="2"
+                                strokeDasharray="3,3"
+                                opacity="0.5"
+                                style={{ pointerEvents: 'none' }}
+                              />
+                            )}
+                            
+                            {/* 绘制临时区域点 */}
+                            {points.map((point, index) => (
+                              <circle
+                                key={`area-point-${index}`}
+                                cx={point.x}
+                                cy={point.y}
+                                r="4"
+                                fill="#ff7875"
+                                stroke="#ffffff"
+                                strokeWidth="2"
+                                opacity="0.9"
+                                style={{ pointerEvents: 'none' }}
+                              />
+                            ))}
+                          </g>
                         );
                       })()}
                     </svg>
@@ -7134,7 +8023,7 @@ const MapManagement: React.FC = () => {
                     })}
                     
                     {/* 画布提示内容 */}
-                    {mapPoints.length === 0 && (
+                    {mapPoints.length === 0 && mapLines.length === 0 && mapAreas.length === 0 && !isDrawingArea && (
                       <div style={{
                         position: 'absolute',
                         top: '50%',
@@ -7147,6 +8036,35 @@ const MapManagement: React.FC = () => {
                         <EditOutlined style={{ fontSize: '48px', marginBottom: '16px' }} />
                         <div style={{ fontSize: '16px', marginBottom: '8px' }}>地图编辑画布</div>
                         <div style={{ fontSize: '12px' }}>选择左侧工具开始绘制地图</div>
+                      </div>
+                    )}
+                    
+                    {/* 区域绘制状态提示 */}
+                    {isDrawingArea && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '20px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: 'rgba(255, 120, 117, 0.9)',
+                        color: '#fff',
+                        padding: '12px 20px',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        fontWeight: '500',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                        pointerEvents: 'none',
+                        zIndex: 1000
+                      }}>
+                        {currentAreaPoints.length === 0 && '点击画布开始绘制区域'}
+                        {currentAreaPoints.length === 1 && '继续点击添加第二个点'}
+                        {currentAreaPoints.length === 2 && '继续点击添加第三个点'}
+                        {currentAreaPoints.length >= 3 && (
+                          <span>
+                            已添加 {currentAreaPoints.length} 个点 • 
+                            <strong>双击</strong> 或 <strong>右键</strong> 完成绘制
+                          </span>
+                        )}
                       </div>
                     )}
                     </div>
@@ -7421,6 +8339,28 @@ const MapManagement: React.FC = () => {
                                   <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
                                 </svg>
                                 单向直线
+                              </Button>
+                              
+                              <Button 
+                                type={selectedTool === 'area' ? 'primary' : 'text'}
+                                onClick={() => handleToolSelect('area')}
+                                style={{
+                                  height: '40px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'flex-start',
+                                  padding: '0 12px',
+                                  border: selectedTool === 'area' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                  borderRadius: '6px',
+                                  background: selectedTool === 'area' ? '#e6f7ff' : '#fff',
+                                  color: selectedTool === 'area' ? '#1890ff' : '#666'
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                  <polygon points="3,3 13,3 13,13 3,13" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
+                                  <polygon points="3,3 13,3 13,13 3,13" fill="#1890ff" fillOpacity="0.2"/>
+                                </svg>
+                                绘制区域
                               </Button>
                               
                               <Button 
@@ -8637,6 +9577,193 @@ const MapManagement: React.FC = () => {
         </Form>
       </Modal>
       
+      {/* 区域属性编辑弹窗 */}
+      <Modal
+        title="编辑区域属性"
+        open={areaEditModalVisible}
+        zIndex={2000}
+        onCancel={() => {
+          setAreaEditModalVisible(false);
+          setEditingArea(null);
+          // 延迟重置表单，避免闪现
+          setTimeout(() => {
+            areaEditForm.resetFields();
+          }, 100);
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setAreaEditModalVisible(false);
+            setEditingArea(null);
+            // 延迟重置表单，避免闪现
+            setTimeout(() => {
+              areaEditForm.resetFields();
+            }, 100);
+          }}>
+            取消
+          </Button>,
+          <Button key="submit" type="primary" onClick={() => areaEditForm.submit()}>
+            保存
+          </Button>
+        ]}
+        width={500}
+        bodyStyle={{
+          maxHeight: '70vh',
+          overflowY: 'auto',
+          padding: '24px'
+        }}
+      >
+        <Form
+          form={areaEditForm}
+          layout="vertical"
+          onFinish={handleSaveAreaEdit}
+        >
+          <Form.Item
+            label="区域ID"
+            style={{ marginBottom: 16 }}
+          >
+            <Input value={editingArea?.id} disabled style={{ color: '#666' }} />
+          </Form.Item>
+          
+          <Form.Item
+            name="name"
+            label="区域名称"
+            rules={[
+              { required: true, message: '请输入区域名称' },
+              { max: 20, message: '区域名称不能超过20个字符' }
+            ]}
+            style={{ marginBottom: 16 }}
+          >
+            <Input 
+              placeholder="请输入区域名称" 
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                  // 阻止Delete和Backspace键事件冒泡，防止误删地图上的区域
+                  if (e.key === 'Delete' || e.key === 'Backspace') {
+                    e.stopPropagation();
+                  }
+                }}
+            />
+          </Form.Item>
+          
+          <Form.Item
+            name="type"
+            label="区域类型"
+            rules={[{ required: true, message: '请选择区域类型' }]}
+            style={{ marginBottom: 16 }}
+          >
+            <Select placeholder="请选择区域类型">
+              <Select.Option value="工作区域">工作区域</Select.Option>
+              <Select.Option value="禁行区域">禁行区域</Select.Option>
+              <Select.Option value="限速区域">限速区域</Select.Option>
+              <Select.Option value="清洁区域">清洁区域</Select.Option>
+              <Select.Option value="安全区域">安全区域</Select.Option>
+              <Select.Option value="停车区域">停车区域</Select.Option>
+            </Select>
+          </Form.Item>
+          
+          {/* 根据区域类型显示不同的字段 */}
+          <Form.Item
+            noStyle
+            shouldUpdate={(prevValues: any, currentValues: any) => prevValues.type !== currentValues.type}
+          >
+            {({ getFieldValue }: any) => {
+              const areaType = getFieldValue('type');
+              
+              // 限速区域显示速度限制字段
+              if (areaType === '限速区域') {
+                return (
+                  <Form.Item
+                    name="speedLimit"
+                    label="速度限制"
+                    rules={[
+                      { required: true, message: '请输入速度限制' },
+                      { 
+                        validator: (_: any, value: any) => {
+                          const num = Number(value);
+                          if (isNaN(num)) {
+                            return Promise.reject(new Error('请输入有效的数字'));
+                          }
+                          if (num <= 0 || num > 10) {
+                            return Promise.reject(new Error('速度范围为0.1到10.0 m/s'));
+                          }
+                          return Promise.resolve();
+                        }
+                      }
+                    ]}
+                    style={{ marginBottom: 16 }}
+                  >
+                    <Input
+                      type="number"
+                      placeholder="请输入速度限制 (0.1-10.0 m/s)"
+                      suffix="m/s"
+                      min={0.1}
+                      max={10}
+                      step={0.1}
+                      onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                        // 阻止Delete和Backspace键事件冒泡，防止误删地图上的区域
+                        if (e.key === 'Delete' || e.key === 'Backspace') {
+                          e.stopPropagation();
+                        }
+                      }}
+                    />
+                  </Form.Item>
+                );
+              }
+              
+              // 清洁区域显示清洁模式字段
+              if (areaType === '清洁区域') {
+                return (
+                  <Form.Item
+                    name="cleanMode"
+                    label="清洁模式"
+                    rules={[{ required: true, message: '请选择清洁模式' }]}
+                    style={{ marginBottom: 16 }}
+                  >
+                    <Select placeholder="请选择清洁模式">
+                      <Select.Option value="标准清洁">标准清洁</Select.Option>
+                      <Select.Option value="深度清洁">深度清洁</Select.Option>
+                      <Select.Option value="快速清洁">快速清洁</Select.Option>
+                      <Select.Option value="静音清洁">静音清洁</Select.Option>
+                    </Select>
+                  </Form.Item>
+                );
+              }
+              
+              return null;
+            }}
+          </Form.Item>
+          
+          <Form.Item
+            name="description"
+            label="区域描述"
+            style={{ marginBottom: 16 }}
+          >
+            <Input.TextArea 
+              placeholder="请输入区域描述（可选）" 
+              rows={3}
+              maxLength={200}
+              showCount
+              onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+                // 阻止Delete和Backspace键事件冒泡，防止误删地图上的区域
+                if (e.key === 'Delete' || e.key === 'Backspace') {
+                  e.stopPropagation();
+                }
+              }}
+            />
+          </Form.Item>
+          
+          <div style={{ 
+            background: '#f5f5f5', 
+            padding: '12px', 
+            borderRadius: '6px',
+            fontSize: '12px',
+            color: '#666'
+          }}>
+            <div><strong>区域点数:</strong> {editingArea?.points?.length || 0} 个点</div>
+            <div style={{ marginTop: '4px' }}><strong>创建时间:</strong> {new Date().toLocaleString()}</div>
+          </div>
+        </Form>
+      </Modal>
+      
       {/* 线属性编辑弹窗 */}
       <Modal
         title={'路径属性'}
@@ -8749,15 +9876,21 @@ const MapManagement: React.FC = () => {
           }}>
             <Row gutter={16}>
               <Col span={12}>
-                <div><strong>起始点:</strong> {getPointById(editingLine?.startPointId || '')?.name || '未知'}</div>
+                <div><strong>起始点:</strong> {editingLine?.startPointId ? getPointById(editingLine.startPointId)?.name || '未知' : '未知'}</div>
                 <div style={{ marginTop: '4px' }}><strong>起始坐标:</strong> 
-                  ({getPointById(editingLine?.startPointId || '')?.x}, {getPointById(editingLine?.startPointId || '')?.y})
+                  {editingLine?.startPointId ? 
+                    `(${getPointById(editingLine.startPointId)?.x || 0}, ${getPointById(editingLine.startPointId)?.y || 0})` : 
+                    '(0, 0)'
+                  }
                 </div>
               </Col>
               <Col span={12}>
-                <div><strong>结束点:</strong> {getPointById(editingLine?.endPointId || '')?.name || '未知'}</div>
+                <div><strong>结束点:</strong> {editingLine?.endPointId ? getPointById(editingLine.endPointId)?.name || '未知' : '未知'}</div>
                 <div style={{ marginTop: '4px' }}><strong>结束坐标:</strong> 
-                  ({getPointById(editingLine?.endPointId || '')?.x}, {getPointById(editingLine?.endPointId || '')?.y})
+                  {editingLine?.endPointId ? 
+                    `(${getPointById(editingLine.endPointId)?.x || 0}, ${getPointById(editingLine.endPointId)?.y || 0})` : 
+                    '(0, 0)'
+                  }
                 </div>
               </Col>
             </Row>
