@@ -924,13 +924,13 @@ const ProductManagement: React.FC = () => {
                 key: 'edit',
                 label: '编辑',
                 icon: <EditOutlined />,
-                onClick: () => console.log('编辑产品:', record.id),
+                onClick: () => handleEdit(record),
               },
               {
                 key: 'delete',
                 label: '删除',
                 icon: <DeleteOutlined />,
-                onClick: () => console.log('删除产品:', record.id),
+                onClick: () => handleDelete(record),
               },
             ],
           }}

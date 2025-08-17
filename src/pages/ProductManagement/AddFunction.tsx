@@ -569,7 +569,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       form.setFieldsValue({
         mappingFunctionName: functionName
       });
-      console.log('设置映射功能名称:', functionName);
+
     }
   }, [currentStep, functionName, form]);
 
@@ -807,12 +807,12 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const handleNext = async () => {
     try {
       const values = await form.validateFields();
-      console.log('handleNext - 表单验证通过，获取的值:', values);
+
       setFunctionName(values.name || ''); // 保存功能名称
       
       // 如果功能类型是属性（静态），直接保存，不进入配置映射页面
       if (values.functionType === '属性（静态）') {
-        console.log('handleNext - 功能类型为属性（静态），直接保存');
+
         await handleSaveStaticProperty(values);
         return;
       }
@@ -836,25 +836,9 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         isComposite: allValues.isComposite !== undefined ? allValues.isComposite : isComposite
       });
       
-      console.log('handleNext - 设置映射功能名称:', values.name);
-      console.log('handleNext - 保存第一步数据到隐藏字段:', {
-        name: values.name,
-        identifier: values.identifier,
-        functionType: values.functionType,
-        readWriteMode: values.readWriteMode,
-        dataType: values.dataType
-      });
-      console.log('handleNext - 恢复第二步数据:', {
-        registerAddress: allValues.registerAddress || registerAddress,
-        functionCode: allValues.functionCode || functionCode,
-        modbusDataType: allValues.modbusDataType || modbusDataType,
-        byteOrder: allValues.byteOrder || byteOrder,
-        registerType: allValues.registerType || registerType,
-        isComposite: allValues.isComposite !== undefined ? allValues.isComposite : isComposite
-      });
+
       
       setCurrentStep(1);
-      console.log('handleNext - 切换到步骤1');
     } catch (error) {
       console.error('表单验证失败:', error);
       message.error('请完善基本信息');
@@ -865,7 +849,6 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const handlePrev = () => {
     // 从第二步返回第一步时，确保表单数据正确显示
     const allValues = form.getFieldsValue();
-    console.log('handlePrev - 当前表单所有值:', allValues);
     
     // 确保第一步的数据正确显示（从隐藏字段恢复）
     const firstStepData = {
@@ -887,15 +870,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       isComposite: isComposite
     });
     
-    console.log('handlePrev - 恢复第一步数据:', firstStepData);
-    console.log('handlePrev - 保存第二步状态数据:', {
-      registerAddress,
-      functionCode,
-      modbusDataType,
-      byteOrder,
-      registerType,
-      isComposite
-    });
+
     
     setCurrentStep(0);
   };
@@ -952,7 +927,6 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         protocol: productProtocol,
       };
 
-      console.log('保存属性（静态）功能数据:', functionData);
       onSave(functionData);
       onClose();
       message.success(isEdit ? '功能更新成功' : '功能添加成功');
@@ -970,7 +944,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     try {
       // 获取表单的所有字段值，包括未渲染的字段
       const allValues = form.getFieldsValue();
-      console.log('表单所有字段值:', allValues); // 添加调试日志
+
       
       // 验证必填字段 - 优先使用functionName状态，其次使用表单值
       const finalName = functionName || allValues.name;
@@ -1190,9 +1164,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         } : {})
       };
       
-      console.log('准备保存功能数据:', functionData); // 添加调试日志
       onSave(functionData);
-      console.log('onSave回调已调用'); // 添加调试日志
       
       // 延迟关闭抽屉，确保父组件有时间处理数据
       setTimeout(() => {
@@ -1343,14 +1315,11 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
               placeholder="请输入功能名称" 
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 const newName = e.target.value;
-                console.log('功能名称输入变化:', newName);
                 setFunctionName(newName);
                 // 实时更新映射功能名称字段
                 form.setFieldsValue({
                   mappingFunctionName: newName
                 });
-                console.log('设置映射功能名称字段:', newName);
-                console.log('当前表单字段值:', form.getFieldsValue());
               }}
             />
           </Form.Item>

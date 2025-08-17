@@ -103,7 +103,6 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
       // 初始化功能列表
       if (editingProduct.functions && Array.isArray(editingProduct.functions)) {
         setFunctions(editingProduct.functions);
-        console.log('编辑模式：初始化功能列表', editingProduct.functions);
       } else {
         setFunctions([]);
       }
@@ -153,8 +152,6 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
 
   // 编辑功能
   const handleEditFunction = (record: ProductFunction) => {
-    console.log('编辑功能:', record);
-    
     // 将ProductFunction转换为FunctionConfig格式
     const functionConfig = {
       id: record.id, // 保持原有ID
@@ -181,7 +178,6 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
       registerType: record.registerType || 'holding-register',
     };
     
-    console.log('转换后的功能配置:', functionConfig);
     setEditingFunction(functionConfig);
     setIsEditMode(true);
     setAddFunctionVisible(true);
@@ -194,17 +190,12 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
 
   // 添加功能按钮点击
   const handleAddFunction = () => {
-    console.log('点击添加功能按钮');
     setEditingFunction(null);
     setIsEditMode(false);
     setAddFunctionVisible(true);
   };
 
-  // 监控addFunctionVisible状态变化
-  useEffect(() => {
-    console.log('addFunctionVisible状态变化:', addFunctionVisible);
-    console.log('handleSaveFunction函数类型:', typeof handleSaveFunction);
-  }, [addFunctionVisible]);
+
 
   // 关闭添加功能抽屉
   const handleCloseAddFunction = () => {
@@ -215,12 +206,6 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
 
   // 保存功能（新增或编辑）
   const handleSaveFunction = (functionData: any) => {
-    console.log('=== 开始保存功能 ===');
-    console.log('接收到的功能数据:', functionData);
-    console.log('当前functions状态:', functions);
-    console.log('编辑模式:', isEditMode);
-    console.log('编辑的功能:', editingFunction);
-    
     if (isEditMode && editingFunction) {
       // 编辑模式：更新现有功能
       const updatedFunction: ProductFunction = {
@@ -240,13 +225,11 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
         byteOrder: functionData.byteOrder,
         registerType: functionData.registerType,
       };
-      console.log('更新的功能对象:', updatedFunction);
       
       setFunctions(prevFunctions => {
         const updatedFunctions = prevFunctions.map(func => 
           func.id === editingFunction.id ? updatedFunction : func
         );
-        console.log('更新后的功能列表:', updatedFunctions);
         return updatedFunctions;
       });
       
@@ -270,19 +253,15 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
         byteOrder: functionData.byteOrder,
         registerType: functionData.registerType,
       };
-      console.log('新功能对象:', newFunction);
       
       setFunctions(prevFunctions => {
-        console.log('setFunctions被调用，prevFunctions:', prevFunctions);
         const updatedFunctions = [...prevFunctions, newFunction];
-        console.log('更新后的功能列表:', updatedFunctions);
         return updatedFunctions;
       });
       
       message.success('功能添加成功！');
     }
     
-    console.log('=== 功能保存完成 ===');
     setAddFunctionVisible(false);
     setEditingFunction(null);
     setIsEditMode(false);
@@ -323,8 +302,6 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
           createdAt: new Date().toISOString()
         })
       };
-      
-      console.log(editingProduct ? '编辑产品:' : '创建产品:', productData);
       
       // 调用父组件的回调函数来更新产品列表
       if (onProductCreated) {
@@ -553,9 +530,6 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
 
   // 渲染功能定义步骤
   const renderFunctionDefinition = () => {
-    console.log('渲染功能定义，当前functions:', functions);
-    console.log('filteredFunctions:', filteredFunctions);
-    
     return (
       <Row justify="center">
         <Col xs={24} sm={23} md={20} lg={18} xl={16}>
