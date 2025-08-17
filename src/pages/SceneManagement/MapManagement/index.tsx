@@ -4058,6 +4058,88 @@ const MapManagement: React.FC = () => {
     message.success(`已删除 ${deletedCount} 个区域`);
   };
 
+  // 对齐功能实现
+  const handleAlignPoints = (alignType: 'top' | 'bottom' | 'left' | 'right') => {
+    if (selectedPoints.length < 2) {
+      message.warning('请至少选择两个点进行对齐');
+      return;
+    }
+
+    // 获取选中的点
+    const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
+    
+    if (selectedPointsData.length < 2) {
+      message.warning('选中的点数据不足');
+      return;
+    }
+
+    // 保存历史记录
+    saveToHistory();
+
+    // 计算基准值
+    let referenceValue: number;
+    switch (alignType) {
+      case 'top':
+        referenceValue = Math.min(...selectedPointsData.map(p => p.y));
+        break;
+      case 'bottom':
+        referenceValue = Math.max(...selectedPointsData.map(p => p.y));
+        break;
+      case 'left':
+        referenceValue = Math.min(...selectedPointsData.map(p => p.x));
+        break;
+      case 'right':
+        referenceValue = Math.max(...selectedPointsData.map(p => p.x));
+        break;
+      default:
+        return;
+    }
+
+    // 更新点的位置
+    const updatedPoints = mapPoints.map(point => {
+      if (selectedPoints.includes(point.id)) {
+        return {
+          ...point,
+          x: alignType === 'left' || alignType === 'right' ? referenceValue : point.x,
+          y: alignType === 'top' || alignType === 'bottom' ? referenceValue : point.y
+        };
+      }
+      return point;
+    });
+
+    setMapPoints(updatedPoints);
+    
+    // 🔧 修复：对齐后重新计算选中框位置
+    setTimeout(() => {
+      if (selectedPoints.length > 0) {
+        const alignedPointsData = updatedPoints.filter(point => selectedPoints.includes(point.id));
+        if (alignedPointsData.length > 0) {
+          const pointRadius = 8;
+          const pointMinX = Math.min(...alignedPointsData.map(p => p.x - pointRadius));
+          const pointMaxX = Math.max(...alignedPointsData.map(p => p.x + pointRadius));
+          const pointMinY = Math.min(...alignedPointsData.map(p => p.y - pointRadius));
+          const pointMaxY = Math.max(...alignedPointsData.map(p => p.y + pointRadius));
+          
+          const padding = 3;
+          const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
+          const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
+          
+          setSelectionStart(newSelectionStart);
+          setSelectionEnd(newSelectionEnd);
+        }
+      }
+    }, 0);
+    
+    const alignTypeMap = {
+      'top': '上对齐',
+      'bottom': '下对齐', 
+      'left': '左对齐',
+      'right': '右对齐'
+    };
+    
+    message.success(`${alignTypeMap[alignType]}完成`);
+  };
+
   // 撤销重做核心逻辑函数
   // 保存当前状态到历史记录
   const saveToHistory = () => {
@@ -4332,6 +4414,89 @@ const MapManagement: React.FC = () => {
       if (selectedPoints.length > 0 || selectedLines.length > 0 || selectedAreas.length > 0 || selectedVertices.length > 0) {
         event.preventDefault();
         handleArrowKeyMove(event.key);
+      }
+    }
+    
+    // 处理绘图工具快捷键
+    if (addMapFileDrawerVisible) {
+      // 检查当前焦点是否在输入框或其他表单元素上
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        (activeElement as HTMLElement).contentEditable === 'true' ||
+        activeElement.getAttribute('role') === 'textbox'
+      );
+      
+      // 如果焦点在输入框上，不处理工具快捷键
+      if (!isInputFocused) {
+        // 在切换工具前，先处理连续绘制状态
+        const handleToolSwitch = (newTool: string, toolName: string) => {
+          event.preventDefault();
+          
+          // 如果正在绘制区域，先处理区域绘制状态
+          if (isDrawingArea) {
+            if (currentAreaPoints.length >= 3) {
+              // 点数足够，完成区域绘制
+              console.log('⌨️ [工具切换] 检测到区域绘制中，完成当前区域绘制');
+              const newArea: MapArea = {
+                id: `area_${Date.now()}`,
+                name: `a${mapAreas.length + 1}`,
+                points: [...currentAreaPoints],
+                fillColor: '#1890ff',
+                strokeColor: '#1890ff',
+                opacity: 0.3
+              };
+              
+              setMapAreas(prev => [...prev, newArea]);
+              setIsDrawingArea(false);
+              setCurrentAreaPoints([]);
+              saveToHistory();
+              message.success(`区域 "${newArea.name}" 创建成功`);
+            } else {
+              // 点数不够，取消区域绘制
+              console.log('⌨️ [工具切换] 检测到区域绘制中，取消当前区域绘制');
+              setIsDrawingArea(false);
+              setCurrentAreaPoints([]);
+              message.info('已取消区域绘制');
+            }
+            setMousePosition(null);
+          }
+          
+          // 如果正在连线模式，退出连线状态
+          if (isConnecting || continuousConnecting) {
+            console.log('⌨️ [工具切换] 检测到连线模式，退出连线状态');
+            exitConnectingMode();
+          }
+          
+          // 切换到新工具
+          console.log(`⌨️ [工具切换] 快捷键${event.key.toUpperCase()} - 切换到${toolName}`);
+          setSelectedTool(newTool);
+        };
+        
+        switch (event.key.toLowerCase()) {
+          case 'v':
+            handleToolSwitch('select', '选择工具');
+            break;
+          case 'p':
+            handleToolSwitch('point', '绘制节点工具');
+            break;
+          case 'd':
+            handleToolSwitch('double-line', '双向直线工具');
+            break;
+          case 's':
+            handleToolSwitch('single-line', '单向直线工具');
+            break;
+          case 'a':
+            handleToolSwitch('area', '绘制区域工具');
+            break;
+          case 'b':
+            handleToolSwitch('double-bezier', '双向贝塞尔曲线工具');
+            break;
+          case 'c':
+            handleToolSwitch('single-bezier', '单向贝塞尔曲线工具');
+            break;
+        }
       }
     }
   };
@@ -8571,6 +8736,117 @@ const MapManagement: React.FC = () => {
                   />
                 </div>
                 
+                {/* 对齐工具栏 - 仅在选择多个点时显示 */}
+                {selectedPoints.length > 1 && (
+                  <div style={{
+                    position: 'absolute',
+                    right: '350px', // 避免与上方工具栏重叠
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: '#fff',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    border: '1px solid #e8e8e8',
+                    padding: '8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                    zIndex: 100
+                  }}>
+                    {/* 上对齐 */}
+                    <Button
+                      type="text"
+                      size="small"
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: 'none'
+                      }}
+                      title="上对齐"
+                      onClick={() => handleAlignPoints('top')}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 4h18" strokeLinecap="round" />
+                        <path d="M8 6v12" strokeLinecap="round" />
+                        <path d="M12 6v8" strokeLinecap="round" />
+                        <path d="16 6v14" strokeLinecap="round" />
+                      </svg>
+                    </Button>
+                    
+                    {/* 下对齐 */}
+                    <Button
+                      type="text"
+                      size="small"
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: 'none'
+                      }}
+                      title="下对齐"
+                      onClick={() => handleAlignPoints('bottom')}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 20h18" strokeLinecap="round" />
+                        <path d="M8 4v14" strokeLinecap="round" />
+                        <path d="M12 8v10" strokeLinecap="round" />
+                        <path d="16 2v16" strokeLinecap="round" />
+                      </svg>
+                    </Button>
+                    
+                    {/* 左对齐 */}
+                    <Button
+                      type="text"
+                      size="small"
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: 'none'
+                      }}
+                      title="左对齐"
+                      onClick={() => handleAlignPoints('left')}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M4 3v18" strokeLinecap="round" />
+                        <path d="M6 8h12" strokeLinecap="round" />
+                        <path d="M6 12h8" strokeLinecap="round" />
+                        <path d="M6 16h14" strokeLinecap="round" />
+                      </svg>
+                    </Button>
+                    
+                    {/* 右对齐 */}
+                    <Button
+                      type="text"
+                      size="small"
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: 'none'
+                      }}
+                      title="右对齐"
+                      onClick={() => handleAlignPoints('right')}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M20 3v18" strokeLinecap="round" />
+                        <path d="M6 8h12" strokeLinecap="round" />
+                        <path d="M10 12h8" strokeLinecap="round" />
+                        <path d="M4 16h14" strokeLinecap="round" />
+                      </svg>
+                    </Button>
+                  </div>
+                )}
+                
                 {/* 右侧信息面板 - 紧挨边缘 */}
                 <div style={{
                   width: '260px',
@@ -8604,7 +8880,7 @@ const MapManagement: React.FC = () => {
                                   height: '40px',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'flex-start',
+                                  justifyContent: 'space-between',
                                   padding: '0 12px',
                                   border: selectedTool === 'select' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
@@ -8612,11 +8888,23 @@ const MapManagement: React.FC = () => {
                                   color: selectedTool === 'select' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                  <rect x="2" y="2" width="10" height="10" fill="none" stroke="#1890ff" strokeWidth="1.5" rx="1"/>
-                                  <path d="M12 7 L15 9 L12 11 L13 9 Z" fill="#1890ff"/>
-                                </svg>
-                                选择工具
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                    <rect x="2" y="2" width="10" height="10" fill="none" stroke="#1890ff" strokeWidth="1.5" rx="1"/>
+                                    <path d="M12 7 L15 9 L12 11 L13 9 Z" fill="#1890ff"/>
+                                  </svg>
+                                  选择工具
+                                </div>
+                                <span style={{ 
+                                  fontSize: '12px', 
+                                  opacity: 0.7,
+                                  fontWeight: 'normal',
+                                  backgroundColor: selectedTool === 'select' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  minWidth: '20px',
+                                  textAlign: 'center'
+                                }}>V</span>
                               </Button>
                               
                               <Button 
@@ -8626,7 +8914,7 @@ const MapManagement: React.FC = () => {
                                   height: '40px',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'flex-start',
+                                  justifyContent: 'space-between',
                                   padding: '0 12px',
                                   border: selectedTool === 'point' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
@@ -8634,11 +8922,23 @@ const MapManagement: React.FC = () => {
                                   color: selectedTool === 'point' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                  <circle cx="8" cy="8" r="6" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
-                                  <circle cx="8" cy="8" r="2" fill="#1890ff"/>
-                                </svg>
-                                绘制节点
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                    <circle cx="8" cy="8" r="6" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
+                                    <circle cx="8" cy="8" r="2" fill="#1890ff"/>
+                                  </svg>
+                                  绘制节点
+                                </div>
+                                <span style={{ 
+                                  fontSize: '12px', 
+                                  opacity: 0.7,
+                                  fontWeight: 'normal',
+                                  backgroundColor: selectedTool === 'point' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  minWidth: '20px',
+                                  textAlign: 'center'
+                                }}>P</span>
                               </Button>
                               
                               <Button 
@@ -8648,7 +8948,7 @@ const MapManagement: React.FC = () => {
                                   height: '40px',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'flex-start',
+                                  justifyContent: 'space-between',
                                   padding: '0 12px',
                                   border: selectedTool === 'double-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
@@ -8656,12 +8956,24 @@ const MapManagement: React.FC = () => {
                                   color: selectedTool === 'double-line' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                  <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
-                                  <path d="M1 8 L4 6.5 L3.5 8 L4 9.5 Z" fill="#1890ff"/>
-                                  <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
-                                </svg>
-                                双向直线
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                    <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
+                                    <path d="M1 8 L4 6.5 L3.5 8 L4 9.5 Z" fill="#1890ff"/>
+                                    <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
+                                  </svg>
+                                  双向直线
+                                </div>
+                                <span style={{ 
+                                  fontSize: '12px', 
+                                  opacity: 0.7,
+                                  fontWeight: 'normal',
+                                  backgroundColor: selectedTool === 'double-line' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  minWidth: '20px',
+                                  textAlign: 'center'
+                                }}>D</span>
                               </Button>
                               
                               <Button 
@@ -8671,7 +8983,7 @@ const MapManagement: React.FC = () => {
                                   height: '40px',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'flex-start',
+                                  justifyContent: 'space-between',
                                   padding: '0 12px',
                                   border: selectedTool === 'single-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
@@ -8679,11 +8991,23 @@ const MapManagement: React.FC = () => {
                                   color: selectedTool === 'single-line' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                  <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
-                                  <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
-                                </svg>
-                                单向直线
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                    <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
+                                    <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
+                                  </svg>
+                                  单向直线
+                                </div>
+                                <span style={{ 
+                                  fontSize: '12px', 
+                                  opacity: 0.7,
+                                  fontWeight: 'normal',
+                                  backgroundColor: selectedTool === 'single-line' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  minWidth: '20px',
+                                  textAlign: 'center'
+                                }}>S</span>
                               </Button>
                               
                               <Button 
@@ -8693,7 +9017,7 @@ const MapManagement: React.FC = () => {
                                   height: '40px',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'flex-start',
+                                  justifyContent: 'space-between',
                                   padding: '0 12px',
                                   border: selectedTool === 'area' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
@@ -8701,11 +9025,23 @@ const MapManagement: React.FC = () => {
                                   color: selectedTool === 'area' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                  <polygon points="3,3 13,3 13,13 3,13" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
-                                  <polygon points="3,3 13,3 13,13 3,13" fill="#1890ff" fillOpacity="0.2"/>
-                                </svg>
-                                绘制区域
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                    <polygon points="3,3 13,3 13,13 3,13" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
+                                    <polygon points="3,3 13,3 13,13 3,13" fill="#1890ff" fillOpacity="0.2"/>
+                                  </svg>
+                                  绘制区域
+                                </div>
+                                <span style={{ 
+                                  fontSize: '12px', 
+                                  opacity: 0.7,
+                                  fontWeight: 'normal',
+                                  backgroundColor: selectedTool === 'area' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  minWidth: '20px',
+                                  textAlign: 'center'
+                                }}>A</span>
                               </Button>
                               
                               <Button 
@@ -8715,7 +9051,7 @@ const MapManagement: React.FC = () => {
                                   height: '40px',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'flex-start',
+                                  justifyContent: 'space-between',
                                   padding: '0 12px',
                                   border: selectedTool === 'double-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
@@ -8723,12 +9059,24 @@ const MapManagement: React.FC = () => {
                                   color: selectedTool === 'double-bezier' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                  <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
-                                  <path d="M1 8 L4 6.5 L3.5 8 L4 9.5 Z" fill="#1890ff"/>
-                                  <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
-                                </svg>
-                                双向贝塞尔曲线
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                    <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
+                                    <path d="M1 8 L4 6.5 L3.5 8 L4 9.5 Z" fill="#1890ff"/>
+                                    <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
+                                  </svg>
+                                  双向贝塞尔曲线
+                                </div>
+                                <span style={{ 
+                                  fontSize: '12px', 
+                                  opacity: 0.7,
+                                  fontWeight: 'normal',
+                                  backgroundColor: selectedTool === 'double-bezier' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  minWidth: '20px',
+                                  textAlign: 'center'
+                                }}>B</span>
                               </Button>
                               
                               <Button 
@@ -8738,7 +9086,7 @@ const MapManagement: React.FC = () => {
                                   height: '40px',
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'flex-start',
+                                  justifyContent: 'space-between',
                                   padding: '0 12px',
                                   border: selectedTool === 'single-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
                                   borderRadius: '6px',
@@ -8746,11 +9094,23 @@ const MapManagement: React.FC = () => {
                                   color: selectedTool === 'single-bezier' ? '#1890ff' : '#666'
                                 }}
                               >
-                                <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                  <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
-                                  <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
-                                </svg>
-                                单向贝塞尔曲线
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                    <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
+                                    <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
+                                  </svg>
+                                  单向贝塞尔曲线
+                                </div>
+                                <span style={{ 
+                                  fontSize: '12px', 
+                                  opacity: 0.7,
+                                  fontWeight: 'normal',
+                                  backgroundColor: selectedTool === 'single-bezier' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  minWidth: '20px',
+                                  textAlign: 'center'
+                                }}>C</span>
                               </Button>
                             </div>
                           </div>
@@ -8967,7 +9327,7 @@ const MapManagement: React.FC = () => {
                                             type="text" 
                                             size="small" 
                                             danger
-                                            onClick={(e) => {
+                                            onClick={(e: React.MouseEvent) => {
                                               e.stopPropagation(); // 阻止事件冒泡到父元素
                                               Modal.confirm({
                                                 title: '确认删除',
