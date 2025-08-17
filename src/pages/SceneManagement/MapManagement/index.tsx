@@ -1163,8 +1163,8 @@ const MapManagement: React.FC = () => {
         id: `area_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: `区域${areaCounter}`,
         points: [...currentAreaPoints],
-        fillColor: '#ff9999', // 浅肉色填充
-        strokeColor: '#cc6666', // 深肉色描边
+        fillColor: '#1890ff', // 蓝色填充
+        strokeColor: '#1890ff', // 蓝色描边
         opacity: 0.3
       };
       
@@ -1201,6 +1201,14 @@ const MapManagement: React.FC = () => {
       return;
     }
     
+    // 如果正在连线模式（包括连续连线），右键取消连续绘制状态
+    if (['single-line', 'double-line', 'single-bezier', 'double-bezier'].includes(selectedTool) && (isConnecting || continuousConnecting)) {
+      e.preventDefault();
+      e.stopPropagation();
+      exitConnectingMode();
+      return;
+    }
+    
     // 只有在有选中元素且在框选区域内时才显示右键菜单
     if (selectedPoints.length > 0 && selectionStart && selectionEnd) {
       e.preventDefault();
@@ -1220,6 +1228,21 @@ const MapManagement: React.FC = () => {
   // 关闭框选区域右键菜单
   const handleCloseSelectionContextMenu = () => {
     setSelectionContextMenuVisible(false);
+  };
+
+  // 处理画布双击事件
+  const handleCanvasDoubleClick = (e: React.MouseEvent) => {
+    // 如果正在绘制区域且有足够的点，双击完成绘制
+    if (selectedTool === 'area' && isDrawingArea && currentAreaPoints.length >= 3) {
+      completeAreaDrawing();
+      return;
+    }
+    
+    // 如果正在连线模式（包括连续连线），双击取消连续绘制状态
+    if (['single-line', 'double-line', 'single-bezier', 'double-bezier'].includes(selectedTool) && (isConnecting || continuousConnecting)) {
+      exitConnectingMode();
+      return;
+    }
   };
 
   // 获取框选区域内的线（路径）
@@ -3266,6 +3289,65 @@ const MapManagement: React.FC = () => {
           提示: '双击或右键完成区域绘制'
         });
       }
+    } else if (['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(selectedTool)) {
+      // 线工具模式：自动创建点并开始连线
+      const canvasElement = event.currentTarget;
+      const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+      
+      console.log('🎯 [线工具-自动创建点] 开始处理', {
+        工具类型: selectedTool,
+        点击坐标: { x, y },
+        是否正在连线: isConnecting,
+        连续连线状态: continuousConnecting,
+        起始点: connectingStartPoint,
+        最后连接点: lastConnectedPoint
+      });
+      
+      // 清除其他选中状态
+      if (selectedLines.length > 0) {
+        setSelectedLines([]);
+      }
+      if (selectedAreas.length > 0) {
+        setSelectedAreas([]);
+      }
+      
+      // 创建新点
+      const newPoint = {
+        id: `point_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: `n${pointCounter}`,
+        type: '节点',
+        x: x,
+        y: y,
+        direction: 0
+      };
+      
+      console.log('🎯 [线工具-自动创建点] 创建新点', {
+        新点信息: newPoint,
+        当前点计数器: pointCounter
+      });
+      
+      // 保存历史记录（添加点之前）
+      saveToHistory();
+      
+      // 添加新点到地图
+      setMapPoints(prev => [...prev, newPoint]);
+      setPointCounter(prev => prev + 1);
+      
+      // 自动开始连线逻辑
+      setTimeout(() => {
+        console.log('🎯 [线工具-自动创建点] 开始连线逻辑', {
+          新点ID: newPoint.id,
+          当前连线状态: {
+            isConnecting,
+            continuousConnecting,
+            connectingStartPoint,
+            lastConnectedPoint
+          }
+        });
+        
+        handlePointConnection(newPoint.id);
+      }, 10); // 短暂延迟确保状态更新完成
+      
     } else if (selectedTool === 'select') {
       console.log('🎯 [区域调试-选择工具调试] 进入选择工具处理逻辑', {
         是否正在框选: isSelecting,
@@ -4050,8 +4132,8 @@ const MapManagement: React.FC = () => {
            id: `area_${Date.now()}`,
            name: `a${mapAreas.length + 1}`,
            points: [...currentAreaPoints],
-           fillColor: '#ffcccb',
-           strokeColor: '#ff6b6b',
+           fillColor: '#1890ff',
+           strokeColor: '#1890ff',
            opacity: 0.3
          };
          
@@ -4095,6 +4177,20 @@ const MapManagement: React.FC = () => {
     // 只在地图编辑模式下且选择工具激活时处理键盘事件
     if (addMapFileDrawerVisible && selectedTool === 'select') {
       if (event.key === 'Delete' || event.key === 'Backspace') {
+        // 检查当前焦点是否在输入框或其他表单元素上
+        const activeElement = document.activeElement;
+        const isInputFocused = activeElement && (
+          activeElement.tagName === 'INPUT' ||
+          activeElement.tagName === 'TEXTAREA' ||
+          (activeElement as HTMLElement).contentEditable === 'true' ||
+          activeElement.getAttribute('role') === 'textbox'
+        );
+        
+        // 如果焦点在输入框上，不拦截键盘事件，让输入框正常处理
+        if (isInputFocused) {
+          return;
+        }
+        
         event.preventDefault();
         // 优先删除选中的点，然后是线，最后是区域
         if (selectedPoints.length > 0) {
@@ -7457,7 +7553,7 @@ const MapManagement: React.FC = () => {
                       userSelect: 'none'  // 防止文本选择
                     }}
                     onClick={(dragTool || isSpacePressed) ? undefined : handleCanvasClick}
-                    onDoubleClick={(dragTool || isSpacePressed) ? undefined : (selectedTool === 'area' && isDrawingArea && currentAreaPoints.length >= 3) ? completeAreaDrawing : undefined}
+                    onDoubleClick={(dragTool || isSpacePressed) ? undefined : handleCanvasDoubleClick}
                     onMouseDown={(dragTool || isSpacePressed) ? handleCanvasDrag : (selectedTool === 'select' ? handleSelectionStart : handleCanvasDrag)}
                     onMouseMove={handleCanvasMouseMove}
                     onContextMenu={handleSelectionContextMenu}
@@ -7688,20 +7784,34 @@ const MapManagement: React.FC = () => {
                         }, '') + ' Z'; // Z命令闭合路径
                         
                         const isSelected = selectedAreas.includes(area.id);
+                        const areaColors = getAreaColors(area);
+                        
+                        // 将区域描边颜色转换为rgba格式用于阴影
+                        const getShadowColor = (strokeColor: string) => {
+                          // 如果是十六进制颜色，转换为rgba
+                          if (strokeColor.startsWith('#')) {
+                            const r = parseInt(strokeColor.slice(1, 3), 16);
+                            const g = parseInt(strokeColor.slice(3, 5), 16);
+                            const b = parseInt(strokeColor.slice(5, 7), 16);
+                            return `rgba(${r}, ${g}, ${b}, 0.6)`;
+                          }
+                          // 如果已经是rgba或rgb格式，直接使用
+                          return strokeColor.includes('rgba') ? strokeColor : strokeColor.replace('rgb', 'rgba').replace(')', ', 0.6)');
+                        };
                         
                         return (
                           <g key={area.id}>
                             {/* 区域填充 */}
                             <path
                               d={pathData}
-                              fill={getAreaColors(area).fillColor}
+                              fill={areaColors.fillColor}
                               fillOpacity={area.opacity || 0.3}
-                              stroke={getAreaColors(area).strokeColor}
+                              stroke={areaColors.strokeColor}
                               strokeWidth={isSelected ? '3' : '2'}
                               strokeOpacity="0.8"
                               style={{
                                 cursor: 'pointer',
-                                filter: isSelected ? 'drop-shadow(0 0 8px rgba(255, 120, 117, 0.6))' : 'none'
+                                filter: isSelected ? `drop-shadow(0 0 8px ${getShadowColor(areaColors.strokeColor)})` : 'none'
                               }}
                               onClick={(e) => {
                                 console.log('🔍 [区域点击调试] 区域被点击', {
@@ -7769,6 +7879,7 @@ const MapManagement: React.FC = () => {
                               // 计算区域中心点
                               const centerX = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
                               const centerY = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
+                              const areaColors = getAreaColors(area);
                               
                               return (
                                 <g>
@@ -7776,7 +7887,7 @@ const MapManagement: React.FC = () => {
                                     cx={centerX}
                                     cy={centerY}
                                     r="6"
-                                    fill="#ff7875"
+                                    fill={areaColors.strokeColor}
                                     stroke="#ffffff"
                                     strokeWidth="2"
                                     opacity="0.9"
@@ -7787,7 +7898,7 @@ const MapManagement: React.FC = () => {
                                     y={centerY - 15}
                                     textAnchor="middle"
                                     fontSize="12"
-                                    fill="#ff7875"
+                                    fill={areaColors.strokeColor}
                                     fontWeight="bold"
                                     style={{ pointerEvents: 'none' }}
                                   >
@@ -7803,20 +7914,23 @@ const MapManagement: React.FC = () => {
                                 v => v.areaId === area.id && v.vertexIndex === index
                               );
                               
+                              // 获取区域的颜色
+                              const areaColors = getAreaColors(area);
+                              
                               return (
                                 <circle
                                   key={`${area.id}-vertex-${index}`}
                                   cx={point.x}
                                   cy={point.y}
                                   r={isVertexSelected ? "6" : "4"}
-                                  fill={isVertexSelected ? "#ff7875" : "#ffffff"}
-                                  stroke="#ff7875"
+                                  fill={isVertexSelected ? areaColors.strokeColor : "#ffffff"}
+                                  stroke={areaColors.strokeColor}
                                   strokeWidth={isVertexSelected ? "3" : "2"}
                                   opacity="0.9"
                                   style={{
                                     cursor: 'pointer',
                                     filter: isVertexSelected 
-                                      ? 'drop-shadow(0 2px 6px rgba(255, 120, 117, 0.4))' 
+                                      ? `drop-shadow(0 2px 6px ${areaColors.strokeColor}40)` 
                                       : 'drop-shadow(0 1px 3px rgba(0, 0, 0, 0.2))'
                                   }}
                                   onClick={(e) => {
@@ -7866,7 +7980,7 @@ const MapManagement: React.FC = () => {
                                      const currentRadius = isVertexSelected ? '6' : '4';
                                      e.currentTarget.setAttribute('r', String(parseInt(currentRadius) + 1));
                                      if (!isVertexSelected) {
-                                       e.currentTarget.setAttribute('fill', '#ff7875');
+                                       e.currentTarget.setAttribute('fill', areaColors.strokeColor);
                                      }
                                    }}
                                    onMouseLeave={(e) => {
@@ -7958,9 +8072,9 @@ const MapManagement: React.FC = () => {
                               return (
                                 <path
                                   d={pathData}
-                                  fill="#ffccc7" // 浅肉色填充
+                                  fill="#1890ff" // 蓝色填充
                                   fillOpacity="0.2"
-                                  stroke="#ff7875" // 深肉色描边
+                                  stroke="#1890ff" // 蓝色描边
                                   strokeWidth="2"
                                   strokeDasharray="5,5"
                                   strokeOpacity="0.6"
@@ -7980,7 +8094,7 @@ const MapManagement: React.FC = () => {
                                   y1={prevPoint.y}
                                   x2={point.x}
                                   y2={point.y}
-                                  stroke="#ff7875"
+                                  stroke="#1890ff"
                                   strokeWidth="2"
                                   strokeDasharray="5,5"
                                   opacity="0.8"
@@ -7996,7 +8110,7 @@ const MapManagement: React.FC = () => {
                                 y1={points[points.length - 1].y}
                                 x2={points[0].x}
                                 y2={points[0].y}
-                                stroke="#ff7875"
+                                stroke="#1890ff"
                                 strokeWidth="2"
                                 strokeDasharray="10,5"
                                 opacity="0.6"
@@ -8011,7 +8125,7 @@ const MapManagement: React.FC = () => {
                                 y1={points[points.length - 1].y}
                                 x2={mousePosition.x}
                                 y2={mousePosition.y}
-                                stroke="#ff7875"
+                                stroke="#1890ff"
                                 strokeWidth="2"
                                 strokeDasharray="3,3"
                                 opacity="0.5"
@@ -8026,7 +8140,7 @@ const MapManagement: React.FC = () => {
                                 cx={point.x}
                                 cy={point.y}
                                 r="4"
-                                fill="#ff7875"
+                                fill="#1890ff"
                                 stroke="#ffffff"
                                 strokeWidth="2"
                                 opacity="0.9"
@@ -8143,25 +8257,38 @@ const MapManagement: React.FC = () => {
                         top: '20px',
                         left: '50%',
                         transform: 'translateX(-50%)',
-                        background: 'rgba(255, 120, 117, 0.9)',
-                        color: '#fff',
+                        background: '#ffffff',
+                        color: '#666666',
                         padding: '12px 20px',
                         borderRadius: '8px',
                         fontSize: '14px',
                         fontWeight: '500',
                         boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
                         pointerEvents: 'none',
-                        zIndex: 1000
+                        zIndex: 1000,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
                       }}>
-                        {currentAreaPoints.length === 0 && '点击画布开始绘制区域'}
-                        {currentAreaPoints.length === 1 && '继续点击添加第二个点'}
-                        {currentAreaPoints.length === 2 && '继续点击添加第三个点'}
-                        {currentAreaPoints.length >= 3 && (
-                          <span>
-                            已添加 {currentAreaPoints.length} 个点 • 
-                            <strong>双击</strong> 或 <strong>右键</strong> 完成绘制
-                          </span>
-                        )}
+                        {/* 绿色小圆点 */}
+                        <div style={{
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          backgroundColor: '#52c41a',
+                          flexShrink: 0
+                        }} />
+                        <span>
+                          {currentAreaPoints.length === 0 && '点击画布开始绘制区域'}
+                          {currentAreaPoints.length === 1 && '继续点击添加第二个点'}
+                          {currentAreaPoints.length === 2 && '继续点击添加第三个点'}
+                          {currentAreaPoints.length >= 3 && (
+                            <span>
+                              已添加 {currentAreaPoints.length} 个点 • 
+                              <strong>双击</strong> 或 <strong>右键</strong> 完成绘制
+                            </span>
+                          )}
+                        </span>
                       </div>
                     )}
                     </div>
@@ -8571,7 +8698,7 @@ const MapManagement: React.FC = () => {
                                                 padding: '0 4px'
                                               }}
                                             >
-                                              移除
+                                              删除
                                             </Button>
                                           )}
                                         </div>
@@ -8620,12 +8747,44 @@ const MapManagement: React.FC = () => {
                                             }}
                                             onMouseEnter={(e) => {
                                               e.currentTarget.style.backgroundColor = '#f5f5f5';
+                                              const deleteBtn = e.currentTarget.querySelector('.delete-btn') as HTMLElement;
+                                              if (deleteBtn) deleteBtn.style.opacity = '1';
                                             }}
                                             onMouseLeave={(e) => {
                                               e.currentTarget.style.backgroundColor = 'transparent';
+                                              const deleteBtn = e.currentTarget.querySelector('.delete-btn') as HTMLElement;
+                                              if (deleteBtn) deleteBtn.style.opacity = '0';
                                             }}
                                           >
                                             <span>{line.name}({startPoint?.name}{directionSymbol}{endPoint?.name})</span>
+                                            <Button 
+                                              className="delete-btn"
+                                              type="text" 
+                                              size="small" 
+                                              danger
+                                              onClick={() => {
+                                                Modal.confirm({
+                                                  title: '确认删除',
+                                                  content: `确定要删除路径 "${line.name}" 吗？删除后无法恢复。`,
+                                                  okText: '确认删除',
+                                                  cancelText: '取消',
+                                                  okType: 'danger',
+                                                  onOk: () => {
+                                                    setMapLines(prev => prev.filter(l => l.id !== line.id));
+                                                    message.success(`路径 "${line.name}" 已删除`);
+                                                  }
+                                                });
+                                              }}
+                                              style={{ 
+                                                opacity: 0, 
+                                                transition: 'opacity 0.2s',
+                                                fontSize: '10px',
+                                                height: '20px',
+                                                padding: '0 4px'
+                                              }}
+                                            >
+                                              删除
+                                            </Button>
                                           </div>
                                         );
                                       })}
@@ -8637,453 +8796,76 @@ const MapManagement: React.FC = () => {
                                     </div>
                                   )
                                 },
-                                {
-                                  key: 'functional-areas',
+                                {key: 'functional-areas',
                                   label: (
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                       <AppstoreOutlined style={{ color: '#fa541c' }} />
                                       <span>功能区</span>
-                                      <Badge count={2} size="small" style={{ backgroundColor: '#fa541c' }} />
+                                      <Badge count={mapAreas.length} size="small" style={{ backgroundColor: '#fa541c' }} />
                                     </div>
                                   ),
                                   children: (
-                                    <div style={{ paddingLeft: '8px' }}>
-                                      <Collapse
-                                        size="small"
-                                        ghost
-                                        items={[
-                                          {
-                                            key: 'area1',
-                                            label: (
-                                              <div 
-                                                style={{ 
-                                                  display: 'flex', 
-                                                  justifyContent: 'space-between', 
-                                                  alignItems: 'center',
-                                                  width: '100%'
-                                                }}
-                                                onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                                                  const addBtn = e.currentTarget.querySelector('.area-add-btn') as HTMLElement;
-                                                  if (addBtn) addBtn.style.opacity = '1';
-                                                }}
-                                                onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                                                  const addBtn = e.currentTarget.querySelector('.area-add-btn') as HTMLElement;
-                                                  if (addBtn) addBtn.style.opacity = '0';
-                                                }}
-                                              >
-                                                <span>区域1</span>
-                                                <Button 
-                                                  className="area-add-btn"
-                                                  type="text" 
-                                                  size="small" 
-                                                  icon={<PlusOutlined />}
-                                                  style={{ 
-                                                    opacity: 0, 
-                                                    transition: 'opacity 0.2s',
-                                                    fontSize: '12px',
-                                                    height: '20px',
-                                                    padding: '0 4px'
-                                                  }}
-                                                  onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                                    e.stopPropagation();
-                                                    handleAddNetworkGroup();
-                                                  }}
-                                                >
-                                                  新增
-                                                </Button>
-                                              </div>
-                                            ),
-                                            children: (
-                                              <div style={{ paddingLeft: '4px' }}>
-                                                <Collapse
-                                                  size="small"
-                                                  ghost
-                                                  items={[
-                                                    {
-                                                      key: 'network-group1',
-                                                      label: (
-                                                        <div 
-                                                          style={{ 
-                                                            display: 'flex', 
-                                                            justifyContent: 'space-between', 
-                                                            alignItems: 'center',
-                                                            width: '100%'
-                                                          }}
-                                                          onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                                                            const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
-                                                            if (actionBtns) actionBtns.style.opacity = '1';
-                                                          }}
-                                                          onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                                                            const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
-                                                            if (actionBtns) actionBtns.style.opacity = '0';
-                                                          }}
-                                                        >
-                                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                            <span>路网组1</span>
-                                                            {defaultNetworkGroup === 'network-group1' && (
-                                                              <div style={{
-                                                                width: '8px',
-                                                                height: '8px',
-                                                                borderRadius: '50%',
-                                                                backgroundColor: '#52c41a',
-                                                                display: 'inline-block'
-                                                              }} />
-                                                            )}
-                                                          </div>
-                                                          <div 
-                                                            className="network-group-actions"
-                                                            style={{ 
-                                                              opacity: 0, 
-                                                              transition: 'opacity 0.2s',
-                                                              display: 'flex',
-                                                              gap: '4px'
-                                                            }}
-                                                          >
-                                                            <Button 
-                                                              type="text" 
-                                                              size="small" 
-                                                              icon={<EditOutlined />}
-                                                              style={{ 
-                                                                fontSize: '12px',
-                                                                height: '20px',
-                                                                padding: '0 4px'
-                                                              }}
-                                                              onClick={(e: React.MouseEvent) => {
-                                                                e.stopPropagation();
-                                                                const group = networkGroups.find(g => g.id === 'network-group1');
-                                                                if (group) handleEditNetworkGroup(group);
-                                                              }}
-                                                            />
-                                                            <Button 
-                                                              type="text" 
-                                                              size="small" 
-                                                              danger
-                                                              icon={<DeleteOutlined />}
-                                                              style={{ 
-                                                                fontSize: '12px',
-                                                                height: '20px',
-                                                                padding: '0 4px'
-                                                              }}
-                                                              onClick={(e: React.MouseEvent) => {
-                                                                e.stopPropagation();
-                                                                handleDeleteNetworkGroup('network-group1');
-                                                              }}
-                                                            />
-                                                            {defaultNetworkGroup !== 'network-group1' && (
-                                                              <Button 
-                                                                type="text" 
-                                                                size="small" 
-                                                                icon={<CheckCircleOutlined />}
-                                                                style={{ 
-                                                                  fontSize: '12px',
-                                                                  height: '20px',
-                                                                  padding: '0 4px',
-                                                                  color: '#52c41a'
-                                                                }}
-                                                                onClick={(e: React.MouseEvent) => {
-                                                                  e.stopPropagation();
-                                                                  handleSetDefaultNetworkGroup('network-group1');
-                                                                }}
-                                                              />
-                                                            )}
-                                                          </div>
-                                                        </div>
-                                                      ),
-                                                      children: (
-                                                        <div style={{ paddingLeft: '16px' }}>
-                                                          {/* 节点列表 */}
-                                                          <div style={{ marginBottom: '8px' }}>
-                                                            <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px' }}>节点:</div>
-                                                            {networkGroups.find(g => g.id === 'network-group1')?.nodes.map(node => (
-                                                              <div 
-                                                                key={node.id}
-                                                                style={{ 
-                                                                  fontSize: '12px', 
-                                                                  lineHeight: '1.6',
-                                                                  display: 'flex',
-                                                                  justifyContent: 'space-between',
-                                                                  alignItems: 'center',
-                                                                  padding: '2px 4px',
-                                                                  borderRadius: '4px',
-                                                                  transition: 'background-color 0.2s'
-                                                                }}
-                                                                onMouseEnter={(e) => {
-                                                                  e.currentTarget.style.backgroundColor = '#f5f5f5';
-                                                                  const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
-                                                                  if (removeBtn) removeBtn.style.opacity = '1';
-                                                                }}
-                                                                onMouseLeave={(e) => {
-                                                                  e.currentTarget.style.backgroundColor = 'transparent';
-                                                                  const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
-                                                                  if (removeBtn) removeBtn.style.opacity = '0';
-                                                                }}
-                                                              >
-                                                                <span>{node.name} ({node.description})</span>
-                                                                <Button 
-                                                                  className="remove-btn"
-                                                                  type="text" 
-                                                                  size="small" 
-                                                                  danger
-                                                                  style={{ 
-                                                                    opacity: 0, 
-                                                                    transition: 'opacity 0.2s',
-                                                                    fontSize: '10px',
-                                                                    height: '20px',
-                                                                    padding: '0 4px'
-                                                                  }}
-                                                                  onClick={() => removeNodeFromGroup('network-group1', node.id)}
-                                                                >
-                                                                  移除
-                                                                </Button>
-                                                              </div>
-                                                            ))}
-                                                          </div>
-                                                          {/* 路径列表 */}
-                                                          <div>
-                                                            <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px' }}>路径:</div>
-                                                            {networkGroups.find(g => g.id === 'network-group1')?.paths.map(path => (
-                                                              <div 
-                                                                key={path.id}
-                                                                style={{ 
-                                                                  fontSize: '12px', 
-                                                                  lineHeight: '1.6',
-                                                                  display: 'flex',
-                                                                  justifyContent: 'space-between',
-                                                                  alignItems: 'center',
-                                                                  padding: '2px 4px',
-                                                                  borderRadius: '4px',
-                                                                  transition: 'background-color 0.2s'
-                                                                }}
-                                                                onMouseEnter={(e) => {
-                                                                  e.currentTarget.style.backgroundColor = '#f5f5f5';
-                                                                  const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
-                                                                  if (removeBtn) removeBtn.style.opacity = '1';
-                                                                }}
-                                                                onMouseLeave={(e) => {
-                                                                  e.currentTarget.style.backgroundColor = 'transparent';
-                                                                  const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
-                                                                  if (removeBtn) removeBtn.style.opacity = '0';
-                                                                }}
-                                                              >
-                                                                <span>{path.name} ({path.description})</span>
-                                                                <Button 
-                                                                  className="remove-btn"
-                                                                  type="text" 
-                                                                  size="small" 
-                                                                  danger
-                                                                  style={{ 
-                                                                    opacity: 0, 
-                                                                    transition: 'opacity 0.2s',
-                                                                    fontSize: '10px',
-                                                                    height: '20px',
-                                                                    padding: '0 4px'
-                                                                  }}
-                                                                  onClick={() => removePathFromGroup('network-group1', path.id)}
-                                                                >
-                                                                  移除
-                                                                </Button>
-                                                              </div>
-                                                            ))}
-                                                          </div>
-                                                        </div>
-                                                      )
-                                                    },
-                                                    {
-                                                      key: 'network-group2',
-                                                      label: (
-                                                        <div 
-                                                          style={{ 
-                                                            display: 'flex', 
-                                                            justifyContent: 'space-between', 
-                                                            alignItems: 'center',
-                                                            width: '100%'
-                                                          }}
-                                                          onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                                                            const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
-                                                            if (actionBtns) actionBtns.style.opacity = '1';
-                                                          }}
-                                                          onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                                                            const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
-                                                            if (actionBtns) actionBtns.style.opacity = '0';
-                                                          }}
-                                                        >
-                                                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                            <span>路网组2</span>
-                                                            {defaultNetworkGroup === 'network-group2' && (
-                                                              <div style={{
-                                                                width: '8px',
-                                                                height: '8px',
-                                                                borderRadius: '50%',
-                                                                backgroundColor: '#52c41a',
-                                                                display: 'inline-block'
-                                                              }} />
-                                                            )}
-                                                          </div>
-                                                          <div 
-                                                            className="network-group-actions"
-                                                            style={{ 
-                                                              opacity: 0, 
-                                                              transition: 'opacity 0.2s',
-                                                              display: 'flex',
-                                                              gap: '4px'
-                                                            }}
-                                                          >
-                                                            <Button 
-                                                              type="text" 
-                                                              size="small" 
-                                                              icon={<EditOutlined />}
-                                                              style={{ 
-                                                                fontSize: '12px',
-                                                                height: '20px',
-                                                                padding: '0 4px'
-                                                              }}
-                                                              onClick={(e: React.MouseEvent) => {
-                                                                e.stopPropagation();
-                                                                const group = networkGroups.find(g => g.id === 'network-group2');
-                                                                if (group) handleEditNetworkGroup(group);
-                                                              }}
-                                                            />
-                                                            <Button 
-                                                              type="text" 
-                                                              size="small" 
-                                                              danger
-                                                              icon={<DeleteOutlined />}
-                                                              style={{ 
-                                                                fontSize: '12px',
-                                                                height: '20px',
-                                                                padding: '0 4px'
-                                                              }}
-                                                              onClick={(e: React.MouseEvent) => {
-                                                                e.stopPropagation();
-                                                                handleDeleteNetworkGroup('network-group2');
-                                                              }}
-                                                            />
-                                                            {defaultNetworkGroup !== 'network-group2' && (
-                                                              <Button 
-                                                                type="text" 
-                                                                size="small" 
-                                                                icon={<CheckCircleOutlined />}
-                                                                style={{ 
-                                                                  fontSize: '12px',
-                                                                  height: '20px',
-                                                                  padding: '0 4px',
-                                                                  color: '#52c41a'
-                                                                }}
-                                                                onClick={(e: React.MouseEvent) => {
-                                                                  e.stopPropagation();
-                                                                  handleSetDefaultNetworkGroup('network-group2');
-                                                                }}
-                                                              />
-                                                            )}
-                                                          </div>
-                                                        </div>
-                                                      ),
-                                                      children: (
-                                                        <div style={{ paddingLeft: '16px' }}>
-                                                          {/* 节点列表 */}
-                                                          <div style={{ marginBottom: '8px' }}>
-                                                            <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px' }}>节点:</div>
-                                                            {networkGroups.find(g => g.id === 'network-group2')?.nodes.map(node => (
-                                                              <div 
-                                                                key={node.id}
-                                                                style={{ 
-                                                                  fontSize: '12px', 
-                                                                  lineHeight: '1.6',
-                                                                  display: 'flex',
-                                                                  justifyContent: 'space-between',
-                                                                  alignItems: 'center',
-                                                                  padding: '2px 4px',
-                                                                  borderRadius: '4px',
-                                                                  transition: 'background-color 0.2s'
-                                                                }}
-                                                                onMouseEnter={(e) => {
-                                                                  e.currentTarget.style.backgroundColor = '#f5f5f5';
-                                                                  const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
-                                                                  if (removeBtn) removeBtn.style.opacity = '1';
-                                                                }}
-                                                                onMouseLeave={(e) => {
-                                                                  e.currentTarget.style.backgroundColor = 'transparent';
-                                                                  const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
-                                                                  if (removeBtn) removeBtn.style.opacity = '0';
-                                                                }}
-                                                              >
-                                                                <span>{node.name} ({node.description})</span>
-                                                                <Button 
-                                                                  className="remove-btn"
-                                                                  type="text" 
-                                                                  size="small" 
-                                                                  danger
-                                                                  style={{ 
-                                                                    opacity: 0, 
-                                                                    transition: 'opacity 0.2s',
-                                                                    fontSize: '10px',
-                                                                    height: '20px',
-                                                                    padding: '0 4px'
-                                                                  }}
-                                                                  onClick={() => removeNodeFromGroup('network-group2', node.id)}
-                                                                >
-                                                                  移除
-                                                                </Button>
-                                                              </div>
-                                                            ))}
-                                                          </div>
-                                                          {/* 路径列表 */}
-                                                          <div>
-                                                            <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px' }}>路径:</div>
-                                                            {networkGroups.find(g => g.id === 'network-group2')?.paths.map(path => (
-                                                              <div 
-                                                                key={path.id}
-                                                                style={{ 
-                                                                  fontSize: '12px', 
-                                                                  lineHeight: '1.6',
-                                                                  display: 'flex',
-                                                                  justifyContent: 'space-between',
-                                                                  alignItems: 'center',
-                                                                  padding: '2px 4px',
-                                                                  borderRadius: '4px',
-                                                                  transition: 'background-color 0.2s'
-                                                                }}
-                                                                onMouseEnter={(e) => {
-                                                                  e.currentTarget.style.backgroundColor = '#f5f5f5';
-                                                                  const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
-                                                                  if (removeBtn) removeBtn.style.opacity = '1';
-                                                                }}
-                                                                onMouseLeave={(e) => {
-                                                                  e.currentTarget.style.backgroundColor = 'transparent';
-                                                                  const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
-                                                                  if (removeBtn) removeBtn.style.opacity = '0';
-                                                                }}
-                                                              >
-                                                                <span>{path.name} ({path.description})</span>
-                                                                <Button 
-                                                                  className="remove-btn"
-                                                                  type="text" 
-                                                                  size="small" 
-                                                                  danger
-                                                                  style={{ 
-                                                                    opacity: 0, 
-                                                                    transition: 'opacity 0.2s',
-                                                                    fontSize: '10px',
-                                                                    height: '20px',
-                                                                    padding: '0 4px'
-                                                                  }}
-                                                                  onClick={() => removePathFromGroup('network-group2', path.id)}
-                                                                >
-                                                                  移除
-                                                                </Button>
-                                                              </div>
-                                                            ))}
-                                                          </div>
-                                                        </div>
-                                                      )
-                                                    }
-                                                  ]}
-                                                />
-                                              </div>
-                                            )
-                                          }
-                                        ]}
-                                      />
+                                    <div style={{ paddingLeft: '16px' }}>
+                                      {mapAreas.map((area) => (
+                                        <div 
+                                          key={area.id} 
+                                          style={{ 
+                                            fontSize: '12px', 
+                                            lineHeight: '1.6',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            padding: '2px 4px',
+                                            borderRadius: '4px',
+                                            transition: 'background-color 0.2s'
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            e.currentTarget.style.backgroundColor = '#f5f5f5';
+                                            const deleteBtn = e.currentTarget.querySelector('.delete-btn') as HTMLElement;
+                                            if (deleteBtn) deleteBtn.style.opacity = '1';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.style.backgroundColor = 'transparent';
+                                            const deleteBtn = e.currentTarget.querySelector('.delete-btn') as HTMLElement;
+                                            if (deleteBtn) deleteBtn.style.opacity = '0';
+                                          }}
+                                        >
+                                          <span>{area.name} ({area.type || '区域'})</span>
+                                          <Button 
+                                            className="delete-btn"
+                                            type="text" 
+                                            size="small" 
+                                            danger
+                                            onClick={() => {
+                                              Modal.confirm({
+                                                title: '确认删除',
+                                                content: `确定要删除区域 "${area.name}" 吗？删除后无法恢复。`,
+                                                okText: '确认删除',
+                                                cancelText: '取消',
+                                                okType: 'danger',
+                                                onOk: () => {
+                                                  setMapAreas(prev => prev.filter(a => a.id !== area.id));
+                                                  message.success(`区域 "${area.name}" 已删除`);
+                                                }
+                                              });
+                                            }}
+                                            style={{ 
+                                              opacity: 0, 
+                                              transition: 'opacity 0.2s',
+                                              fontSize: '10px',
+                                              height: '20px',
+                                              padding: '0 4px'
+                                            }}
+                                          >
+                                            删除
+                                          </Button>
+                                        </div>
+                                      ))}
+                                      {mapAreas.length === 0 && (
+                                        <div style={{ fontSize: '12px', color: '#999', textAlign: 'center', padding: '16px 0' }}>
+                                          暂无功能区域数据
+                                        </div>
+                                      )}
                                     </div>
                                   )
                                 },
@@ -10054,6 +9836,7 @@ const MapManagement: React.FC = () => {
               placeholder="请输入路径组名称（最多6个字符）" 
               maxLength={6}
               showCount
+              allowClear
             />
           </Form.Item>
         </Form>
@@ -10183,7 +9966,54 @@ const MapManagement: React.FC = () => {
           style={{ marginTop: '16px' }}
         >
           <Form.Item
-            label="选择路径组"
+            label={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '16px' }}>
+                <span>选择路径组</span>
+                <Popover
+                  title="新增路径组"
+                  open={addPathGroupPopoverVisible}
+                  onOpenChange={setAddPathGroupPopoverVisible}
+                  content={
+                    <div style={{ width: '250px' }}>
+                      <Input
+                         placeholder="请输入路径名称（不超过6个字符）"
+                         value={newPathGroupName}
+                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPathGroupName(e.target.value)}
+                         maxLength={6}
+                         showCount
+                         allowClear
+                         style={{ marginBottom: '12px' }}
+                       />
+                      <div style={{ textAlign: 'right' }}>
+                        <Space>
+                          <Button size="small" onClick={handleCancelCreatePathGroup}>
+                            取消
+                          </Button>
+                          <Button 
+                            type="primary" 
+                            size="small" 
+                            onClick={handleCreateNewPathGroup}
+                            disabled={!newPathGroupName.trim()}
+                          >
+                            确认
+                          </Button>
+                        </Space>
+                      </div>
+                    </div>
+                  }
+                  trigger="click"
+                  placement="top"
+                >
+                  <Button 
+                    type="dashed" 
+                    size="small"
+                    icon={<PlusOutlined />}
+                  >
+                    新增路径组
+                  </Button>
+                </Popover>
+              </div>
+            }
             name="pathGroupId"
             rules={[{ required: true, message: '请选择路径组' }]}
           >
@@ -10239,49 +10069,7 @@ const MapManagement: React.FC = () => {
             }}
           </Form.Item>
           
-          <div style={{ textAlign: 'center', marginTop: '16px' }}>
-            <Popover
-              title="新增路径组"
-              open={addPathGroupPopoverVisible}
-              onOpenChange={setAddPathGroupPopoverVisible}
-              content={
-                <div style={{ width: '250px' }}>
-                  <Input
-                     placeholder="请输入路径名称（不超过6个字符）"
-                     value={newPathGroupName}
-                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPathGroupName(e.target.value)}
-                     maxLength={6}
-                     showCount
-                     style={{ marginBottom: '12px' }}
-                   />
-                  <div style={{ textAlign: 'right' }}>
-                    <Space>
-                      <Button size="small" onClick={handleCancelCreatePathGroup}>
-                        取消
-                      </Button>
-                      <Button 
-                        type="primary" 
-                        size="small" 
-                        onClick={handleCreateNewPathGroup}
-                        disabled={!newPathGroupName.trim()}
-                      >
-                        确认
-                      </Button>
-                    </Space>
-                  </div>
-                </div>
-              }
-              trigger="click"
-              placement="top"
-            >
-              <Button 
-                type="dashed" 
-                icon={<PlusOutlined />}
-              >
-                新增路径
-              </Button>
-            </Popover>
-          </div>
+
         </Form>
       </Modal>
     </div>
