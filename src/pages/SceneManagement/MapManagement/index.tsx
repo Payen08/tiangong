@@ -336,6 +336,7 @@ const MapManagement: React.FC = () => {
   const [draggingPointId, setDraggingPointId] = useState<string | null>(null); // 正在拖拽的点ID
   const [pointDragStart, setPointDragStart] = useState<{x: number, y: number} | null>(null); // 点拖拽开始位置
   const [pointsInitialPositions, setPointsInitialPositions] = useState<Record<string, {x: number, y: number}>>({});  // 存储拖拽开始时所有选中点的初始位置
+  const [selectionInitialPosition, setSelectionInitialPosition] = useState<{start: {x: number, y: number}, end: {x: number, y: number}} | null>(null); // 存储拖拽开始时选中框的初始位置
   const [isDraggingSelection, setIsDraggingSelection] = useState(false); // 是否正在拖拽选中的元素组
   const [selectionDragStart, setSelectionDragStart] = useState<{x: number, y: number} | null>(null); // 选中元素组拖拽开始位置
   
@@ -436,6 +437,14 @@ const MapManagement: React.FC = () => {
     });
     setPointsInitialPositions(initialPositions);
     
+    // 保存选中框的初始位置
+    if (selectionStart && selectionEnd) {
+      setSelectionInitialPosition({
+        start: { x: selectionStart.x, y: selectionStart.y },
+        end: { x: selectionEnd.x, y: selectionEnd.y }
+      });
+    }
+    
     setIsDraggingPoint(true);
     setDraggingPointId(pointId);
     setPointDragStart({ x: canvasX, y: canvasY });
@@ -504,32 +513,17 @@ const MapManagement: React.FC = () => {
       })
     );
     
-    // 更新选中框位置
-    if (selectedPoints.length > 0) {
-      const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
-      if (selectedPointsData.length > 0) {
-        // 计算更新后的点位置
-        const updatedPointsData = selectedPointsData.map(point => {
-          if (pointsInitialPositions[point.id]) {
-            const initialPos = pointsInitialPositions[point.id];
-            return {
-              ...point,
-              x: initialPos.x + deltaX,
-              y: initialPos.y + deltaY
-            };
-          }
-          return point;
-        });
-        
-        const pointRadius = 8;
-        const pointMinX = Math.min(...updatedPointsData.map(p => p.x - pointRadius));
-        const pointMaxX = Math.max(...updatedPointsData.map(p => p.x + pointRadius));
-        const pointMinY = Math.min(...updatedPointsData.map(p => p.y - pointRadius));
-        const pointMaxY = Math.max(...updatedPointsData.map(p => p.y + pointRadius));
-        
-        setSelectionStart({ x: pointMinX, y: pointMinY });
-        setSelectionEnd({ x: pointMaxX, y: pointMaxY });
-      }
+    // 更新选中框位置 - 直接基于拖拽距离更新，避免依赖异步状态
+    if (selectedPoints.length > 0 && selectionStart && selectionEnd) {
+      // 直接基于当前选中框位置和拖拽距离计算新位置
+      setSelectionStart({
+        x: selectionStart.x + deltaX,
+        y: selectionStart.y + deltaY
+      });
+      setSelectionEnd({
+        x: selectionEnd.x + deltaX,
+        y: selectionEnd.y + deltaY
+      });
     }
   };
   
@@ -538,7 +532,8 @@ const MapManagement: React.FC = () => {
     setIsDraggingPoint(false);
     setDraggingPointId(null);
     setPointDragStart(null);
-    setPointsInitialPositions({});  // 清空初始位置记录
+    setPointsInitialPositions({});
+    setSelectionInitialPosition(null);  // 清空初始位置记录
     console.log('🎯 Point drag end');
   };
 
@@ -612,16 +607,16 @@ const MapManagement: React.FC = () => {
     );
     
     // 更新选中框位置
-    if (selectionStart && selectionEnd) {
-      setSelectionStart({
-        x: selectionStart.x + deltaX,
-        y: selectionStart.y + deltaY
-      });
-      setSelectionEnd({
-        x: selectionEnd.x + deltaX,
-        y: selectionEnd.y + deltaY
-      });
-    }
+      if (selectionInitialPosition) {
+        setSelectionStart({
+          x: selectionInitialPosition.start.x + deltaX,
+          y: selectionInitialPosition.start.y + deltaY
+        });
+        setSelectionEnd({
+          x: selectionInitialPosition.end.x + deltaX,
+          y: selectionInitialPosition.end.y + deltaY
+        });
+      }
     
     // 更新拖拽起始位置
     setSelectionDragStart(currentCanvasCoords);
@@ -2965,6 +2960,134 @@ const MapManagement: React.FC = () => {
     setCanvasScale(1);
     setCanvasOffset({ x: 0, y: 0 });
   };
+
+  // 画布居中显示指定节点
+  const centerCanvasOnPoint = (pointId: string) => {
+    const point = mapPoints.find(p => p.id === pointId);
+    if (!point || !canvasRef.current) return;
+
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    const canvasWidth = canvasRect.width;
+    const canvasHeight = canvasRect.height;
+
+    // 计算画布中心点
+    const centerX = canvasWidth / 2;
+    const centerY = canvasHeight / 2;
+
+    // 计算需要的偏移量，使节点位于画布中心
+    // 由于transform的顺序是scale然后translate，所以偏移量不需要乘以缩放比例
+    const newOffsetX = (centerX / canvasScale) - point.x;
+    const newOffsetY = (centerY / canvasScale) - point.y;
+
+    setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+  };
+
+  // 处理节点列表点击事件
+  const handleNodeListClick = (pointId: string) => {
+    // 选中该节点
+    setSelectedPoints([pointId]);
+    
+    // 清除其他选中状态
+    if (selectedLines.length > 0) {
+      setSelectedLines([]);
+    }
+    if (selectedAreas.length > 0) {
+      setSelectedAreas([]);
+    }
+    
+    // 居中显示该节点
+    centerCanvasOnPoint(pointId);
+    
+    // 切换到选择工具
+    setSelectedTool('select');
+  };
+
+  // 处理路径列表点击事件
+  const handleLineListClick = (lineId: string) => {
+    // 选中该路径
+    setSelectedLines([lineId]);
+    
+    // 清除其他选中状态
+    if (selectedPoints.length > 0) {
+      setSelectedPoints([]);
+    }
+    if (selectedAreas.length > 0) {
+      setSelectedAreas([]);
+    }
+    
+    // 计算路径中心点并居中显示
+    const line = mapLines.find(l => l.id === lineId);
+    if (line) {
+      const startPoint = getPointById(line.startPointId);
+      const endPoint = getPointById(line.endPointId);
+      if (startPoint && endPoint) {
+        const centerX = (startPoint.x + endPoint.x) / 2;
+        const centerY = (startPoint.y + endPoint.y) / 2;
+        
+        // 创建虚拟点用于居中显示
+        const virtualPoint = { x: centerX, y: centerY };
+        
+        // 计算画布中心
+        const canvasRect = canvasRef.current?.getBoundingClientRect();
+        if (canvasRect) {
+          const canvasCenterX = canvasRect.width / 2;
+          const canvasCenterY = canvasRect.height / 2;
+          
+          // 计算新的偏移量
+          const newOffsetX = (canvasCenterX / canvasScale) - virtualPoint.x;
+          const newOffsetY = (canvasCenterY / canvasScale) - virtualPoint.y;
+          
+          setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+        }
+      }
+    }
+    
+    // 切换到选择工具
+    setSelectedTool('select');
+  };
+
+  // 处理区域列表点击事件
+  const handleAreaListClick = (areaId: string) => {
+    // 选中该区域
+    setSelectedAreas([areaId]);
+    
+    // 清除其他选中状态
+    if (selectedPoints.length > 0) {
+      setSelectedPoints([]);
+    }
+    if (selectedLines.length > 0) {
+      setSelectedLines([]);
+    }
+    
+    // 计算区域中心点并居中显示
+    const area = mapAreas.find(a => a.id === areaId);
+    if (area && area.points.length > 0) {
+      // 计算区域所有顶点的中心点
+      const sumX = area.points.reduce((sum, point) => sum + point.x, 0);
+      const sumY = area.points.reduce((sum, point) => sum + point.y, 0);
+      const centerX = sumX / area.points.length;
+      const centerY = sumY / area.points.length;
+      
+      // 创建虚拟点用于居中显示
+      const virtualPoint = { x: centerX, y: centerY };
+      
+      // 计算画布中心
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      if (canvasRect) {
+        const canvasCenterX = canvasRect.width / 2;
+        const canvasCenterY = canvasRect.height / 2;
+        
+        // 计算新的偏移量
+        const newOffsetX = (canvasCenterX / canvasScale) - virtualPoint.x;
+        const newOffsetY = (canvasCenterY / canvasScale) - virtualPoint.y;
+        
+        setCanvasOffset({ x: newOffsetX, y: newOffsetY });
+      }
+    }
+    
+    // 切换到选择工具
+    setSelectedTool('select');
+  };
   
   // 触摸事件处理 - 双指缩放
   const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
@@ -4719,17 +4842,15 @@ const MapManagement: React.FC = () => {
         const width = Math.abs(dynamicEnd.x - dynamicStart.x);
         const height = Math.abs(dynamicEnd.y - dynamicStart.y);
         
-        // 将画布坐标转换为屏幕坐标
-        const screenStart = canvasToScreenCoordinates(minX, minY);
-        const screenWidth = width * canvasScale;
-        const screenHeight = height * canvasScale;
+        // 🔧 关键修复：选中框位于transform容器内，直接使用画布坐标，不需要转换为屏幕坐标
+        // 因为选中框的父容器已经有了transform变换，所以直接使用画布坐标即可
         
         const style = {
           position: 'absolute' as const,
-          left: screenStart.x,
-          top: screenStart.y,
-          width: Math.max(screenWidth, 1),
-          height: Math.max(screenHeight, 1),
+          left: minX,
+          top: minY,
+          width: Math.max(width, 1),
+          height: Math.max(height, 1),
           border: '2px dashed #1890ff',
           background: 'rgba(24, 144, 255, 0.1)',
           pointerEvents: 'auto' as const,  // 允许交互
@@ -5965,7 +6086,7 @@ const MapManagement: React.FC = () => {
                              style={{ 
                                flexShrink: 0
                              }}
-                             onClick={(e) => {
+                             onClick={(e: React.MouseEvent) => {
                                e.stopPropagation();
                                setSelectedRobot(robot.id);
                              }}
@@ -6095,7 +6216,7 @@ const MapManagement: React.FC = () => {
                                style={{ 
                                  flexShrink: 0
                                }}
-                               onClick={(e) => {
+                               onClick={(e: React.MouseEvent) => {
                                  e.stopPropagation();
                                  const newSelected = selectedRobotMaps.includes(mapName)
                                    ? selectedRobotMaps.filter(m => m !== mapName)
@@ -8669,7 +8790,8 @@ const MapManagement: React.FC = () => {
                                             alignItems: 'center',
                                             padding: '2px 4px',
                                             borderRadius: '4px',
-                                            transition: 'background-color 0.2s'
+                                            transition: 'background-color 0.2s',
+                                            cursor: 'pointer'
                                           }}
                                           onMouseEnter={(e) => {
                                             e.currentTarget.style.backgroundColor = '#f5f5f5';
@@ -8681,6 +8803,7 @@ const MapManagement: React.FC = () => {
                                             const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
                                             if (removeBtn) removeBtn.style.opacity = '0';
                                           }}
+                                          onClick={() => handleNodeListClick(point.id)}
                                         >
                                           <span>{point.name} ({point.description || point.type})</span>
                                           {!point.isPreset && (
@@ -8689,7 +8812,10 @@ const MapManagement: React.FC = () => {
                                               type="text" 
                                               size="small" 
                                               danger
-                                              onClick={() => handleRemoveMapPoint(point.id)}
+                                              onClick={(e: React.MouseEvent) => {
+                                                e.stopPropagation();
+                                                handleRemoveMapPoint(point.id);
+                                              }}
                                               style={{ 
                                                 opacity: 0, 
                                                 transition: 'opacity 0.2s',
@@ -8743,8 +8869,10 @@ const MapManagement: React.FC = () => {
                                               alignItems: 'center',
                                               padding: '2px 4px',
                                               borderRadius: '4px',
-                                              transition: 'background-color 0.2s'
+                                              transition: 'background-color 0.2s',
+                                              cursor: 'pointer'
                                             }}
+                                            onClick={() => handleLineListClick(line.id)}
                                             onMouseEnter={(e) => {
                                               e.currentTarget.style.backgroundColor = '#f5f5f5';
                                               const deleteBtn = e.currentTarget.querySelector('.delete-btn') as HTMLElement;
@@ -8762,7 +8890,8 @@ const MapManagement: React.FC = () => {
                                               type="text" 
                                               size="small" 
                                               danger
-                                              onClick={() => {
+                                              onClick={(e: React.MouseEvent) => {
+                                                e.stopPropagation(); // 阻止事件冒泡到父元素
                                                 Modal.confirm({
                                                   title: '确认删除',
                                                   content: `确定要删除路径 "${line.name}" 吗？删除后无法恢复。`,
@@ -8817,8 +8946,10 @@ const MapManagement: React.FC = () => {
                                             alignItems: 'center',
                                             padding: '2px 4px',
                                             borderRadius: '4px',
-                                            transition: 'background-color 0.2s'
+                                            transition: 'background-color 0.2s',
+                                            cursor: 'pointer'
                                           }}
+                                          onClick={() => handleAreaListClick(area.id)}
                                           onMouseEnter={(e) => {
                                             e.currentTarget.style.backgroundColor = '#f5f5f5';
                                             const deleteBtn = e.currentTarget.querySelector('.delete-btn') as HTMLElement;
@@ -8836,7 +8967,8 @@ const MapManagement: React.FC = () => {
                                             type="text" 
                                             size="small" 
                                             danger
-                                            onClick={() => {
+                                            onClick={(e) => {
+                                              e.stopPropagation(); // 阻止事件冒泡到父元素
                                               Modal.confirm({
                                                 title: '确认删除',
                                                 content: `确定要删除区域 "${area.name}" 吗？删除后无法恢复。`,
