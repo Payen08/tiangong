@@ -4449,10 +4449,34 @@ const MapManagement: React.FC = () => {
               const pixelX = Math.round(canvasX + dx);
               const pixelY = Math.round(canvasY + dy);
               
-              // 检查像素是否在画布范围内
+              // Check if pixel is within canvas bounds
               if (pixelX >= 0 && pixelX < canvas.width && pixelY >= 0 && pixelY < canvas.height) {
-                // 记录被擦除的像素位置
-                setErasedPixels(prev => [...prev, { x: pixelX, y: pixelY }]);
+                // Get current pixel color data
+                const imageData = ctx.getImageData(pixelX, pixelY, 1, 1);
+                const data = imageData.data;
+                
+                // Check if it's a black pixel (RGB values close to 0 and opaque)
+                const r = data[0];
+                const g = data[1];
+                const b = data[2];
+                const a = data[3];
+                
+                // Determine if it's a black pixel (threshold adjustable)
+                const isBlackPixel = (r < 50 && g < 50 && b < 50 && a > 200);
+                
+                if (isBlackPixel) {
+                  // Replace black pixel with white
+                  data[0] = 255; // R
+                  data[1] = 255; // G
+                  data[2] = 255; // B
+                  data[3] = 255; // A (keep opaque)
+                  
+                  // Write modified pixel data back to Canvas
+                  ctx.putImageData(imageData, pixelX, pixelY);
+                  
+                  // Record erased pixel position
+                  setErasedPixels(prev => [...prev, { x: pixelX, y: pixelY }]);
+                }
               }
             }
           }
@@ -4789,9 +4813,20 @@ const MapManagement: React.FC = () => {
         // 绘制图片到Canvas
         ctx.drawImage(img, 0, 0);
         
-        // 应用已擦除的像素
+        // Apply erased pixels (replace black pixels with white)
         erasedPixels.forEach(pixel => {
-          ctx.clearRect(pixel.x - 5, pixel.y - 5, 10, 10);
+          // Get current pixel color data
+          const imageData = ctx.getImageData(pixel.x, pixel.y, 1, 1);
+          const data = imageData.data;
+          
+          // Set pixel to white
+          data[0] = 255; // R
+          data[1] = 255; // G
+          data[2] = 255; // B
+          data[3] = 255; // A (keep opaque)
+          
+          // Write modified pixel data back to Canvas
+          ctx.putImageData(imageData, pixel.x, pixel.y);
         });
       };
       img.src = mapFileUploadedImage.url;
