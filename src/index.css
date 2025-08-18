@@ -86,3 +86,15 @@ body {
     margin-bottom: 8px;
   }
 }
+
+/* 阅览模式只读输入框样式 */
+.readonly-input input {
+  background-color: #f5f5f5 !important;
+  color: #999 !important;
+}
+
+.readonly-input .ant-input-group-addon {
+  background-color: #f5f5f5 !important;
+  color: #999 !important;
+  border-color: #d9d9d9 !important;
+}

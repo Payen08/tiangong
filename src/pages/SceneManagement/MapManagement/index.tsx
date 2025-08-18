@@ -340,6 +340,12 @@ const MapManagement: React.FC = () => {
   const [isDraggingSelection, setIsDraggingSelection] = useState(false); // 是否正在拖拽选中的元素组
   const [selectionDragStart, setSelectionDragStart] = useState<{x: number, y: number} | null>(null); // 选中元素组拖拽开始位置
   
+  // 画笔绘制相关状态
+  const [isDrawing, setIsDrawing] = useState(false); // 是否正在绘制
+  const [isErasing, setIsErasing] = useState(false); // 是否正在擦除
+  const [currentStroke, setCurrentStroke] = useState<{x: number, y: number}[]>([]); // 当前正在绘制的笔画
+  const [brushStrokes, setBrushStrokes] = useState<{id: string, points: {x: number, y: number}[]}[]>([]); // 所有画笔笔画
+  
   // 控制手柄事件处理函数
   const handleControlHandleMouseDown = (e: React.MouseEvent, lineId: string, handleType: 'cp1' | 'cp2') => {
     e.stopPropagation();
@@ -834,7 +840,7 @@ const MapManagement: React.FC = () => {
   const [pageSize, setPageSize] = useState(10);
   
   // 右侧信息面板标签页状态
-  const [activeTabKey, setActiveTabKey] = useState('tools'); // 默认选中绘图工具Tab
+  const [activeTabKey, setActiveTabKey] = useState('elements'); // 默认选中地图元素Tab
 
   // 搜索功能状态
   const [searchValue, setSearchValue] = useState('');
@@ -2882,7 +2888,48 @@ const MapManagement: React.FC = () => {
 
   // 模式切换处理函数
   const handleExitEditMode = () => {
-    // 退出编辑模式
+    // 检查是否有未保存的编辑记录
+    const hasChanges = checkForUnsavedChanges();
+    
+    if (hasChanges) {
+      // 有编辑记录，弹出二次确认弹窗
+      Modal.confirm({
+        title: '退出编辑模式',
+        content: '检测到您有未保存的编辑记录，请选择操作：',
+        okText: '保存并退出',
+        cancelText: '直接退出',
+        onOk: () => {
+          // 保存并退出编辑模式
+          handleSave();
+          setCurrentMode('view');
+          // 切换到阅览模式时强制选择工具为select
+          setSelectedTool('select');
+          message.success('已保存修改并退出编辑模式');
+        },
+        onCancel: () => {
+          // 直接退出编辑模式，不保存
+          Modal.confirm({
+            title: '确认直接退出',
+            content: '直接退出将丢失所有未保存的修改，确定要继续吗？',
+            okText: '确定退出',
+            cancelText: '取消',
+            okType: 'danger',
+            onOk: () => {
+              setCurrentMode('view');
+              // 切换到阅览模式时强制选择工具为select
+              setSelectedTool('select');
+              message.info('已退出编辑模式，未保存的修改已丢失');
+            }
+          });
+        }
+      });
+    } else {
+      // 没有编辑记录，直接退出编辑模式
+      setCurrentMode('view');
+      // 切换到阅览模式时强制选择工具为select
+      setSelectedTool('select');
+      message.success('已退出编辑模式');
+    }
   };
 
   const handleEnterEditMode = () => {
@@ -3744,8 +3791,8 @@ const MapManagement: React.FC = () => {
 
   // 框选开始处理
   const handleSelectionStart = (event: React.MouseEvent<HTMLDivElement>) => {
-    // 只有在选择工具激活且没有点击到地图点且是左键点击时才开始框选
-    if (selectedTool === 'select' && !(event.target as Element).closest('.map-point') && event.button === 0) {
+    // 只有在编辑模式下且选择工具激活且没有点击到地图点且是左键点击时才开始框选
+    if (currentMode === 'edit' && selectedTool === 'select' && !(event.target as Element).closest('.map-point') && event.button === 0) {
       // 阻止默认行为和事件冒泡
       event.preventDefault();
       event.stopPropagation();
@@ -4212,6 +4259,138 @@ const MapManagement: React.FC = () => {
     }
   };
 
+  // 判断当前选中的地图是否为黑白底图模式
+  const isGrayscaleMode = () => {
+    if (!selectedMap) return false;
+    const currentMapFiles = mapFiles[selectedMap.id] || [];
+    const activeFile = currentMapFiles.find((file: MapFile) => file.status === 'active');
+    return activeFile?.format === 'grayscale';
+  };
+
+  // 画笔绘制事件处理函数
+  const handleBrushStart = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (selectedTool !== 'brush') return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const canvasElement = event.currentTarget;
+    const rect = canvasElement.getBoundingClientRect();
+    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
+    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    
+    setIsDrawing(true);
+    setCurrentStroke([{ x, y }]);
+  };
+  
+  const handleBrushMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDrawing || selectedTool !== 'brush') return;
+    
+    const canvasElement = event.currentTarget;
+    const rect = canvasElement.getBoundingClientRect();
+    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
+    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    
+    setCurrentStroke(prev => [...prev, { x, y }]);
+  };
+  
+  const handleBrushEnd = () => {
+    if (!isDrawing || selectedTool !== 'brush') return;
+    
+    if (currentStroke.length > 0) {
+      const newStroke = {
+        id: `stroke_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        points: [...currentStroke]
+      };
+      setBrushStrokes(prev => [...prev, newStroke]);
+    }
+    
+    setIsDrawing(false);
+    setCurrentStroke([]);
+  };
+  
+  const handleBrushClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (selectedTool !== 'brush') return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const canvasElement = event.currentTarget;
+    const rect = canvasElement.getBoundingClientRect();
+    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
+    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    
+    // 创建一个点（小圆圈）
+    const newStroke = {
+      id: `dot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      points: [{ x, y }]
+    };
+    setBrushStrokes(prev => [...prev, newStroke]);
+  };
+
+  // 橡皮擦相关的事件处理函数
+  const handleEraserStart = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (selectedTool !== 'eraser') return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const canvasElement = event.currentTarget;
+    const rect = canvasElement.getBoundingClientRect();
+    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
+    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    
+    setIsErasing(true);
+    eraseAtPosition(x, y);
+  };
+
+  const handleEraserMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!isErasing || selectedTool !== 'eraser') return;
+    
+    const canvasElement = event.currentTarget;
+    const rect = canvasElement.getBoundingClientRect();
+    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
+    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    
+    eraseAtPosition(x, y);
+  };
+
+  const handleEraserEnd = () => {
+    if (selectedTool !== 'eraser') return;
+    setIsErasing(false);
+  };
+
+  const handleEraserClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (selectedTool !== 'eraser') return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const canvasElement = event.currentTarget;
+    const rect = canvasElement.getBoundingClientRect();
+    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
+    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    
+    eraseAtPosition(x, y);
+  };
+
+  // 擦除指定位置的笔画
+  const eraseAtPosition = (x: number, y: number) => {
+    const eraserRadius = 10; // 橡皮擦半径
+    
+    setBrushStrokes(prev => {
+      return prev.filter(stroke => {
+        // 检查笔画是否与橡皮擦位置相交
+        return !stroke.points.some(point => {
+          const distance = Math.sqrt(
+            Math.pow(point.x - x, 2) + Math.pow(point.y - y, 2)
+          );
+          return distance <= eraserRadius;
+        });
+      });
+    });
+  };
+
   // 键盘事件处理
   const handleKeyDown = (event: KeyboardEvent) => {
     // 添加基础键盘事件调试日志
@@ -4230,8 +4409,8 @@ const MapManagement: React.FC = () => {
       event.preventDefault();
       event.stopPropagation();
       
-      // 如果在地图编辑模式下
-      if (addMapFileDrawerVisible) {
+      // 如果在地图编辑模式下且为编辑模式
+      if (addMapFileDrawerVisible && currentMode === 'edit') {
         // 如果正在绘制区域，完成或取消区域绘制
         if (isDrawingArea) {
 
@@ -4327,8 +4506,8 @@ const MapManagement: React.FC = () => {
     
     // 处理Enter键
     if (event.key === 'Enter') {
-      // 如果在地图编辑模式下且正在绘制区域
-      if (addMapFileDrawerVisible && isDrawingArea && currentAreaPoints.length >= 3) {
+      // 如果在地图编辑模式下且为编辑模式且正在绘制区域
+      if (addMapFileDrawerVisible && currentMode === 'edit' && isDrawingArea && currentAreaPoints.length >= 3) {
         event.preventDefault();
         console.log('⌨️ [区域绘制] 检测到Enter键，完成区域绘制');
         
@@ -4357,7 +4536,7 @@ const MapManagement: React.FC = () => {
     
     // 处理撤销重做快捷键 (Ctrl+Z/Cmd+Z 撤销, Ctrl+Y/Cmd+Y 重做)
     // Mac系统使用metaKey (Command键)，Windows/Linux使用ctrlKey
-    if (addMapFileDrawerVisible && (event.ctrlKey || event.metaKey)) {
+    if (addMapFileDrawerVisible && currentMode === 'edit' && (event.ctrlKey || event.metaKey)) {
       if (event.key === 'z' || event.key === 'Z') {
         event.preventDefault();
         handleUndo();
@@ -4379,8 +4558,8 @@ const MapManagement: React.FC = () => {
       return;
     }
     
-    // 只在地图编辑模式下且选择工具激活时处理键盘事件
-    if (addMapFileDrawerVisible && selectedTool === 'select') {
+    // 只在地图编辑模式下且为编辑模式且选择工具激活时处理键盘事件
+    if (addMapFileDrawerVisible && currentMode === 'edit' && selectedTool === 'select') {
       if (event.key === 'Delete' || event.key === 'Backspace') {
         // 检查当前焦点是否在输入框或其他表单元素上
         const activeElement = document.activeElement;
@@ -4409,7 +4588,7 @@ const MapManagement: React.FC = () => {
     }
     
     // 处理方向键移动选中元素（包括选中的顶点）
-    if (addMapFileDrawerVisible && selectedTool === 'select' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+    if (addMapFileDrawerVisible && currentMode === 'edit' && selectedTool === 'select' && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
       // 检查是否有任何选中的元素（点、线、区域或顶点）
       if (selectedPoints.length > 0 || selectedLines.length > 0 || selectedAreas.length > 0 || selectedVertices.length > 0) {
         event.preventDefault();
@@ -4418,7 +4597,7 @@ const MapManagement: React.FC = () => {
     }
     
     // 处理绘图工具快捷键
-    if (addMapFileDrawerVisible) {
+    if (addMapFileDrawerVisible && currentMode === 'edit') {
       // 检查当前焦点是否在输入框或其他表单元素上
       const activeElement = document.activeElement;
       const isInputFocused = activeElement && (
@@ -4430,71 +4609,72 @@ const MapManagement: React.FC = () => {
       
       // 如果焦点在输入框上，不处理工具快捷键
       if (!isInputFocused) {
-        // 在切换工具前，先处理连续绘制状态
-        const handleToolSwitch = (newTool: string, toolName: string) => {
-          event.preventDefault();
-          
-          // 如果正在绘制区域，先处理区域绘制状态
-          if (isDrawingArea) {
-            if (currentAreaPoints.length >= 3) {
-              // 点数足够，完成区域绘制
-              console.log('⌨️ [工具切换] 检测到区域绘制中，完成当前区域绘制');
-              const newArea: MapArea = {
-                id: `area_${Date.now()}`,
-                name: `a${mapAreas.length + 1}`,
-                points: [...currentAreaPoints],
-                fillColor: '#1890ff',
-                strokeColor: '#1890ff',
-                opacity: 0.3
-              };
-              
-              setMapAreas(prev => [...prev, newArea]);
-              setIsDrawingArea(false);
-              setCurrentAreaPoints([]);
-              saveToHistory();
-              message.success(`区域 "${newArea.name}" 创建成功`);
-            } else {
-              // 点数不够，取消区域绘制
-              console.log('⌨️ [工具切换] 检测到区域绘制中，取消当前区域绘制');
-              setIsDrawingArea(false);
-              setCurrentAreaPoints([]);
-              message.info('已取消区域绘制');
-            }
-            setMousePosition(null);
-          }
-          
-          // 如果正在连线模式，退出连线状态
-          if (isConnecting || continuousConnecting) {
-            console.log('⌨️ [工具切换] 检测到连线模式，退出连线状态');
-            exitConnectingMode();
-          }
-          
-          // 切换到新工具
-          console.log(`⌨️ [工具切换] 快捷键${event.key.toUpperCase()} - 切换到${toolName}`);
-          setSelectedTool(newTool);
-        };
-        
         switch (event.key.toLowerCase()) {
           case 'v':
-            handleToolSwitch('select', '选择工具');
+            event.preventDefault();
+            console.log('⌨️ [工具切换] 快捷键V - 切换到选择工具');
+            setSelectedTool('select');
             break;
           case 'p':
-            handleToolSwitch('point', '绘制节点工具');
+            // 在黑白底图模式下屏蔽绘制节点工具的快捷键
+            if (!isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键P - 切换到绘制节点工具');
+              setSelectedTool('point');
+            }
             break;
           case 'd':
-            handleToolSwitch('double-line', '双向直线工具');
+            // 在黑白底图模式下屏蔽双向直线工具的快捷键
+            if (!isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键D - 切换到双向直线工具');
+              setSelectedTool('double-line');
+            }
             break;
           case 's':
-            handleToolSwitch('single-line', '单向直线工具');
+            // 在黑白底图模式下屏蔽单向直线工具的快捷键
+            if (!isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键S - 切换到单向直线工具');
+              setSelectedTool('single-line');
+            }
             break;
           case 'a':
-            handleToolSwitch('area', '绘制区域工具');
+            // 在黑白底图模式下屏蔽绘制区域工具的快捷键
+            if (!isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键A - 切换到绘制区域工具');
+              setSelectedTool('area');
+            }
             break;
           case 'b':
-            handleToolSwitch('double-bezier', '双向贝塞尔曲线工具');
+            if (isGrayscaleMode()) {
+              // 在黑白底图模式下，B键切换到画笔工具
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键B - 切换到画笔工具');
+              setSelectedTool('brush');
+            } else {
+              // 在拓扑地图模式下，B键切换到双向贝塞尔曲线工具
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键B - 切换到双向贝塞尔曲线工具');
+              setSelectedTool('double-bezier');
+            }
             break;
           case 'c':
-            handleToolSwitch('single-bezier', '单向贝塞尔曲线工具');
+            // 在黑白底图模式下屏蔽单向贝塞尔曲线工具的快捷键
+            if (!isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键C - 切换到单向贝塞尔曲线工具');
+              setSelectedTool('single-bezier');
+            }
+            break;
+          case 'e':
+            // 在黑白底图模式下，E键切换到橡皮擦工具
+            if (isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键E - 切换到橡皮擦工具');
+              setSelectedTool('eraser');
+            }
             break;
         }
       }
@@ -7507,14 +7687,9 @@ const MapManagement: React.FC = () => {
                         <Button 
                           type="primary"
                           onClick={handleEnterEditMode}
-                          disabled={true}
                           style={{
                             height: '32px',
-                            fontSize: '12px',
-                            backgroundColor: '#f5f5f5',
-                            borderColor: '#d9d9d9',
-                            color: '#bfbfbf',
-                            cursor: 'not-allowed'
+                            fontSize: '12px'
                           }}
                         >
                           进入编辑模式
@@ -7571,7 +7746,12 @@ const MapManagement: React.FC = () => {
                     
                     <Button 
                       type={mapType === 'grayscale' ? 'primary' : 'text'}
-                      onClick={() => setMapType('grayscale')}
+                      onClick={() => {
+                        setMapType('grayscale');
+                        if (currentMode === 'edit') {
+                          setActiveTabKey('tools'); // 自动切换到绘图工具tab
+                        }
+                      }}
                       style={{
                         height: '36px',
                         display: 'flex',
@@ -7635,19 +7815,29 @@ const MapManagement: React.FC = () => {
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <Input 
                           value={mapInfo.originX}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, originX: Number(e.target.value) || 0})}
+                          onChange={currentMode === 'edit' ? (e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, originX: Number(e.target.value) || 0}) : undefined}
                           placeholder="X坐标"
                           size="small"
                           type="number"
-                          style={{ flex: 1 }}
+                          style={{ 
+                            flex: 1,
+                            backgroundColor: currentMode === 'view' ? '#f5f5f5' : undefined,
+                            color: currentMode === 'view' ? '#999' : undefined
+                          }}
+                          readOnly={currentMode === 'view'}
                         />
                         <Input 
                           value={mapInfo.originY}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, originY: Number(e.target.value) || 0})}
+                          onChange={currentMode === 'edit' ? (e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, originY: Number(e.target.value) || 0}) : undefined}
                           placeholder="Y坐标"
                           size="small"
                           type="number"
-                          style={{ flex: 1 }}
+                          style={{ 
+                            flex: 1,
+                            backgroundColor: currentMode === 'view' ? '#f5f5f5' : undefined,
+                            color: currentMode === 'view' ? '#999' : undefined
+                          }}
+                          readOnly={currentMode === 'view'}
                         />
                       </div>
                     </div>
@@ -7656,13 +7846,19 @@ const MapManagement: React.FC = () => {
                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图方向</div>
                        <Input 
                          value={mapInfo.direction}
-                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, direction: Number(e.target.value) || 0})}
+                         onChange={currentMode === 'edit' ? (e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, direction: Number(e.target.value) || 0}) : undefined}
                          placeholder="请输入地图方向（-180到180）"
                          size="small"
                          type="number"
                          min="-180"
                          max="180"
                          addonAfter="°"
+                         className={currentMode === 'view' ? 'readonly-input' : ''}
+                         style={{
+                           backgroundColor: currentMode === 'view' ? '#f5f5f5 !important' : undefined,
+                           color: currentMode === 'view' ? '#999 !important' : undefined
+                         }}
+                         readOnly={currentMode === 'view'}
                        />
                      </div>
                     
@@ -7718,12 +7914,17 @@ const MapManagement: React.FC = () => {
                       <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>分辨率 (m/pixel)</div>
                       <Input 
                         value={mapInfo.resolution}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, resolution: Number(e.target.value) || 0})}
+                        onChange={currentMode === 'edit' ? (e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, resolution: Number(e.target.value) || 0}) : undefined}
                         placeholder="请输入分辨率"
                         size="small"
                         type="number"
                         step="0.001"
                         min="0"
+                        style={{
+                          backgroundColor: currentMode === 'view' ? '#f5f5f5' : undefined,
+                          color: currentMode === 'view' ? '#999' : undefined
+                        }}
+                        readOnly={currentMode === 'view'}
                       />
                     </div>
                     
@@ -7805,25 +8006,37 @@ const MapManagement: React.FC = () => {
                       gap: '8px'
                     }}>
                       <Button 
-                        onClick={handleCancel}
-                        style={{ borderColor: '#d9d9d9', color: '#8c8c8c', background: '#f5f5f5', minWidth: '80px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                        onClick={currentMode === 'view' ? handleCloseAddMapFileDrawer : handleCancel}
+                        style={{ 
+                          borderColor: '#faad14', 
+                          color: '#fff', 
+                          background: '#faad14', 
+                          minWidth: '80px', 
+                          height: '36px', 
+                          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' 
+                        }}
                       >
                         取消
                       </Button>
-                      <Button 
-                        type="primary" 
-                        onClick={handleGoBack}
-                        style={{ background: '#52c41a', borderColor: '#52c41a', minWidth: '100px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
-                      >
-                        返回上一步
-                      </Button>
-                      <Button 
-                        type="primary" 
-                        onClick={handleSubmitAndExit}
-                        style={{ background: '#1890ff', borderColor: '#1890ff', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
-                      >
-                        提交
-                      </Button>
+                      {/* 编辑模式下显示返回上一步和提交按钮 */}
+                      {currentMode === 'edit' && (
+                        <>
+                          <Button 
+                            type="primary" 
+                            onClick={handleGoBack}
+                            style={{ background: '#52c41a', borderColor: '#52c41a', minWidth: '100px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                          >
+                            返回上一步
+                          </Button>
+                          <Button 
+                            type="primary" 
+                            onClick={handleSubmitAndExit}
+                            style={{ background: '#1890ff', borderColor: '#1890ff', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                          >
+                            提交
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                   
@@ -7838,10 +8051,11 @@ const MapManagement: React.FC = () => {
                       cursor: (dragTool || isSpacePressed) ? 'grab' : (isDragging ? 'grabbing' : getCanvasCursor()),
                       userSelect: 'none'  // 防止文本选择
                     }}
-                    onClick={(dragTool || isSpacePressed) ? undefined : handleCanvasClick}
+                    onClick={(dragTool || isSpacePressed) ? undefined : (selectedTool === 'brush' ? handleBrushClick : (selectedTool === 'eraser' ? handleEraserClick : handleCanvasClick))}
                     onDoubleClick={(dragTool || isSpacePressed) ? undefined : handleCanvasDoubleClick}
-                    onMouseDown={(dragTool || isSpacePressed) ? handleCanvasDrag : (selectedTool === 'select' ? handleSelectionStart : handleCanvasDrag)}
-                    onMouseMove={handleCanvasMouseMove}
+                    onMouseDown={(dragTool || isSpacePressed) ? handleCanvasDrag : (selectedTool === 'brush' ? handleBrushStart : (selectedTool === 'eraser' ? handleEraserStart : (selectedTool === 'select' ? handleSelectionStart : handleCanvasDrag)))}
+                    onMouseMove={(dragTool || isSpacePressed) ? handleCanvasMouseMove : (selectedTool === 'brush' ? handleBrushMove : (selectedTool === 'eraser' ? handleEraserMove : handleCanvasMouseMove))}
+                    onMouseUp={selectedTool === 'brush' ? handleBrushEnd : (selectedTool === 'eraser' ? handleEraserEnd : undefined)}
                     onContextMenu={handleSelectionContextMenu}
                     onTouchStart={handleTouchStart}
                     onTouchMove={handleTouchMove}
@@ -8056,8 +8270,8 @@ const MapManagement: React.FC = () => {
                         }
                       }}
                     >
-                      {/* 渲染已完成的区域 - 放在最前面确保在底层 */}
-                      {mapAreas.map((area) => {
+                      {/* 渲染已完成的区域 - 放在最前面确保在底层，仅在拓扑地图模式下显示 */}
+                      {mapType === 'topology' && mapAreas.map((area) => {
                         if (area.points.length < 3) return null;
                         
                         // 构建SVG路径字符串
@@ -8283,15 +8497,100 @@ const MapManagement: React.FC = () => {
                           );
                         })}
                         
-                        {/* 渲染线条 */}
-                        {(() => {
+                        {/* 渲染线条 - 仅在拓扑地图模式下显示 */}
+                        {mapType === 'topology' && (() => {
                           console.log('📊 mapLines data:', mapLines);
                           return mapLines.map(line => renderLine(line));
                         })()}
 
+                      {/* 渲染画笔笔画 - 仅在黑白底图模式下显示 */}
+                      {mapType === 'grayscale' && (() => {
+                        return (
+                          <g>
+                            {/* 渲染已完成的笔画 */}
+                            {brushStrokes.map((stroke, index) => {
+                              if (stroke.points.length < 2) {
+                                // 单点笔画，渲染为圆圈
+                                const point = stroke.points[0];
+                                return (
+                                  <circle
+                                    key={`brush-stroke-${index}`}
+                                    cx={point.x}
+                                    cy={point.y}
+                                    r="2"
+                                    fill="#000000"
+                                    stroke="none"
+                                  />
+                                );
+                              } else {
+                                // 多点笔画，渲染为路径
+                                const pathData = stroke.points.reduce((path, point, pointIndex) => {
+                                  if (pointIndex === 0) {
+                                    return `M ${point.x} ${point.y}`;
+                                  } else {
+                                    return `${path} L ${point.x} ${point.y}`;
+                                  }
+                                }, '');
+                                
+                                return (
+                                  <path
+                                    key={`brush-stroke-${index}`}
+                                    d={pathData}
+                                    stroke="#000000"
+                                    strokeWidth="2"
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                );
+                              }
+                            })}
+                            
+                            {/* 渲染当前正在绘制的笔画 */}
+                            {isDrawing && currentStroke.length > 0 && (() => {
+                              if (currentStroke.length === 1) {
+                                // 单点，渲染为圆圈
+                                const point = currentStroke[0];
+                                return (
+                                  <circle
+                                    cx={point.x}
+                                    cy={point.y}
+                                    r="2"
+                                    fill="#000000"
+                                    stroke="none"
+                                    opacity="0.7"
+                                  />
+                                );
+                              } else {
+                                // 多点，渲染为路径
+                                const pathData = currentStroke.reduce((path, point, pointIndex) => {
+                                  if (pointIndex === 0) {
+                                    return `M ${point.x} ${point.y}`;
+                                  } else {
+                                    return `${path} L ${point.x} ${point.y}`;
+                                  }
+                                }, '');
+                                
+                                return (
+                                  <path
+                                    d={pathData}
+                                    stroke="#000000"
+                                    strokeWidth="2"
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    opacity="0.7"
+                                  />
+                                );
+                              }
+                            })()}
+                          </g>
+                        );
+                      })()}
+
                       
-                      {/* 临时跟随线条 - 连线模式下显示 */}
-                      {(() => {
+                      {/* 临时跟随线条 - 连线模式下显示，仅在拓扑地图模式下显示 */}
+                      {mapType === 'topology' && (() => {
                         // 检查虚线渲染条件
                         const hasConnectingState = isConnecting || continuousConnecting;
                         const hasStartPoint = connectingStartPoint || lastConnectedPoint;
@@ -8337,8 +8636,8 @@ const MapManagement: React.FC = () => {
                         );
                       })()}
                       
-                      {/* 区域绘制临时视觉反馈 */}
-                      {isDrawingArea && currentAreaPoints.length > 0 && (() => {
+                      {/* 区域绘制临时视觉反馈 - 仅在拓扑地图模式下显示 */}
+                      {mapType === 'topology' && isDrawingArea && currentAreaPoints.length > 0 && (() => {
                         const points = currentAreaPoints;
                         
                         return (
@@ -8438,8 +8737,8 @@ const MapManagement: React.FC = () => {
                       })()}
                     </svg>
                     
-                    {/* 绘制的点 */}
-                    {mapPoints.map((point) => {
+                    {/* 绘制的点 - 仅在拓扑地图模式下显示 */}
+                    {mapType === 'topology' && mapPoints.map((point) => {
                       // 直接使用画布坐标，因为父容器已经应用了CSS transform
                       // 不需要再次转换为屏幕坐标，避免双重变换
                       const canvasCoords = { x: point.x, y: point.y };
@@ -8520,24 +8819,48 @@ const MapManagement: React.FC = () => {
                     })}
                     
                     {/* 画布提示内容 */}
-                    {mapPoints.length === 0 && mapLines.length === 0 && mapAreas.length === 0 && !isDrawingArea && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        textAlign: 'center',
-                        color: '#999',
-                        pointerEvents: 'none'
-                      }}>
-                        <EditOutlined style={{ fontSize: '48px', marginBottom: '16px' }} />
-                        <div style={{ fontSize: '16px', marginBottom: '8px' }}>地图编辑画布</div>
-                        <div style={{ fontSize: '12px' }}>选择左侧工具开始绘制地图</div>
-                      </div>
-                    )}
+                    {(() => {
+                      // 在拓扑地图模式下，当没有任何拓扑元素且不在绘制状态时显示提示
+                      if (mapType === 'topology' && mapPoints.length === 0 && mapLines.length === 0 && mapAreas.length === 0 && !isDrawingArea) {
+                        return (
+                          <div style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            textAlign: 'center',
+                            color: '#999',
+                            pointerEvents: 'none'
+                          }}>
+                            <EditOutlined style={{ fontSize: '48px', marginBottom: '16px' }} />
+                            <div style={{ fontSize: '16px', marginBottom: '8px' }}>地图编辑画布</div>
+                            <div style={{ fontSize: '12px' }}>选择左侧工具开始绘制地图</div>
+                          </div>
+                        );
+                      }
+                      // 在黑白底图模式下，根据是否有PNG图片决定是否显示提示
+                      if (mapType === 'grayscale' && !mapFileUploadedImage) {
+                        return (
+                          <div style={{
+                            position: 'absolute',
+                            top: '50%',
+                            left: '50%',
+                            transform: 'translate(-50%, -50%)',
+                            textAlign: 'center',
+                            color: '#999',
+                            pointerEvents: 'none'
+                          }}>
+                            <EyeOutlined style={{ fontSize: '48px', marginBottom: '16px' }} />
+                            <div style={{ fontSize: '16px', marginBottom: '8px' }}>黑白底图模式</div>
+                            <div style={{ fontSize: '12px' }}>当前仅显示PNG图片和网格背景</div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
                     
-                    {/* 区域绘制状态提示 */}
-                    {isDrawingArea && (
+                    {/* 区域绘制状态提示 - 仅在拓扑地图模式下显示 */}
+                    {mapType === 'topology' && isDrawingArea && (
                       <div style={{
                         position: 'absolute',
                         top: '20px',
@@ -8657,43 +8980,47 @@ const MapManagement: React.FC = () => {
                     margin: '4px 0'
                   }} />
                   
-                  {/* 撤销工具 */}
-                  <Button
-                    type="text"
-                    icon={<UndoOutlined />}
-                    size="small"
-                    onClick={handleUndo}
-                    disabled={historyIndex <= 0}
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: 'none',
-                      color: historyIndex <= 0 ? '#d9d9d9' : '#1890ff'
-                    }}
-                    title="撤销 (Ctrl+Z / Cmd+Z)"
-                  />
+                  {/* 撤销工具 - 仅在编辑模式下显示 */}
+                  {currentMode === 'edit' && (
+                    <Button
+                      type="text"
+                      icon={<UndoOutlined />}
+                      size="small"
+                      onClick={handleUndo}
+                      disabled={historyIndex <= 0}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: 'none',
+                        color: historyIndex <= 0 ? '#d9d9d9' : '#1890ff'
+                      }}
+                      title="撤销 (Ctrl+Z / Cmd+Z)"
+                    />
+                  )}
                   
-                  {/* 重做工具 */}
-                  <Button
-                    type="text"
-                    icon={<RedoOutlined />}
-                    size="small"
-                    onClick={handleRedo}
-                    disabled={historyIndex >= history.length - 1}
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: 'none',
+                  {/* 重做工具 - 仅在编辑模式下显示 */}
+                  {currentMode === 'edit' && (
+                    <Button
+                      type="text"
+                      icon={<RedoOutlined />}
+                      size="small"
+                      onClick={handleRedo}
+                      disabled={historyIndex >= history.length - 1}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: 'none',
                       color: historyIndex >= history.length - 1 ? '#d9d9d9' : '#1890ff'
                     }}
                     title="重做 (Ctrl+Y / Cmd+Y)"
                   />
+                  )}
                   
                   {/* 分隔线 */}
                   <div style={{
@@ -8857,7 +9184,7 @@ const MapManagement: React.FC = () => {
                   boxShadow: '-2px 0 8px rgba(0,0,0,0.1)'
                 }}>
                   <Tabs
-                    activeKey={activeTabKey}
+                    activeKey={currentMode === 'view' ? 'elements' : activeTabKey}
                     onChange={setActiveTabKey}
                     size="small"
                     style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
@@ -8867,7 +9194,7 @@ const MapManagement: React.FC = () => {
                       paddingTop: '12px'
                     }}
                     items={[
-                      {
+                      ...(currentMode === 'edit' ? [{
                         key: 'tools',
                         label: '绘图工具',
                         children: (
@@ -8907,216 +9234,294 @@ const MapManagement: React.FC = () => {
                                 }}>V</span>
                               </Button>
                               
-                              <Button 
-                                type={selectedTool === 'point' ? 'primary' : 'text'}
-                                onClick={() => handleToolSelect('point')}
-                                style={{
-                                  height: '40px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '0 12px',
-                                  border: selectedTool === 'point' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                                  borderRadius: '6px',
-                                  background: selectedTool === 'point' ? '#e6f7ff' : '#fff',
-                                  color: selectedTool === 'point' ? '#1890ff' : '#666'
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                    <circle cx="8" cy="8" r="6" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
-                                    <circle cx="8" cy="8" r="2" fill="#1890ff"/>
-                                  </svg>
-                                  绘制节点
-                                </div>
-                                <span style={{ 
-                                  fontSize: '12px', 
-                                  opacity: 0.7,
-                                  fontWeight: 'normal',
-                                  backgroundColor: selectedTool === 'point' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  minWidth: '20px',
-                                  textAlign: 'center'
-                                }}>P</span>
-                              </Button>
-                              
-                              <Button 
-                                type={selectedTool === 'double-line' ? 'primary' : 'text'}
-                                onClick={() => handleToolSelect('double-line')}
-                                style={{
-                                  height: '40px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '0 12px',
-                                  border: selectedTool === 'double-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                                  borderRadius: '6px',
-                                  background: selectedTool === 'double-line' ? '#e6f7ff' : '#fff',
-                                  color: selectedTool === 'double-line' ? '#1890ff' : '#666'
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                    <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
-                                    <path d="M1 8 L4 6.5 L3.5 8 L4 9.5 Z" fill="#1890ff"/>
-                                    <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
-                                  </svg>
-                                  双向直线
-                                </div>
-                                <span style={{ 
-                                  fontSize: '12px', 
-                                  opacity: 0.7,
-                                  fontWeight: 'normal',
-                                  backgroundColor: selectedTool === 'double-line' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  minWidth: '20px',
-                                  textAlign: 'center'
-                                }}>D</span>
-                              </Button>
-                              
-                              <Button 
-                                type={selectedTool === 'single-line' ? 'primary' : 'text'}
-                                onClick={() => handleToolSelect('single-line')}
-                                style={{
-                                  height: '40px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '0 12px',
-                                  border: selectedTool === 'single-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                                  borderRadius: '6px',
-                                  background: selectedTool === 'single-line' ? '#e6f7ff' : '#fff',
-                                  color: selectedTool === 'single-line' ? '#1890ff' : '#666'
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                    <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
-                                    <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
-                                  </svg>
-                                  单向直线
-                                </div>
-                                <span style={{ 
-                                  fontSize: '12px', 
-                                  opacity: 0.7,
-                                  fontWeight: 'normal',
-                                  backgroundColor: selectedTool === 'single-line' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  minWidth: '20px',
-                                  textAlign: 'center'
-                                }}>S</span>
-                              </Button>
-                              
-                              <Button 
-                                type={selectedTool === 'area' ? 'primary' : 'text'}
-                                onClick={() => handleToolSelect('area')}
-                                style={{
-                                  height: '40px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '0 12px',
-                                  border: selectedTool === 'area' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                                  borderRadius: '6px',
-                                  background: selectedTool === 'area' ? '#e6f7ff' : '#fff',
-                                  color: selectedTool === 'area' ? '#1890ff' : '#666'
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                    <polygon points="3,3 13,3 13,13 3,13" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
-                                    <polygon points="3,3 13,3 13,13 3,13" fill="#1890ff" fillOpacity="0.2"/>
-                                  </svg>
-                                  绘制区域
-                                </div>
-                                <span style={{ 
-                                  fontSize: '12px', 
-                                  opacity: 0.7,
-                                  fontWeight: 'normal',
-                                  backgroundColor: selectedTool === 'area' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  minWidth: '20px',
-                                  textAlign: 'center'
-                                }}>A</span>
-                              </Button>
-                              
-                              <Button 
-                                type={selectedTool === 'double-bezier' ? 'primary' : 'text'}
-                                onClick={() => handleToolSelect('double-bezier')}
-                                style={{
-                                  height: '40px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '0 12px',
-                                  border: selectedTool === 'double-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                                  borderRadius: '6px',
-                                  background: selectedTool === 'double-bezier' ? '#e6f7ff' : '#fff',
-                                  color: selectedTool === 'double-bezier' ? '#1890ff' : '#666'
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                    <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
-                                    <path d="M1 8 L4 6.5 L3.5 8 L4 9.5 Z" fill="#1890ff"/>
-                                    <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
-                                  </svg>
-                                  双向贝塞尔曲线
-                                </div>
-                                <span style={{ 
-                                  fontSize: '12px', 
-                                  opacity: 0.7,
-                                  fontWeight: 'normal',
-                                  backgroundColor: selectedTool === 'double-bezier' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  minWidth: '20px',
-                                  textAlign: 'center'
-                                }}>B</span>
-                              </Button>
-                              
-                              <Button 
-                                type={selectedTool === 'single-bezier' ? 'primary' : 'text'}
-                                onClick={() => handleToolSelect('single-bezier')}
-                                style={{
-                                  height: '40px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '0 12px',
-                                  border: selectedTool === 'single-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                                  borderRadius: '6px',
-                                  background: selectedTool === 'single-bezier' ? '#e6f7ff' : '#fff',
-                                  color: selectedTool === 'single-bezier' ? '#1890ff' : '#666'
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                    <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
-                                    <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
-                                  </svg>
-                                  单向贝塞尔曲线
-                                </div>
-                                <span style={{ 
-                                  fontSize: '12px', 
-                                  opacity: 0.7,
-                                  fontWeight: 'normal',
-                                  backgroundColor: selectedTool === 'single-bezier' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  minWidth: '20px',
-                                  textAlign: 'center'
-                                }}>C</span>
-                              </Button>
+                              {/* 黑白底图模式下显示画笔和橡皮擦工具 */}
+                              {mapType === 'grayscale' ? (
+                                <>
+                                  <Button 
+                                    type={selectedTool === 'brush' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('brush')}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: selectedTool === 'brush' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      borderRadius: '6px',
+                                      background: selectedTool === 'brush' ? '#e6f7ff' : '#fff',
+                                      color: selectedTool === 'brush' ? '#1890ff' : '#666'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <path d="M3 13 L13 3 L14 4 L4 14 Z" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
+                                        <circle cx="13.5" cy="2.5" r="1.5" fill="#1890ff"/>
+                                        <circle cx="2.5" cy="13.5" r="1.5" fill="#1890ff"/>
+                                      </svg>
+                                      画笔工具
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'brush' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>B</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'eraser' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('eraser')}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: selectedTool === 'eraser' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      borderRadius: '6px',
+                                      background: selectedTool === 'eraser' ? '#e6f7ff' : '#fff',
+                                      color: selectedTool === 'eraser' ? '#1890ff' : '#666'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <rect x="2" y="6" width="8" height="4" rx="1" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
+                                        <rect x="10" y="4" width="4" height="8" rx="1" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
+                                        <path d="M6 8 L10 8" stroke="#1890ff" strokeWidth="1"/>
+                                      </svg>
+                                      橡皮擦工具
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'eraser' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>E</span>
+                                  </Button>
+                                </>
+                              ) : (
+                                /* 拓扑地图模式下显示原有的绘图工具 */
+                                <>
+                                  <Button 
+                                    type={selectedTool === 'point' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('point')}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: selectedTool === 'point' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      borderRadius: '6px',
+                                      background: selectedTool === 'point' ? '#e6f7ff' : '#fff',
+                                      color: selectedTool === 'point' ? '#1890ff' : '#666'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <circle cx="8" cy="8" r="6" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
+                                        <circle cx="8" cy="8" r="2" fill="#1890ff"/>
+                                      </svg>
+                                      绘制节点
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'point' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>P</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'double-line' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('double-line')}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: selectedTool === 'double-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      borderRadius: '6px',
+                                      background: selectedTool === 'double-line' ? '#e6f7ff' : '#fff',
+                                      color: selectedTool === 'double-line' ? '#1890ff' : '#666'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
+                                        <path d="M1 8 L4 6.5 L3.5 8 L4 9.5 Z" fill="#1890ff"/>
+                                        <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
+                                      </svg>
+                                      双向直线
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'double-line' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>D</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'single-line' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('single-line')}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: selectedTool === 'single-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      borderRadius: '6px',
+                                      background: selectedTool === 'single-line' ? '#e6f7ff' : '#fff',
+                                      color: selectedTool === 'single-line' ? '#1890ff' : '#666'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <line x1="2" y1="8" x2="14" y2="8" stroke="#1890ff" strokeWidth="1.5"/>
+                                        <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
+                                      </svg>
+                                      单向直线
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'single-line' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>S</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'area' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('area')}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: selectedTool === 'area' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      borderRadius: '6px',
+                                      background: selectedTool === 'area' ? '#e6f7ff' : '#fff',
+                                      color: selectedTool === 'area' ? '#1890ff' : '#666'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <polygon points="3,3 13,3 13,13 3,13" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
+                                        <polygon points="3,3 13,3 13,13 3,13" fill="#1890ff" fillOpacity="0.2"/>
+                                      </svg>
+                                      绘制区域
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'area' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>A</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'double-bezier' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('double-bezier')}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: selectedTool === 'double-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      borderRadius: '6px',
+                                      background: selectedTool === 'double-bezier' ? '#e6f7ff' : '#fff',
+                                      color: selectedTool === 'double-bezier' ? '#1890ff' : '#666'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
+                                        <path d="M1 8 L4 6.5 L3.5 8 L4 9.5 Z" fill="#1890ff"/>
+                                        <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
+                                      </svg>
+                                      双向贝塞尔曲线
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'double-bezier' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>B</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'single-bezier' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('single-bezier')}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: selectedTool === 'single-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      borderRadius: '6px',
+                                      background: selectedTool === 'single-bezier' ? '#e6f7ff' : '#fff',
+                                      color: selectedTool === 'single-bezier' ? '#1890ff' : '#666'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <path d="M2 8 Q5 4 8 8 Q11 12 14 8" stroke="#1890ff" strokeWidth="1.5" fill="none"/>
+                                        <path d="M15 8 L12 6.5 L12.5 8 L12 9.5 Z" fill="#1890ff"/>
+                                      </svg>
+                                      单向贝塞尔曲线
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'single-bezier' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>C</span>
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           </div>
                         )
-                      },
-                      {
+                      }] : []),
+                      ...(!(currentMode === 'edit' && mapType === 'grayscale') ? [{
                         key: 'elements',
                         label: '地图元素',
                         children: (
@@ -9166,7 +9571,7 @@ const MapManagement: React.FC = () => {
                                           onClick={() => handleNodeListClick(point.id)}
                                         >
                                           <span>{point.name} ({point.description || point.type})</span>
-                                          {!point.isPreset && (
+                                          {!point.isPreset && currentMode === 'edit' && (
                                             <Button 
                                               className="remove-btn"
                                               type="text" 
@@ -9245,35 +9650,37 @@ const MapManagement: React.FC = () => {
                                             }}
                                           >
                                             <span>{line.name}({startPoint?.name}{directionSymbol}{endPoint?.name})</span>
-                                            <Button 
-                                              className="delete-btn"
-                                              type="text" 
-                                              size="small" 
-                                              danger
-                                              onClick={(e: React.MouseEvent) => {
-                                                e.stopPropagation(); // 阻止事件冒泡到父元素
-                                                Modal.confirm({
-                                                  title: '确认删除',
-                                                  content: `确定要删除路径 "${line.name}" 吗？删除后无法恢复。`,
-                                                  okText: '确认删除',
-                                                  cancelText: '取消',
-                                                  okType: 'danger',
-                                                  onOk: () => {
-                                                    setMapLines(prev => prev.filter(l => l.id !== line.id));
-                                                    message.success(`路径 "${line.name}" 已删除`);
-                                                  }
-                                                });
-                                              }}
-                                              style={{ 
-                                                opacity: 0, 
-                                                transition: 'opacity 0.2s',
-                                                fontSize: '10px',
-                                                height: '20px',
-                                                padding: '0 4px'
-                                              }}
-                                            >
-                                              删除
-                                            </Button>
+                                            {currentMode === 'edit' && (
+                                              <Button 
+                                                className="delete-btn"
+                                                type="text" 
+                                                size="small" 
+                                                danger
+                                                onClick={(e: React.MouseEvent) => {
+                                                  e.stopPropagation(); // 阻止事件冒泡到父元素
+                                                  Modal.confirm({
+                                                    title: '确认删除',
+                                                    content: `确定要删除路径 "${line.name}" 吗？删除后无法恢复。`,
+                                                    okText: '确认删除',
+                                                    cancelText: '取消',
+                                                    okType: 'danger',
+                                                    onOk: () => {
+                                                      setMapLines(prev => prev.filter(l => l.id !== line.id));
+                                                      message.success(`路径 "${line.name}" 已删除`);
+                                                    }
+                                                  });
+                                                }}
+                                                style={{ 
+                                                  opacity: 0, 
+                                                  transition: 'opacity 0.2s',
+                                                  fontSize: '10px',
+                                                  height: '20px',
+                                                  padding: '0 4px'
+                                                }}
+                                              >
+                                                删除
+                                              </Button>
+                                            )}
                                           </div>
                                         );
                                       })}
@@ -9322,35 +9729,37 @@ const MapManagement: React.FC = () => {
                                           }}
                                         >
                                           <span>{area.name} ({area.type || '区域'})</span>
-                                          <Button 
-                                            className="delete-btn"
-                                            type="text" 
-                                            size="small" 
-                                            danger
-                                            onClick={(e: React.MouseEvent) => {
-                                              e.stopPropagation(); // 阻止事件冒泡到父元素
-                                              Modal.confirm({
-                                                title: '确认删除',
-                                                content: `确定要删除区域 "${area.name}" 吗？删除后无法恢复。`,
-                                                okText: '确认删除',
-                                                cancelText: '取消',
-                                                okType: 'danger',
-                                                onOk: () => {
-                                                  setMapAreas(prev => prev.filter(a => a.id !== area.id));
-                                                  message.success(`区域 "${area.name}" 已删除`);
-                                                }
-                                              });
-                                            }}
-                                            style={{ 
-                                              opacity: 0, 
-                                              transition: 'opacity 0.2s',
-                                              fontSize: '10px',
-                                              height: '20px',
-                                              padding: '0 4px'
-                                            }}
-                                          >
-                                            删除
-                                          </Button>
+                                          {currentMode === 'edit' && (
+                                            <Button 
+                                              className="delete-btn"
+                                              type="text" 
+                                              size="small" 
+                                              danger
+                                              onClick={(e: React.MouseEvent) => {
+                                                e.stopPropagation(); // 阻止事件冒泡到父元素
+                                                Modal.confirm({
+                                                  title: '确认删除',
+                                                  content: `确定要删除区域 "${area.name}" 吗？删除后无法恢复。`,
+                                                  okText: '确认删除',
+                                                  cancelText: '取消',
+                                                  okType: 'danger',
+                                                  onOk: () => {
+                                                    setMapAreas(prev => prev.filter(a => a.id !== area.id));
+                                                    message.success(`区域 "${area.name}" 已删除`);
+                                                  }
+                                                });
+                                              }}
+                                              style={{ 
+                                                opacity: 0, 
+                                                transition: 'opacity 0.2s',
+                                                fontSize: '10px',
+                                                height: '20px',
+                                                padding: '0 4px'
+                                              }}
+                                            >
+                                              删除
+                                            </Button>
+                                          )}
                                         </div>
                                       ))}
                                       {mapAreas.length === 0 && (
@@ -9382,26 +9791,28 @@ const MapManagement: React.FC = () => {
                                       <GroupOutlined style={{ color: '#722ed1' }} />
                                       <span>路径组</span>
                                       <Badge count={pathGroups.length} size="small" style={{ backgroundColor: '#722ed1' }} />
-                                      <Button 
-                                        className="path-group-add-btn"
-                                        type="text" 
-                                        size="small" 
-                                        icon={<PlusOutlined />}
-                                        style={{ 
-                                          opacity: 0, 
-                                          transition: 'opacity 0.2s',
-                                          fontSize: '12px',
-                                          height: '20px',
-                                          padding: '0 4px',
-                                          marginLeft: '4px'
-                                        }}
-                                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                          e.stopPropagation();
-                                          handleAddPathGroup();
-                                        }}
-                                      >
-                                        新增
-                                      </Button>
+                                      {currentMode === 'edit' && (
+                                        <Button 
+                                          className="path-group-add-btn"
+                                          type="text" 
+                                          size="small" 
+                                          icon={<PlusOutlined />}
+                                          style={{ 
+                                            opacity: 0, 
+                                            transition: 'opacity 0.2s',
+                                            fontSize: '12px',
+                                            height: '20px',
+                                            padding: '0 4px',
+                                            marginLeft: '4px'
+                                          }}
+                                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                            e.stopPropagation();
+                                            handleAddPathGroup();
+                                          }}
+                                        >
+                                          新增
+                                        </Button>
+                                      )}
                                     </div>
                                   ),
                                   children: (
@@ -9430,45 +9841,47 @@ const MapManagement: React.FC = () => {
                                               }}
                                             >
                                               <span>{group.name}</span>
-                                              <div 
-                                                className="path-group-actions"
-                                                style={{ 
-                                                  opacity: 0, 
-                                                  transition: 'opacity 0.2s',
-                                                  display: 'flex',
-                                                  gap: '4px'
-                                                }}
-                                              >
-                                                <Button 
-                                                  type="text" 
-                                                  size="small" 
-                                                  icon={<EditOutlined />}
+                                              {currentMode === 'edit' && (
+                                                <div 
+                                                  className="path-group-actions"
                                                   style={{ 
-                                                    fontSize: '12px',
-                                                    height: '20px',
-                                                    padding: '0 4px'
+                                                    opacity: 0, 
+                                                    transition: 'opacity 0.2s',
+                                                    display: 'flex',
+                                                    gap: '4px'
                                                   }}
-                                                  onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                                    e.stopPropagation();
-                                                    handleEditPathGroup(group);
-                                                  }}
-                                                />
-                                                <Button 
-                                                  type="text" 
-                                                  size="small" 
-                                                  danger
-                                                  icon={<DeleteOutlined />}
-                                                  style={{ 
-                                                    fontSize: '12px',
-                                                    height: '20px',
-                                                    padding: '0 4px'
-                                                  }}
-                                                  onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                                    e.stopPropagation();
-                                                    handleDeletePathGroup(group.id);
-                                                  }}
-                                                />
-                                              </div>
+                                                >
+                                                  <Button 
+                                                    type="text" 
+                                                    size="small" 
+                                                    icon={<EditOutlined />}
+                                                    style={{ 
+                                                      fontSize: '12px',
+                                                      height: '20px',
+                                                      padding: '0 4px'
+                                                    }}
+                                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                                      e.stopPropagation();
+                                                      handleEditPathGroup(group);
+                                                    }}
+                                                  />
+                                                  <Button 
+                                                    type="text" 
+                                                    size="small" 
+                                                    danger
+                                                    icon={<DeleteOutlined />}
+                                                    style={{ 
+                                                      fontSize: '12px',
+                                                      height: '20px',
+                                                      padding: '0 4px'
+                                                    }}
+                                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                                      e.stopPropagation();
+                                                      handleDeletePathGroup(group.id);
+                                                    }}
+                                                  />
+                                                </div>
+                                              )}
                                             </div>
                                           ),
                                           children: (
@@ -9500,25 +9913,27 @@ const MapManagement: React.FC = () => {
                                                       }}
                                                     >
                                                       <span>{path.name} ({path.description})</span>
-                                                      <Button 
-                                                        className="remove-btn"
-                                                        type="text" 
-                                                        size="small" 
-                                                        danger
-                                                        style={{ 
-                                                          opacity: 0, 
-                                                          transition: 'opacity 0.2s',
-                                                          fontSize: '10px',
-                                                          height: '20px',
-                                                          padding: '0 4px'
-                                                        }}
-                                                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                                          e.stopPropagation();
-                                                          removePathFromPathGroup(group.id, path.id);
-                                                        }}
-                                                      >
-                                                        移除
-                                                      </Button>
+                                                      {currentMode === 'edit' && (
+                                                        <Button 
+                                                          className="remove-btn"
+                                                          type="text" 
+                                                          size="small" 
+                                                          danger
+                                                          style={{ 
+                                                            opacity: 0, 
+                                                            transition: 'opacity 0.2s',
+                                                            fontSize: '10px',
+                                                            height: '20px',
+                                                            padding: '0 4px'
+                                                          }}
+                                                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                                            e.stopPropagation();
+                                                            removePathFromPathGroup(group.id, path.id);
+                                                          }}
+                                                        >
+                                                          移除
+                                                        </Button>
+                                                      )}
                                                     </div>
                                                   ))}
                                                 </div>
@@ -9534,7 +9949,7 @@ const MapManagement: React.FC = () => {
                             />
                           </div>
                         )
-                      }
+                      }] : [])
                     ]}
                   />
                 </div>
@@ -9546,7 +9961,7 @@ const MapManagement: React.FC = () => {
       
       {/* 点属性编辑弹窗 */}
       <Modal
-        title="编辑点属性"
+        title={currentMode === 'view' ? "查看点属性" : "编辑点属性"}
         open={pointEditModalVisible}
         zIndex={2000}
         onCancel={() => {
@@ -9566,11 +9981,13 @@ const MapManagement: React.FC = () => {
               pointEditForm.resetFields();
             }, 100);
           }}>
-            取消
+            {currentMode === 'view' ? '关闭' : '取消'}
           </Button>,
-          <Button key="submit" type="primary" onClick={() => pointEditForm.submit()}>
-            保存
-          </Button>
+          ...(currentMode === 'edit' ? [
+            <Button key="submit" type="primary" onClick={() => pointEditForm.submit()}>
+              保存
+            </Button>
+          ] : [])
         ]}
         width={500}
         bodyStyle={{
@@ -9602,6 +10019,7 @@ const MapManagement: React.FC = () => {
           >
             <Input 
               placeholder="请输入点名称" 
+              disabled={currentMode === 'view'}
               onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                   // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点
                   if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -9617,7 +10035,7 @@ const MapManagement: React.FC = () => {
             rules={[{ required: true, message: '请选择点类型' }]}
             style={{ marginBottom: 16 }}
           >
-            <Select placeholder="请选择点类型">
+            <Select placeholder="请选择点类型" disabled={currentMode === 'view'}>
               <Select.Option value="节点">节点</Select.Option>
               <Select.Option value="站点">站点</Select.Option>
               <Select.Option value="充电点">充电点</Select.Option>
@@ -9674,6 +10092,7 @@ const MapManagement: React.FC = () => {
                         suffix="°"
                         min={-180}
                         max={180}
+                        disabled={currentMode === 'view'}
                         onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                           // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点
                           if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -9690,7 +10109,7 @@ const MapManagement: React.FC = () => {
                       initialValue={false}
                       style={{ marginBottom: 16 }}
                     >
-                      <Select placeholder="请选择是否禁止调头">
+                      <Select placeholder="请选择是否禁止调头" disabled={currentMode === 'view'}>
                         <Select.Option value={false}>否</Select.Option>
                         <Select.Option value={true}>是</Select.Option>
                       </Select>
@@ -9710,7 +10129,7 @@ const MapManagement: React.FC = () => {
                       style={{ marginBottom: 16 }}
                       tooltip="如果开启，则充电点也可以作为停靠点使用，也就是这个点可以作为停靠点又可以作为充电点"
                     >
-                      <Select placeholder="请选择是否可作为停靠点使用">
+                      <Select placeholder="请选择是否可作为停靠点使用" disabled={currentMode === 'view'}>
                         <Select.Option value={false}>否</Select.Option>
                         <Select.Option value={true}>是</Select.Option>
                       </Select>
@@ -9730,6 +10149,7 @@ const MapManagement: React.FC = () => {
                         placeholder="请选择关联的机器人设备"
                         allowClear
                         showSearch
+                        disabled={currentMode === 'view'}
                         filterOption={(input: string, option: any) =>
                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                          }
@@ -9760,6 +10180,7 @@ const MapManagement: React.FC = () => {
                         placeholder="请选择关联的机器人设备"
                         allowClear
                         showSearch
+                        disabled={currentMode === 'view'}
                         filterOption={(input: string, option: any) =>
                            (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                          }
@@ -9787,7 +10208,7 @@ const MapManagement: React.FC = () => {
                         rules={[{ required: true, message: '请选择电梯内/外' }]}
                         style={{ marginBottom: 16 }}
                       >
-                        <Select placeholder="请选择电梯内/外">
+                        <Select placeholder="请选择电梯内/外" disabled={currentMode === 'view'}>
                           <Select.Option value="电梯内">电梯内</Select.Option>
                           <Select.Option value="电梯外">电梯外</Select.Option>
                         </Select>
@@ -9805,6 +10226,7 @@ const MapManagement: React.FC = () => {
                           placeholder="请选择电梯设备"
                           allowClear
                           showSearch
+                          disabled={currentMode === 'view'}
                           filterOption={(input: string, option: any) =>
                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                            }
@@ -9826,7 +10248,7 @@ const MapManagement: React.FC = () => {
                         rules={[{ required: true, message: '请选择电梯门' }]}
                         style={{ marginBottom: 16 }}
                       >
-                        <Select placeholder="请选择电梯门">
+                        <Select placeholder="请选择电梯门" disabled={currentMode === 'view'}>
                           <Select.Option value="A门">A门</Select.Option>
                           <Select.Option value="B门">B门</Select.Option>
                           <Select.Option value="C门">C门</Select.Option>
@@ -9851,6 +10273,7 @@ const MapManagement: React.FC = () => {
                           placeholder="请选择自动门设备"
                           allowClear
                           showSearch
+                          disabled={currentMode === 'view'}
                           filterOption={(input: string, option: any) =>
                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                            }
@@ -9872,7 +10295,7 @@ const MapManagement: React.FC = () => {
                         rules={[{ required: true, message: '请选择自动门' }]}
                         style={{ marginBottom: 16 }}
                       >
-                        <Select placeholder="请选择自动门">
+                        <Select placeholder="请选择自动门" disabled={currentMode === 'view'}>
                           <Select.Option value="A门">A门</Select.Option>
                           <Select.Option value="B门">B门</Select.Option>
                           <Select.Option value="C门">C门</Select.Option>
@@ -9909,6 +10332,7 @@ const MapManagement: React.FC = () => {
                       suffix="°"
                       min={-180}
                       max={180}
+                      disabled={currentMode === 'view'}
                       onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                         // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点
                         if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -9950,7 +10374,7 @@ const MapManagement: React.FC = () => {
       
       {/* 区域属性编辑弹窗 */}
       <Modal
-        title="编辑区域属性"
+        title={currentMode === 'view' ? '查看区域属性' : '编辑区域属性'}
         open={areaEditModalVisible}
         zIndex={2000}
         onCancel={() => {
@@ -9970,11 +10394,13 @@ const MapManagement: React.FC = () => {
               areaEditForm.resetFields();
             }, 100);
           }}>
-            取消
+            {currentMode === 'view' ? '关闭' : '取消'}
           </Button>,
-          <Button key="submit" type="primary" onClick={() => areaEditForm.submit()}>
-            保存
-          </Button>
+          ...(currentMode === 'view' ? [] : [
+            <Button key="submit" type="primary" onClick={() => areaEditForm.submit()}>
+              保存
+            </Button>
+          ])
         ]}
         width={500}
         bodyStyle={{
@@ -10010,6 +10436,7 @@ const MapManagement: React.FC = () => {
           >
             <Input 
               placeholder="请输入区域名称" 
+              disabled={currentMode === 'view'}
               onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                   // 阻止Delete和Backspace键事件冒泡，防止误删地图上的区域
                   if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -10025,7 +10452,7 @@ const MapManagement: React.FC = () => {
             rules={[{ required: true, message: '请选择区域类型' }]}
             style={{ marginBottom: 16 }}
           >
-            <Select placeholder="请选择区域类型">
+            <Select placeholder="请选择区域类型" disabled={currentMode === 'view'}>
               <Select.Option value="禁行区域">禁行区域</Select.Option>
               <Select.Option value="调速区域">调速区域</Select.Option>
             </Select>
@@ -10069,6 +10496,7 @@ const MapManagement: React.FC = () => {
                       min={0.1}
                       max={10}
                       step={0.1}
+                      disabled={currentMode === 'view'}
                       onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                         // 阻止Delete和Backspace键事件冒泡，防止误删地图上的区域
                         if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -10094,6 +10522,7 @@ const MapManagement: React.FC = () => {
               rows={3}
               maxLength={200}
               showCount
+              disabled={currentMode === 'view'}
               onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
                 // 阻止Delete和Backspace键事件冒泡，防止误删地图上的区域
                 if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -10118,7 +10547,7 @@ const MapManagement: React.FC = () => {
       
       {/* 线属性编辑弹窗 */}
       <Modal
-        title={'路径属性'}
+        title={currentMode === 'view' ? '查看路径属性' : '编辑路径属性'}
         open={lineEditModalVisible}
         zIndex={2000}
         onCancel={() => {
@@ -10132,11 +10561,13 @@ const MapManagement: React.FC = () => {
             setEditingLine(null);
             lineEditForm.resetFields();
           }}>
-            取消
+            {currentMode === 'view' ? '关闭' : '取消'}
           </Button>,
-          <Button key="submit" type="primary" onClick={() => lineEditForm.submit()}>
-            保存
-          </Button>
+          ...(currentMode === 'view' ? [] : [
+            <Button key="submit" type="primary" onClick={() => lineEditForm.submit()}>
+              保存
+            </Button>
+          ])
         ]}
         width={500}
         bodyStyle={{
@@ -10182,6 +10613,7 @@ const MapManagement: React.FC = () => {
           >
             <Input 
               placeholder="请输入路径名称" 
+              disabled={currentMode === 'view'}
               onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                 // 阻止Delete和Backspace键事件冒泡，防止误删地图上的点和线
                 if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -10197,7 +10629,7 @@ const MapManagement: React.FC = () => {
             rules={[{ required: true, message: '请选择路径类型' }]}
             style={{ marginBottom: 16 }}
           >
-            <Select placeholder="请选择路径类型">
+            <Select placeholder="请选择路径类型" disabled={currentMode === 'view'}>
               <Select.Option value="single-line">单向直线</Select.Option>
               <Select.Option value="double-line">双向直线</Select.Option>
               <Select.Option value="single-bezier">单向贝塞尔曲线</Select.Option>
