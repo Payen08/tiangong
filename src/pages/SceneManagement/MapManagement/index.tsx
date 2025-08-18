@@ -4378,6 +4378,43 @@ const MapManagement: React.FC = () => {
     eraseAtPosition(x, y);
   };
 
+  // Canvas专用的事件处理函数
+  const handleCanvasEraserMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isErasing || selectedTool !== 'eraser') return;
+    
+    const canvasElement = event.currentTarget;
+    const rect = canvasElement.getBoundingClientRect();
+    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
+    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    
+    eraseAtPosition(x, y);
+  };
+
+  const handleCanvasEraserClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (selectedTool !== 'eraser') return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const canvasElement = event.currentTarget;
+    const rect = canvasElement.getBoundingClientRect();
+    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
+    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    
+    eraseAtPosition(x, y);
+  };
+
+  const handleCanvasEraserStart = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (selectedTool !== 'eraser') return;
+    setIsErasing(true);
+    handleCanvasEraserClick(event);
+  };
+
+  const handleCanvasEraserEnd = () => {
+    if (selectedTool !== 'eraser') return;
+    setIsErasing(false);
+  };
+
   // 擦除指定位置的笔画和PNG像素
   const eraseAtPosition = (x: number, y: number) => {
     const eraserRadius = 10; // 橡皮擦半径
@@ -4434,13 +4471,16 @@ const MapManagement: React.FC = () => {
     
     // 擦除PNG图片像素
     if (mapFileUploadedImage && pngCanvasRef.current) {
+      console.log('PNG eraser triggered at position:', x, y);
       const canvas = pngCanvasRef.current;
       const ctx = canvas.getContext('2d');
       if (ctx) {
+        console.log('Canvas context available, canvas size:', canvas.width, 'x', canvas.height);
         // 将SVG坐标转换为Canvas坐标
         const canvasX = x;
         const canvasY = y;
         
+        let pixelsErased = 0;
         // 在橡皮擦范围内擦除像素
         for (let dx = -eraserRadius; dx <= eraserRadius; dx++) {
           for (let dy = -eraserRadius; dy <= eraserRadius; dy++) {
@@ -4461,10 +4501,16 @@ const MapManagement: React.FC = () => {
                 const b = data[2];
                 const a = data[3];
                 
+                // Log pixel data for debugging
+                if (dx === 0 && dy === 0) {
+                  console.log('Center pixel RGBA:', r, g, b, a);
+                }
+                
                 // Determine if it's a black pixel (threshold adjustable)
                 const isBlackPixel = (r < 50 && g < 50 && b < 50 && a > 200);
                 
                 if (isBlackPixel) {
+                  console.log('Black pixel found at:', pixelX, pixelY, 'RGBA:', r, g, b, a);
                   // Replace black pixel with white
                   data[0] = 255; // R
                   data[1] = 255; // G
@@ -4476,12 +4522,18 @@ const MapManagement: React.FC = () => {
                   
                   // Record erased pixel position
                   setErasedPixels(prev => [...prev, { x: pixelX, y: pixelY }]);
+                  pixelsErased++;
                 }
               }
             }
           }
         }
+        console.log('Total pixels erased:', pixelsErased);
+      } else {
+        console.log('Canvas context not available');
       }
+    } else {
+      console.log('PNG canvas or image not available:', !!mapFileUploadedImage, !!pngCanvasRef.current);
     }
   };
 
@@ -8254,9 +8306,13 @@ const MapManagement: React.FC = () => {
                             left: 0,
                             width: '100%',
                             height: '100%',
-                            pointerEvents: 'none',
-                            zIndex: 1
+                            pointerEvents: selectedTool === 'eraser' ? 'auto' : 'none',
+                            zIndex: selectedTool === 'eraser' ? 10 : 1
                           }}
+                          onClick={selectedTool === 'eraser' ? handleCanvasEraserClick : undefined}
+                          onMouseMove={selectedTool === 'eraser' ? handleCanvasEraserMove : undefined}
+                          onMouseDown={selectedTool === 'eraser' ? handleCanvasEraserStart : undefined}
+                          onMouseUp={selectedTool === 'eraser' ? handleCanvasEraserEnd : undefined}
                         />
                       </div>
                     )}
