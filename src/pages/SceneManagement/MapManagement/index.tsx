@@ -346,6 +346,10 @@ const MapManagement: React.FC = () => {
   const [currentStroke, setCurrentStroke] = useState<{x: number, y: number}[]>([]); // 当前正在绘制的笔画
   const [brushStrokes, setBrushStrokes] = useState<{id: string, points: {x: number, y: number}[]}[]>([]); // 所有画笔笔画
   
+  // PNG图片擦除相关状态
+  const pngCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [erasedPixels, setErasedPixels] = useState<{x: number, y: number}[]>([]); // 存储被擦除的像素位置
+  
   // 控制手柄事件处理函数
   const handleControlHandleMouseDown = (e: React.MouseEvent, lineId: string, handleType: 'cp1' | 'cp2') => {
     e.stopPropagation();
@@ -4374,21 +4378,87 @@ const MapManagement: React.FC = () => {
     eraseAtPosition(x, y);
   };
 
-  // 擦除指定位置的笔画
+  // 擦除指定位置的笔画和PNG像素
   const eraseAtPosition = (x: number, y: number) => {
     const eraserRadius = 10; // 橡皮擦半径
     
+    // 擦除画笔笔画
     setBrushStrokes(prev => {
-      return prev.filter(stroke => {
-        // 检查笔画是否与橡皮擦位置相交
-        return !stroke.points.some(point => {
+      return prev.flatMap(stroke => {
+        // 对于单点笔画（圆形），如果橡皮擦触及，则完全移除
+        if (stroke.points.length === 1) {
+          const point = stroke.points[0];
           const distance = Math.sqrt(
             Math.pow(point.x - x, 2) + Math.pow(point.y - y, 2)
           );
-          return distance <= eraserRadius;
-        });
+          // 如果距离小于橡皮擦半径，完全移除这个笔画
+          if (distance <= eraserRadius) {
+            return []; // 返回空数组表示移除
+          }
+          return [stroke]; // 返回包含原笔画的数组
+        }
+        
+        // 对于多点笔画，需要智能分割而不是简单过滤
+        const segments: Array<{x: number, y: number}[]> = [];
+        let currentSegment: Array<{x: number, y: number}> = [];
+        
+        for (const point of stroke.points) {
+          const distance = Math.sqrt(
+            Math.pow(point.x - x, 2) + Math.pow(point.y - y, 2)
+          );
+          
+          if (distance > eraserRadius) {
+            // 点在橡皮擦范围外，添加到当前片段
+            currentSegment.push(point);
+          } else {
+            // 点在橡皮擦范围内，结束当前片段
+            if (currentSegment.length >= 2) {
+              segments.push([...currentSegment]);
+            }
+            currentSegment = [];
+          }
+        }
+        
+        // 处理最后一个片段
+        if (currentSegment.length >= 2) {
+          segments.push(currentSegment);
+        }
+        
+        // 返回所有有效片段作为独立笔画
+        return segments.map(segment => ({
+          ...stroke,
+          points: segment
+        }));
       });
     });
+    
+    // 擦除PNG图片像素
+    if (mapFileUploadedImage && pngCanvasRef.current) {
+      const canvas = pngCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        // 将SVG坐标转换为Canvas坐标
+        const canvasX = x;
+        const canvasY = y;
+        
+        // 在橡皮擦范围内擦除像素
+        for (let dx = -eraserRadius; dx <= eraserRadius; dx++) {
+          for (let dy = -eraserRadius; dy <= eraserRadius; dy++) {
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance <= eraserRadius) {
+              const pixelX = Math.round(canvasX + dx);
+              const pixelY = Math.round(canvasY + dy);
+              
+              // 检查像素是否在画布范围内
+              if (pixelX >= 0 && pixelX < canvas.width && pixelY >= 0 && pixelY < canvas.height) {
+                // 记录被擦除的像素位置
+                setErasedPixels(prev => [...prev, { x: pixelX, y: pixelY }]);
+              }
+            }
+          }
+        }
+      }
+    }
   };
 
   // 键盘事件处理
@@ -4701,6 +4771,32 @@ const MapManagement: React.FC = () => {
       document.removeEventListener('keyup', handleKeyUp);
     };
   }, [addMapFileDrawerVisible, selectedTool, selectedPoints, selectedLines, selectedAreas, selectedVertices, isSpacePressed, isConnecting, continuousConnecting, historyIndex, history.length, isDrawingArea, currentAreaPoints, isCompletingArea]);
+
+  // 初始化PNG Canvas用于像素级擦除
+  useEffect(() => {
+    if (mapFileUploadedImage && pngCanvasRef.current) {
+      const canvas = pngCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        // 设置Canvas尺寸与图片一致
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        // 绘制图片到Canvas
+        ctx.drawImage(img, 0, 0);
+        
+        // 应用已擦除的像素
+        erasedPixels.forEach(pixel => {
+          ctx.clearRect(pixel.x - 5, pixel.y - 5, 10, 10);
+        });
+      };
+      img.src = mapFileUploadedImage.url;
+    }
+  }, [mapFileUploadedImage, erasedPixels]);
   
   // 测试代码已删除 - 不再自动添加测试点
   
@@ -8114,6 +8210,19 @@ const MapManagement: React.FC = () => {
                             pointerEvents: 'none'
                           }}
                         />
+                        {/* Canvas覆盖层用于PNG像素擦除 */}
+                        <canvas
+                          ref={pngCanvasRef}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            height: '100%',
+                            pointerEvents: 'none',
+                            zIndex: 1
+                          }}
+                        />
                       </div>
                     )}
                     
@@ -8503,13 +8612,13 @@ const MapManagement: React.FC = () => {
                           return mapLines.map(line => renderLine(line));
                         })()}
 
-                      {/* 渲染画笔笔画 - 仅在黑白底图模式下显示 */}
-                      {mapType === 'grayscale' && (() => {
+                      {/* 渲染画笔笔画 - 在两种地图模式下都显示，位于区域之后、线条之前 */}
+                      {(() => {
                         return (
                           <g>
                             {/* 渲染已完成的笔画 */}
                             {brushStrokes.map((stroke, index) => {
-                              if (stroke.points.length < 2) {
+                              if (stroke.points.length === 1) {
                                 // 单点笔画，渲染为圆圈
                                 const point = stroke.points[0];
                                 return (
@@ -8522,7 +8631,7 @@ const MapManagement: React.FC = () => {
                                     stroke="none"
                                   />
                                 );
-                              } else {
+                              } else if (stroke.points.length >= 2) {
                                 // 多点笔画，渲染为路径
                                 const pathData = stroke.points.reduce((path, point, pointIndex) => {
                                   if (pointIndex === 0) {
@@ -8546,7 +8655,7 @@ const MapManagement: React.FC = () => {
                               }
                             })}
                             
-                            {/* 渲染当前正在绘制的笔画 */}
+                            {/* 渲染当前正在绘制的笔画 - 在两种地图模式下都显示 */}
                             {isDrawing && currentStroke.length > 0 && (() => {
                               if (currentStroke.length === 1) {
                                 // 单点，渲染为圆圈
