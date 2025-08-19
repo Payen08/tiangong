@@ -24,7 +24,7 @@ import {
   Popover,
   Radio,
   Select,
-
+  Slider,
   Checkbox,
   Progress,
   Alert,
@@ -197,6 +197,10 @@ const MapManagement: React.FC = () => {
     resolution: 0.05 // 分辨率
   });
   
+  // 地图模式和阅览模式状态
+  const [mapMode, setMapMode] = useState<'topology' | 'navigation'>('topology');
+  const [isReadOnlyMode, setIsReadOnlyMode] = useState(false);
+  
   // 计算机器人扫图范围
   const calculateScanArea = () => {
     return (mapInfo.width * mapInfo.height).toFixed(2);
@@ -344,7 +348,57 @@ const MapManagement: React.FC = () => {
   const [isDrawing, setIsDrawing] = useState(false); // 是否正在绘制
   const [isErasing, setIsErasing] = useState(false); // 是否正在擦除
   const [currentStroke, setCurrentStroke] = useState<{x: number, y: number}[]>([]); // 当前正在绘制的笔画
-  const [brushStrokes, setBrushStrokes] = useState<{id: string, points: {x: number, y: number}[]}[]>([]); // 所有画笔笔画
+  const [currentEraserStroke, setCurrentEraserStroke] = useState<{x: number, y: number}[]>([]); // 当前正在绘制的橡皮擦笔画
+  // 统一的笔画数据结构，支持按时间顺序渲染
+  const [allStrokes, setAllStrokes] = useState<{
+    id: string;
+    points: {x: number, y: number}[];
+    type: 'brush' | 'eraser';
+    timestamp: number;
+    size: number;
+  }[]>([]);
+  
+  // 撤销重做功能相关状态
+  const [strokeHistory, setStrokeHistory] = useState<{
+    id: string;
+    points: {x: number, y: number}[];
+    type: 'brush' | 'eraser';
+    timestamp: number;
+    size: number;
+  }[][]>([[]]); // 历史记录数组，每个元素是一个完整的笔画状态
+  const [strokeHistoryIndex, setStrokeHistoryIndex] = useState(0); // 当前笔画历史记录索引
+  
+  // 撤销重做功能函数
+  const saveStrokeToHistory = (newStrokes: typeof allStrokes) => {
+    setStrokeHistory(prev => {
+      const newHistory = prev.slice(0, strokeHistoryIndex + 1);
+      newHistory.push([...newStrokes]);
+      return newHistory;
+    });
+    setStrokeHistoryIndex(prev => prev + 1);
+  };
+  
+  const undoStroke = () => {
+    if (strokeHistoryIndex > 0) {
+      const previousState = strokeHistory[strokeHistoryIndex - 1];
+      setAllStrokes([...previousState]);
+      setStrokeHistoryIndex(prev => prev - 1);
+    }
+  };
+  
+  const redoStroke = () => {
+    if (strokeHistoryIndex < strokeHistory.length - 1) {
+      const nextState = strokeHistory[strokeHistoryIndex + 1];
+      setAllStrokes([...nextState]);
+      setStrokeHistoryIndex(prev => prev + 1);
+    }
+  };
+  
+  // 保持原有的分离数组用于兼容性（从统一数组中过滤）
+  const brushStrokes = allStrokes.filter(stroke => stroke.type === 'brush');
+  const eraserStrokes = allStrokes.filter(stroke => stroke.type === 'eraser');
+  const [brushSize, setBrushSize] = useState(6); // 画笔大小
+  const [eraserSize, setEraserSize] = useState(6); // 橡皮擦大小
   
   // PNG图片擦除相关状态
   const pngCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -2617,7 +2671,26 @@ const MapManagement: React.FC = () => {
   // 同步、导出、下载函数已移除
 
   const handleDeleteFile = (file: MapFile) => {
-    console.log('删除文件:', file);
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除地图文件 "${file.name}" 吗？此操作不可撤销。`,
+      icon: <ExclamationCircleOutlined />,
+      okText: '确定',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: () => {
+        // 执行删除操作
+        if (selectedMap) {
+          setMapFiles(prev => {
+            const updatedFiles = { ...prev };
+            const currentMapFiles = updatedFiles[selectedMap.id] || [];
+            updatedFiles[selectedMap.id] = currentMapFiles.filter(f => f.id !== file.id);
+            return updatedFiles;
+          });
+          message.success('地图文件删除成功');
+        }
+      },
+    });
   };
 
   const handleDetail = (file: MapFile) => {
@@ -2646,7 +2719,58 @@ const MapManagement: React.FC = () => {
   // 同步文件函数已移除
 
   const handleViewDetails = (file: MapFile) => {
-    console.log('查看详情:', file);
+    // 进入地图文件编辑页面
+    setAddMapFileStep(2); // 直接进入地图编辑步骤
+    setAddMapFileDrawerVisible(true);
+    
+    // 设置编辑模式的地图信息
+    setMapInfo({
+      mapName: file.name,
+      originX: 0,
+      originY: 0,
+      direction: 0,
+      width: 100,
+      height: 100,
+      resolution: 0.05
+    });
+    
+    // 设置上传的图片
+    setMapFileUploadedImage({
+      url: file.thumbnail,
+      name: file.name
+    });
+    
+    message.info('进入地图编辑模式');
+  };
+
+  // 处理地图文件图片点击事件
+  const handleImageClick = (file: MapFile) => {
+    // 进入阅览模式的拓扑地图编辑器
+    setAddMapFileStep(2); // 进入地图编辑步骤
+    setAddMapFileDrawerVisible(true);
+    
+    // 设置阅览模式的地图信息
+    setMapInfo({
+      mapName: file.name,
+      originX: 0,
+      originY: 0,
+      direction: 0,
+      width: 100,
+      height: 100,
+      resolution: 0.05
+    });
+    
+    // 设置上传的图片
+    setMapFileUploadedImage({
+      url: file.thumbnail,
+      name: file.name
+    });
+    
+    // 设置为阅览模式（拓扑地图）
+    setMapMode('topology'); // 设置地图类型为拓扑地图
+    setIsReadOnlyMode(true); // 设置为阅览模式
+    
+    message.info('进入拓扑地图阅览模式');
   };
 
   // 新增地图文件相关处理函数
@@ -2815,9 +2939,14 @@ const MapManagement: React.FC = () => {
     setPointEditModalVisible(false);
     pointEditForm.resetFields();
     setActiveTabKey('tools'); // 重置为默认的绘图工具Tab
-    // 重置区域相关状态（保留已完成的区域，只清空绘制状态）
-    // setMapAreas([]); // 注释掉：不清空已完成的区域
-    // setAreaCounter(1); // 注释掉：保持区域计数器
+    
+    // 重置线条相关状态
+    setMapLines(defaultMapLines);
+    setLineCounter(1);
+    
+    // 重置区域相关状态
+    setMapAreas([]);
+    setAreaCounter(1);
     setSelectedAreas([]);
     setIsDrawingArea(false);
     setCurrentAreaPoints([]);
@@ -2825,6 +2954,31 @@ const MapManagement: React.FC = () => {
     setEditingArea(null);
     setAreaEditModalVisible(false);
     areaEditForm.resetFields();
+    
+    // 重置所有笔画绘制状态
+    setAllStrokes([]);
+    
+    // 清除PNG画布内容
+    if (pngCanvasRef.current) {
+      const canvas = pngCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+    
+    // 重置地图信息
+    setMapInfo({
+      mapName: '',
+      originX: 0,
+      originY: 0,
+      direction: 0,
+      width: 0,
+      height: 0,
+      resolution: 0.05
+    });
+    
+
   };
   
   // 地图编辑状态跟踪
@@ -2856,19 +3010,7 @@ const MapManagement: React.FC = () => {
     });
   };
   
-  const handleGoBack = () => {
-    const hasChanges = checkForUnsavedChanges();
-    
-    if (hasChanges) {
-      // 有修改，先保存再返回
-      handleSave();
-      message.info('检测到地图有修改，已自动保存');
-    }
-    
-    // 返回上一步（回到基本信息步骤）
-    setAddMapFileStep(1);
-    message.success('已返回上一步');
-  };
+
   
   const handleSave = () => {
     // 保存当前地图编辑状态（不提交到后台）
@@ -3229,7 +3371,16 @@ const MapManagement: React.FC = () => {
 
   // 工具选择处理
   const handleToolSelect = (toolType: string) => {
-
+    console.log('🔧 [工具选择] 选择工具:', toolType);
+    
+    // 在黑白底图模式下，只允许选择特定工具
+    if (mapType === 'grayscale') {
+      const allowedTools = ['select', 'brush', 'eraser'];
+      if (!allowedTools.includes(toolType)) {
+        console.log('🚫 [工具限制] 黑白底图模式下不允许使用工具:', toolType);
+        return; // 阻止选择不允许的工具
+      }
+    }
     
     // 检查是否是连线工具
     const isLineToolSelected = ['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(toolType);
@@ -4265,10 +4416,7 @@ const MapManagement: React.FC = () => {
 
   // 判断当前选中的地图是否为黑白底图模式
   const isGrayscaleMode = () => {
-    if (!selectedMap) return false;
-    const currentMapFiles = mapFiles[selectedMap.id] || [];
-    const activeFile = currentMapFiles.find((file: MapFile) => file.status === 'active');
-    return activeFile?.format === 'grayscale';
+    return mapType === 'grayscale';
   };
 
   // 画笔绘制事件处理函数
@@ -4304,9 +4452,14 @@ const MapManagement: React.FC = () => {
     if (currentStroke.length > 0) {
       const newStroke = {
         id: `stroke_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        points: [...currentStroke]
+        points: [...currentStroke],
+        type: 'brush' as const,
+        timestamp: Date.now(),
+        size: brushSize
       };
-      setBrushStrokes(prev => [...prev, newStroke]);
+      const newStrokes = [...allStrokes, newStroke];
+      setAllStrokes(newStrokes);
+      saveStrokeToHistory(newStrokes);
     }
     
     setIsDrawing(false);
@@ -4327,12 +4480,17 @@ const MapManagement: React.FC = () => {
     // 创建一个点（小圆圈）
     const newStroke = {
       id: `dot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      points: [{ x, y }]
+      points: [{ x, y }],
+      type: 'brush' as const,
+      timestamp: Date.now(),
+      size: brushSize
     };
-    setBrushStrokes(prev => [...prev, newStroke]);
+    const newStrokes = [...allStrokes, newStroke];
+    setAllStrokes(newStrokes);
+    saveStrokeToHistory(newStrokes);
   };
 
-  // 橡皮擦相关的事件处理函数
+  // 橡皮擦绘制事件处理函数（按照画笔方式实现，但绘制白色）
   const handleEraserStart = (event: React.MouseEvent<HTMLDivElement>) => {
     if (selectedTool !== 'eraser') return;
     
@@ -4345,9 +4503,9 @@ const MapManagement: React.FC = () => {
     const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
     
     setIsErasing(true);
-    eraseAtPosition(x, y);
+    setCurrentEraserStroke([{ x, y }]);
   };
-
+  
   const handleEraserMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isErasing || selectedTool !== 'eraser') return;
     
@@ -4356,14 +4514,29 @@ const MapManagement: React.FC = () => {
     const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
     const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
     
-    eraseAtPosition(x, y);
+    setCurrentEraserStroke(prev => [...prev, { x, y }]);
   };
-
+  
   const handleEraserEnd = () => {
-    if (selectedTool !== 'eraser') return;
+    if (!isErasing || selectedTool !== 'eraser') return;
+    
+    if (currentEraserStroke.length > 0) {
+      const newStroke = {
+        id: `eraser_stroke_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        points: [...currentEraserStroke],
+        type: 'eraser' as const,
+        timestamp: Date.now(),
+        size: eraserSize
+      };
+      const newStrokes = [...allStrokes, newStroke];
+      setAllStrokes(newStrokes);
+      saveStrokeToHistory(newStrokes);
+    }
+    
     setIsErasing(false);
+    setCurrentEraserStroke([]);
   };
-
+  
   const handleEraserClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (selectedTool !== 'eraser') return;
     
@@ -4375,167 +4548,20 @@ const MapManagement: React.FC = () => {
     const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
     const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
     
-    eraseAtPosition(x, y);
+    // 创建一个白色点（小圆圈）
+    const newStroke = {
+      id: `eraser_dot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      points: [{ x, y }],
+      type: 'eraser' as const,
+      timestamp: Date.now(),
+      size: eraserSize
+    };
+    const newStrokes = [...allStrokes, newStroke];
+    setAllStrokes(newStrokes);
+    saveStrokeToHistory(newStrokes);
   };
 
-  // Canvas专用的事件处理函数
-  const handleCanvasEraserMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isErasing || selectedTool !== 'eraser') return;
-    
-    const canvasElement = event.currentTarget;
-    const rect = canvasElement.getBoundingClientRect();
-    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
-    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
-    
-    eraseAtPosition(x, y);
-  };
 
-  const handleCanvasEraserClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (selectedTool !== 'eraser') return;
-    
-    event.preventDefault();
-    event.stopPropagation();
-    
-    const canvasElement = event.currentTarget;
-    const rect = canvasElement.getBoundingClientRect();
-    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
-    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
-    
-    eraseAtPosition(x, y);
-  };
-
-  const handleCanvasEraserStart = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (selectedTool !== 'eraser') return;
-    setIsErasing(true);
-    handleCanvasEraserClick(event);
-  };
-
-  const handleCanvasEraserEnd = () => {
-    if (selectedTool !== 'eraser') return;
-    setIsErasing(false);
-  };
-
-  // 擦除指定位置的笔画和PNG像素
-  const eraseAtPosition = (x: number, y: number) => {
-    const eraserRadius = 10; // 橡皮擦半径
-    
-    // 擦除画笔笔画
-    setBrushStrokes(prev => {
-      return prev.flatMap(stroke => {
-        // 对于单点笔画（圆形），如果橡皮擦触及，则完全移除
-        if (stroke.points.length === 1) {
-          const point = stroke.points[0];
-          const distance = Math.sqrt(
-            Math.pow(point.x - x, 2) + Math.pow(point.y - y, 2)
-          );
-          // 如果距离小于橡皮擦半径，完全移除这个笔画
-          if (distance <= eraserRadius) {
-            return []; // 返回空数组表示移除
-          }
-          return [stroke]; // 返回包含原笔画的数组
-        }
-        
-        // 对于多点笔画，需要智能分割而不是简单过滤
-        const segments: Array<{x: number, y: number}[]> = [];
-        let currentSegment: Array<{x: number, y: number}> = [];
-        
-        for (const point of stroke.points) {
-          const distance = Math.sqrt(
-            Math.pow(point.x - x, 2) + Math.pow(point.y - y, 2)
-          );
-          
-          if (distance > eraserRadius) {
-            // 点在橡皮擦范围外，添加到当前片段
-            currentSegment.push(point);
-          } else {
-            // 点在橡皮擦范围内，结束当前片段
-            if (currentSegment.length >= 2) {
-              segments.push([...currentSegment]);
-            }
-            currentSegment = [];
-          }
-        }
-        
-        // 处理最后一个片段
-        if (currentSegment.length >= 2) {
-          segments.push(currentSegment);
-        }
-        
-        // 返回所有有效片段作为独立笔画
-        return segments.map(segment => ({
-          ...stroke,
-          points: segment
-        }));
-      });
-    });
-    
-    // 擦除PNG图片像素
-    if (mapFileUploadedImage && pngCanvasRef.current) {
-      console.log('PNG eraser triggered at position:', x, y);
-      const canvas = pngCanvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        console.log('Canvas context available, canvas size:', canvas.width, 'x', canvas.height);
-        // 将SVG坐标转换为Canvas坐标
-        const canvasX = x;
-        const canvasY = y;
-        
-        let pixelsErased = 0;
-        // 在橡皮擦范围内擦除像素
-        for (let dx = -eraserRadius; dx <= eraserRadius; dx++) {
-          for (let dy = -eraserRadius; dy <= eraserRadius; dy++) {
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            if (distance <= eraserRadius) {
-              const pixelX = Math.round(canvasX + dx);
-              const pixelY = Math.round(canvasY + dy);
-              
-              // Check if pixel is within canvas bounds
-              if (pixelX >= 0 && pixelX < canvas.width && pixelY >= 0 && pixelY < canvas.height) {
-                // Get current pixel color data
-                const imageData = ctx.getImageData(pixelX, pixelY, 1, 1);
-                const data = imageData.data;
-                
-                // Check if it's a black pixel (RGB values close to 0 and opaque)
-                const r = data[0];
-                const g = data[1];
-                const b = data[2];
-                const a = data[3];
-                
-                // Log pixel data for debugging
-                if (dx === 0 && dy === 0) {
-                  console.log('Center pixel RGBA:', r, g, b, a);
-                }
-                
-                // Determine if it's a black pixel (threshold adjustable)
-                const isBlackPixel = (r < 50 && g < 50 && b < 50 && a > 200);
-                
-                if (isBlackPixel) {
-                  console.log('Black pixel found at:', pixelX, pixelY, 'RGBA:', r, g, b, a);
-                  // Replace black pixel with white
-                  data[0] = 255; // R
-                  data[1] = 255; // G
-                  data[2] = 255; // B
-                  data[3] = 255; // A (keep opaque)
-                  
-                  // Write modified pixel data back to Canvas
-                  ctx.putImageData(imageData, pixelX, pixelY);
-                  
-                  // Record erased pixel position
-                  setErasedPixels(prev => [...prev, { x: pixelX, y: pixelY }]);
-                  pixelsErased++;
-                }
-              }
-            }
-          }
-        }
-        console.log('Total pixels erased:', pixelsErased);
-      } else {
-        console.log('Canvas context not available');
-      }
-    } else {
-      console.log('PNG canvas or image not available:', !!mapFileUploadedImage, !!pngCanvasRef.current);
-    }
-  };
 
   // 键盘事件处理
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -4685,12 +4711,22 @@ const MapManagement: React.FC = () => {
     if (addMapFileDrawerVisible && currentMode === 'edit' && (event.ctrlKey || event.metaKey)) {
       if (event.key === 'z' || event.key === 'Z') {
         event.preventDefault();
-        handleUndo();
+        // 在黑白底图模式下使用画笔撤销重做功能
+        if (mapType === 'grayscale') {
+          undoStroke();
+        } else {
+          handleUndo();
+        }
         return;
       }
       if (event.key === 'y' || event.key === 'Y') {
         event.preventDefault();
-        handleRedo();
+        // 在黑白底图模式下使用画笔撤销重做功能
+        if (mapType === 'grayscale') {
+          redoStroke();
+        } else {
+          handleRedo();
+        }
         return;
       }
     }
@@ -4763,34 +4799,66 @@ const MapManagement: React.FC = () => {
             break;
           case 'p':
             // 在黑白底图模式下屏蔽绘制节点工具的快捷键
+            console.log('🔍 [快捷键调试] P键按下', {
+              mapType: mapType,
+              isGrayscaleMode: isGrayscaleMode(),
+              当前工具: selectedTool
+            });
             if (!isGrayscaleMode()) {
               event.preventDefault();
               console.log('⌨️ [工具切换] 快捷键P - 切换到绘制节点工具');
               setSelectedTool('point');
+            } else {
+              console.log('🚫 [快捷键屏蔽] P键在黑白底图模式下被屏蔽');
+              event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 'd':
             // 在黑白底图模式下屏蔽双向直线工具的快捷键
+            console.log('🔍 [快捷键调试] D键按下', {
+              mapType: mapType,
+              isGrayscaleMode: isGrayscaleMode(),
+              当前工具: selectedTool
+            });
             if (!isGrayscaleMode()) {
               event.preventDefault();
               console.log('⌨️ [工具切换] 快捷键D - 切换到双向直线工具');
               setSelectedTool('double-line');
+            } else {
+              console.log('🚫 [快捷键屏蔽] D键在黑白底图模式下被屏蔽');
+              event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 's':
             // 在黑白底图模式下屏蔽单向直线工具的快捷键
+            console.log('🔍 [快捷键调试] S键按下', {
+              mapType: mapType,
+              isGrayscaleMode: isGrayscaleMode(),
+              当前工具: selectedTool
+            });
             if (!isGrayscaleMode()) {
               event.preventDefault();
               console.log('⌨️ [工具切换] 快捷键S - 切换到单向直线工具');
               setSelectedTool('single-line');
+            } else {
+              console.log('🚫 [快捷键屏蔽] S键在黑白底图模式下被屏蔽');
+              event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 'a':
             // 在黑白底图模式下屏蔽绘制区域工具的快捷键
+            console.log('🔍 [快捷键调试] A键按下', {
+              mapType: mapType,
+              isGrayscaleMode: isGrayscaleMode(),
+              当前工具: selectedTool
+            });
             if (!isGrayscaleMode()) {
               event.preventDefault();
               console.log('⌨️ [工具切换] 快捷键A - 切换到绘制区域工具');
               setSelectedTool('area');
+            } else {
+              console.log('🚫 [快捷键屏蔽] A键在黑白底图模式下被屏蔽');
+              event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 'b':
@@ -4808,10 +4876,18 @@ const MapManagement: React.FC = () => {
             break;
           case 'c':
             // 在黑白底图模式下屏蔽单向贝塞尔曲线工具的快捷键
+            console.log('🔍 [快捷键调试] C键按下', {
+              mapType: mapType,
+              isGrayscaleMode: isGrayscaleMode(),
+              当前工具: selectedTool
+            });
             if (!isGrayscaleMode()) {
               event.preventDefault();
               console.log('⌨️ [工具切换] 快捷键C - 切换到单向贝塞尔曲线工具');
               setSelectedTool('single-bezier');
+            } else {
+              console.log('🚫 [快捷键屏蔽] C键在黑白底图模式下被屏蔽');
+              event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 'e':
@@ -4865,20 +4941,12 @@ const MapManagement: React.FC = () => {
         // 绘制图片到Canvas
         ctx.drawImage(img, 0, 0);
         
-        // Apply erased pixels (replace black pixels with white)
+        // 应用已擦除的像素（绘制白色圆形）
+        ctx.fillStyle = '#FFFFFF';
         erasedPixels.forEach(pixel => {
-          // Get current pixel color data
-          const imageData = ctx.getImageData(pixel.x, pixel.y, 1, 1);
-          const data = imageData.data;
-          
-          // Set pixel to white
-          data[0] = 255; // R
-          data[1] = 255; // G
-          data[2] = 255; // B
-          data[3] = 255; // A (keep opaque)
-          
-          // Write modified pixel data back to Canvas
-          ctx.putImageData(imageData, pixel.x, pixel.y);
+          ctx.beginPath();
+          ctx.arc(pixel.x, pixel.y, 10, 0, 2 * Math.PI);
+          ctx.fill();
         });
       };
       img.src = mapFileUploadedImage.url;
@@ -7611,7 +7679,7 @@ const MapManagement: React.FC = () => {
                    onClick={handleSubmitAndNext}
                    style={{ background: '#1890ff', borderColor: '#1890ff' }}
                  >
-                   下一步
+                   进入地图编辑
                  </Button>
               </>
             ) : (
@@ -7864,7 +7932,6 @@ const MapManagement: React.FC = () => {
                           textAlign: 'center',
                           fontWeight: 500
                         }}>
-                          <EyeOutlined style={{ marginRight: '6px' }} />
                           阅览模式
                         </div>
                         <Button 
@@ -7888,7 +7955,15 @@ const MapManagement: React.FC = () => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
                     <Button 
                       type={mapType === 'topology' ? 'primary' : 'text'}
-                      onClick={() => setMapType('topology')}
+                      onClick={() => {
+                        console.log('🔄 [地图切换] 切换到拓扑地图');
+                        setMapType('topology');
+                        // 从黑白底图切换到拓扑地图时，工具切换到选择工具
+                        if (currentMode === 'edit') {
+                          console.log('🔄 [工具切换] 拓扑地图模式下自动切换到选择工具');
+                          setSelectedTool('select');
+                        }
+                      }}
                       style={{
                         height: '36px',
                         display: 'flex',
@@ -7930,9 +8005,29 @@ const MapManagement: React.FC = () => {
                     <Button 
                       type={mapType === 'grayscale' ? 'primary' : 'text'}
                       onClick={() => {
+                        console.log('🔄 [地图切换] 切换到黑白底图，当前工具:', selectedTool);
                         setMapType('grayscale');
                         if (currentMode === 'edit') {
                           setActiveTabKey('tools'); // 自动切换到绘图工具tab
+                          
+                          // 智能工具切换逻辑
+                          const topologyTools = ['point', 'double-line', 'single-line', 'area', 'double-bezier', 'single-bezier'];
+                          
+                          if (topologyTools.includes(selectedTool)) {
+                            // 如果当前工具是拓扑绘图工具，先切换到选择工具（模拟ESC键效果）
+                            console.log('🔄 [工具切换] 检测到拓扑绘图工具，先切换到选择工具完成连续操作');
+                            setSelectedTool('select');
+                            
+                            // 然后切换到画笔工具
+                            setTimeout(() => {
+                              console.log('🔄 [工具切换] 黑白底图模式下自动切换到画笔工具');
+                              setSelectedTool('brush');
+                            }, 100);
+                          } else {
+                            // 如果当前工具不是拓扑绘图工具，直接切换到画笔
+                            console.log('🔄 [工具切换] 黑白底图模式下自动切换到画笔工具');
+                            setSelectedTool('brush');
+                          }
                         }
                       }}
                       style={{
@@ -8201,20 +8296,13 @@ const MapManagement: React.FC = () => {
                       >
                         取消
                       </Button>
-                      {/* 编辑模式下显示返回上一步和提交按钮 */}
+                      {/* 编辑模式下显示提交按钮 */}
                       {currentMode === 'edit' && (
                         <>
                           <Button 
                             type="primary" 
-                            onClick={handleGoBack}
-                            style={{ background: '#52c41a', borderColor: '#52c41a', minWidth: '100px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
-                          >
-                            返回上一步
-                          </Button>
-                          <Button 
-                            type="primary" 
                             onClick={handleSubmitAndExit}
-                            style={{ background: '#1890ff', borderColor: '#1890ff', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
+                            style={{ background: '#1890ff', borderColor: '#1890ff', minWidth: '80px', height: '36px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)' }}
                           >
                             提交
                           </Button>
@@ -8271,7 +8359,7 @@ const MapManagement: React.FC = () => {
                       backgroundSize: '20px 20px',
                       opacity: 0.5,
                       pointerEvents: 'none',  // 确保网格不会阻挡鼠标事件
-                      zIndex: 1
+                      zIndex: 20
                     }}></div>
                     
                     {/* PNG图片背景层 - 在画布变换容器内部，最底层 */}
@@ -8306,13 +8394,9 @@ const MapManagement: React.FC = () => {
                             left: 0,
                             width: '100%',
                             height: '100%',
-                            pointerEvents: selectedTool === 'eraser' ? 'auto' : 'none',
-                            zIndex: selectedTool === 'eraser' ? 10 : 1
+                            pointerEvents: 'none',
+                            zIndex: 1
                           }}
-                          onClick={selectedTool === 'eraser' ? handleCanvasEraserClick : undefined}
-                          onMouseMove={selectedTool === 'eraser' ? handleCanvasEraserMove : undefined}
-                          onMouseDown={selectedTool === 'eraser' ? handleCanvasEraserStart : undefined}
-                          onMouseUp={selectedTool === 'eraser' ? handleCanvasEraserEnd : undefined}
                         />
                       </div>
                     )}
@@ -8333,7 +8417,7 @@ const MapManagement: React.FC = () => {
                         width: '100%',
                         height: '100%',
                         pointerEvents: 'auto', // 允许SVG接收事件
-                        zIndex: 10
+                        zIndex: 5
                       }}
                       onClick={(e) => {
                         // 检查区域点击标记，如果刚刚点击了区域，则跳过SVG事件处理
@@ -8470,7 +8554,141 @@ const MapManagement: React.FC = () => {
                         }
                       }}
                     >
-                      {/* 渲染已完成的区域 - 放在最前面确保在底层，仅在拓扑地图模式下显示 */}
+                      {/* 渲染所有笔画 - 按时间戳顺序统一渲染，支持正确的叠加绘制 */}
+                      {(() => {
+                        // 按时间戳排序所有笔画，确保按绘制顺序渲染
+                        const sortedStrokes = [...allStrokes].sort((a, b) => a.timestamp - b.timestamp);
+                        
+                        return (
+                          <g>
+                            {/* 渲染所有已完成的笔画 */}
+                            {sortedStrokes.map((stroke, index) => {
+                              const isEraser = stroke.type === 'eraser';
+                              const strokeColor = isEraser ? '#FFFFFF' : '#000000';
+                              const strokeSize = stroke.size;
+                              
+                              if (stroke.points.length === 1) {
+                                // 单点笔画，渲染为圆圈
+                                const point = stroke.points[0];
+                                return (
+                                  <circle
+                                    key={`stroke-${stroke.id}-${index}`}
+                                    cx={point.x}
+                                    cy={point.y}
+                                    r={strokeSize}
+                                    fill={strokeColor}
+                                    stroke={isEraser ? '#CCCCCC' : 'none'}
+                                    strokeWidth={isEraser ? '0.5' : '0'}
+                                  />
+                                );
+                              } else if (stroke.points.length >= 2) {
+                                // 多点笔画，渲染为路径
+                                const pathData = stroke.points.reduce((path, point, pointIndex) => {
+                                  if (pointIndex === 0) {
+                                    return `M ${point.x} ${point.y}`;
+                                  } else {
+                                    return `${path} L ${point.x} ${point.y}`;
+                                  }
+                                }, '');
+                                
+                                return (
+                                  <path
+                                    key={`stroke-${stroke.id}-${index}`}
+                                    d={pathData}
+                                    stroke={strokeColor}
+                                    strokeWidth={strokeSize}
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                );
+                              }
+                              return null;
+                            })}
+                            
+                            {/* 渲染当前正在绘制的画笔笔画 */}
+                            {isDrawing && currentStroke.length > 0 && (() => {
+                              if (currentStroke.length === 1) {
+                                // 单点，渲染为圆圈
+                                const point = currentStroke[0];
+                                return (
+                                  <circle
+                                    cx={point.x}
+                                    cy={point.y}
+                                    r={brushSize}
+                                    fill="#000000"
+                                    stroke="none"
+                                    opacity="0.7"
+                                  />
+                                );
+                              } else {
+                                // 多点，渲染为路径
+                                const pathData = currentStroke.reduce((path, point, pointIndex) => {
+                                  if (pointIndex === 0) {
+                                    return `M ${point.x} ${point.y}`;
+                                  } else {
+                                    return `${path} L ${point.x} ${point.y}`;
+                                  }
+                                }, '');
+                                
+                                return (
+                                  <path
+                                    d={pathData}
+                                    stroke="#000000"
+                                    strokeWidth={brushSize}
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    opacity="0.7"
+                                  />
+                                );
+                              }
+                            })()}
+                            
+                            {/* 渲染当前正在绘制的橡皮擦笔画 */}
+                            {isErasing && currentEraserStroke.length > 0 && (() => {
+                              if (currentEraserStroke.length === 1) {
+                                // 单点，渲染为白色圆圈
+                                const point = currentEraserStroke[0];
+                                return (
+                                  <circle
+                                    cx={point.x}
+                                    cy={point.y}
+                                    r={eraserSize}
+                                    fill="#FFFFFF"
+                                    stroke="#CCCCCC"
+                                    strokeWidth="0.5"
+                                    opacity="0.7"
+                                  />
+                                );
+                              } else {
+                                // 多点，渲染为白色路径
+                                const pathData = currentEraserStroke.reduce((path, point, pointIndex) => {
+                                  if (pointIndex === 0) {
+                                    return `M ${point.x} ${point.y}`;
+                                  } else {
+                                    return `${path} L ${point.x} ${point.y}`;
+                                  }
+                                }, '');
+                                
+                                return (
+                                  <path
+                                    d={pathData}
+                                    stroke="#FFFFFF"
+                                    strokeWidth={eraserSize}
+                                    fill="none"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    opacity="0.7"
+                                  />
+                                );
+                              }
+                            })()}
+                          </g>
+                        );
+                      })()}
+
+                      {/* 渲染已完成的区域 - 放在黑白底图之上，仅在拓扑地图模式下显示 */}
                       {mapType === 'topology' && mapAreas.map((area) => {
                         if (area.points.length < 3) return null;
                         
@@ -8703,90 +8921,7 @@ const MapManagement: React.FC = () => {
                           return mapLines.map(line => renderLine(line));
                         })()}
 
-                      {/* 渲染画笔笔画 - 在两种地图模式下都显示，位于区域之后、线条之前 */}
-                      {(() => {
-                        return (
-                          <g>
-                            {/* 渲染已完成的笔画 */}
-                            {brushStrokes.map((stroke, index) => {
-                              if (stroke.points.length === 1) {
-                                // 单点笔画，渲染为圆圈
-                                const point = stroke.points[0];
-                                return (
-                                  <circle
-                                    key={`brush-stroke-${index}`}
-                                    cx={point.x}
-                                    cy={point.y}
-                                    r="2"
-                                    fill="#000000"
-                                    stroke="none"
-                                  />
-                                );
-                              } else if (stroke.points.length >= 2) {
-                                // 多点笔画，渲染为路径
-                                const pathData = stroke.points.reduce((path, point, pointIndex) => {
-                                  if (pointIndex === 0) {
-                                    return `M ${point.x} ${point.y}`;
-                                  } else {
-                                    return `${path} L ${point.x} ${point.y}`;
-                                  }
-                                }, '');
-                                
-                                return (
-                                  <path
-                                    key={`brush-stroke-${index}`}
-                                    d={pathData}
-                                    stroke="#000000"
-                                    strokeWidth="2"
-                                    fill="none"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                  />
-                                );
-                              }
-                            })}
-                            
-                            {/* 渲染当前正在绘制的笔画 - 在两种地图模式下都显示 */}
-                            {isDrawing && currentStroke.length > 0 && (() => {
-                              if (currentStroke.length === 1) {
-                                // 单点，渲染为圆圈
-                                const point = currentStroke[0];
-                                return (
-                                  <circle
-                                    cx={point.x}
-                                    cy={point.y}
-                                    r="2"
-                                    fill="#000000"
-                                    stroke="none"
-                                    opacity="0.7"
-                                  />
-                                );
-                              } else {
-                                // 多点，渲染为路径
-                                const pathData = currentStroke.reduce((path, point, pointIndex) => {
-                                  if (pointIndex === 0) {
-                                    return `M ${point.x} ${point.y}`;
-                                  } else {
-                                    return `${path} L ${point.x} ${point.y}`;
-                                  }
-                                }, '');
-                                
-                                return (
-                                  <path
-                                    d={pathData}
-                                    stroke="#000000"
-                                    strokeWidth="2"
-                                    fill="none"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    opacity="0.7"
-                                  />
-                                );
-                              }
-                            })()}
-                          </g>
-                        );
-                      })()}
+
 
                       
                       {/* 临时跟随线条 - 连线模式下显示，仅在拓扑地图模式下显示 */}
@@ -9018,8 +9153,8 @@ const MapManagement: React.FC = () => {
                       );
                     })}
                     
-                    {/* 画布提示内容 */}
-                    {(() => {
+                    {/* 画布提示内容 - 仅在编辑模式下显示 */}
+                    {currentMode === 'edit' && (() => {
                       // 在拓扑地图模式下，当没有任何拓扑元素且不在绘制状态时显示提示
                       if (mapType === 'topology' && mapPoints.length === 0 && mapLines.length === 0 && mapAreas.length === 0 && !isDrawingArea) {
                         return (
@@ -9186,8 +9321,14 @@ const MapManagement: React.FC = () => {
                       type="text"
                       icon={<UndoOutlined />}
                       size="small"
-                      onClick={handleUndo}
-                      disabled={historyIndex <= 0}
+                      onClick={() => {
+                        if (mapType === 'grayscale') {
+                          undoStroke();
+                        } else {
+                          handleUndo();
+                        }
+                      }}
+                      disabled={mapType === 'grayscale' ? strokeHistoryIndex <= 0 : historyIndex <= 0}
                       style={{
                         width: '32px',
                         height: '32px',
@@ -9195,7 +9336,7 @@ const MapManagement: React.FC = () => {
                         alignItems: 'center',
                         justifyContent: 'center',
                         border: 'none',
-                        color: historyIndex <= 0 ? '#d9d9d9' : '#1890ff'
+                        color: (mapType === 'grayscale' ? strokeHistoryIndex <= 0 : historyIndex <= 0) ? '#d9d9d9' : '#1890ff'
                       }}
                       title="撤销 (Ctrl+Z / Cmd+Z)"
                     />
@@ -9207,8 +9348,14 @@ const MapManagement: React.FC = () => {
                       type="text"
                       icon={<RedoOutlined />}
                       size="small"
-                      onClick={handleRedo}
-                      disabled={historyIndex >= history.length - 1}
+                      onClick={() => {
+                        if (mapType === 'grayscale') {
+                          redoStroke();
+                        } else {
+                          handleRedo();
+                        }
+                      }}
+                      disabled={mapType === 'grayscale' ? strokeHistoryIndex >= strokeHistory.length - 1 : historyIndex >= history.length - 1}
                       style={{
                         width: '32px',
                         height: '32px',
@@ -9216,8 +9363,8 @@ const MapManagement: React.FC = () => {
                         alignItems: 'center',
                         justifyContent: 'center',
                         border: 'none',
-                      color: historyIndex >= history.length - 1 ? '#d9d9d9' : '#1890ff'
-                    }}
+                        color: (mapType === 'grayscale' ? strokeHistoryIndex >= strokeHistory.length - 1 : historyIndex >= history.length - 1) ? '#d9d9d9' : '#1890ff'
+                      }}
                     title="重做 (Ctrl+Y / Cmd+Y)"
                   />
                   )}
@@ -9400,39 +9547,42 @@ const MapManagement: React.FC = () => {
                         children: (
                           <div style={{ padding: '12px 12px 12px 12px', flex: 1, overflow: 'auto' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                              <Button 
-                                type={selectedTool === 'select' ? 'primary' : 'text'}
-                                onClick={() => handleToolSelect('select')}
-                                style={{
-                                  height: '40px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  padding: '0 12px',
-                                  border: selectedTool === 'select' ? '1px solid #1890ff' : '1px solid #d9d9d9',
-                                  borderRadius: '6px',
-                                  background: selectedTool === 'select' ? '#e6f7ff' : '#fff',
-                                  color: selectedTool === 'select' ? '#1890ff' : '#666'
-                                }}
-                              >
-                                <div style={{ display: 'flex', alignItems: 'center' }}>
-                                  <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                    <rect x="2" y="2" width="10" height="10" fill="none" stroke="#1890ff" strokeWidth="1.5" rx="1"/>
-                                    <path d="M12 7 L15 9 L12 11 L13 9 Z" fill="#1890ff"/>
-                                  </svg>
-                                  选择工具
-                                </div>
-                                <span style={{ 
-                                  fontSize: '12px', 
-                                  opacity: 0.7,
-                                  fontWeight: 'normal',
-                                  backgroundColor: selectedTool === 'select' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
-                                  padding: '2px 6px',
-                                  borderRadius: '4px',
-                                  minWidth: '20px',
-                                  textAlign: 'center'
-                                }}>V</span>
-                              </Button>
+                              {/* 在黑白底图模式下隐藏选择工具 */}
+                              {(mapType as string) !== 'grayscale' && (
+                                <Button 
+                                  type={selectedTool === 'select' ? 'primary' : 'text'}
+                                  onClick={() => handleToolSelect('select')}
+                                  style={{
+                                    height: '40px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    padding: '0 12px',
+                                    border: selectedTool === 'select' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                    borderRadius: '6px',
+                                    background: selectedTool === 'select' ? '#e6f7ff' : '#fff',
+                                    color: selectedTool === 'select' ? '#1890ff' : '#666'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                      <rect x="2" y="2" width="10" height="10" fill="none" stroke="#1890ff" strokeWidth="1.5" rx="1"/>
+                                      <path d="M12 7 L15 9 L12 11 L13 9 Z" fill="#1890ff"/>
+                                    </svg>
+                                    选择工具
+                                  </div>
+                                  <span style={{ 
+                                    fontSize: '12px', 
+                                    opacity: 0.7,
+                                    fontWeight: 'normal',
+                                    backgroundColor: selectedTool === 'select' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                    padding: '2px 6px',
+                                    borderRadius: '4px',
+                                    minWidth: '20px',
+                                    textAlign: 'center'
+                                  }}>V</span>
+                                </Button>
+                              )}
                               
                               {/* 黑白底图模式下显示画笔和橡皮擦工具 */}
                               {mapType === 'grayscale' ? (
@@ -9472,6 +9622,36 @@ const MapManagement: React.FC = () => {
                                     }}>B</span>
                                   </Button>
                                   
+                                  {/* 画笔大小控制 */}
+                                  {selectedTool === 'brush' && (
+                                    <div style={{
+                                      padding: '8px 12px',
+                                      background: '#f8f9fa',
+                                      borderRadius: '6px',
+                                      border: '1px solid #e8e8e8'
+                                    }}>
+                                      <div style={{ 
+                                        fontSize: '12px', 
+                                        color: '#666', 
+                                        marginBottom: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between'
+                                      }}>
+                                        <span>画笔大小</span>
+                                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>{brushSize}px</span>
+                                      </div>
+                                      <Slider
+                                        min={1}
+                                        max={20}
+                                        value={brushSize}
+                                        onChange={(value) => setBrushSize(value)}
+                                        style={{ width: '120px', margin: 0 }}
+                                        tooltip={{ formatter: (value) => `${value}px` }}
+                                      />
+                                    </div>
+                                  )}
+                                  
                                   <Button 
                                     type={selectedTool === 'eraser' ? 'primary' : 'text'}
                                     onClick={() => handleToolSelect('eraser')}
@@ -9506,6 +9686,36 @@ const MapManagement: React.FC = () => {
                                       textAlign: 'center'
                                     }}>E</span>
                                   </Button>
+                                  
+                                  {/* 橡皮擦大小控制 */}
+                                  {selectedTool === 'eraser' && (
+                                    <div style={{
+                                      padding: '8px 12px',
+                                      background: '#f8f9fa',
+                                      borderRadius: '6px',
+                                      border: '1px solid #e8e8e8'
+                                    }}>
+                                      <div style={{ 
+                                        fontSize: '12px', 
+                                        color: '#666', 
+                                        marginBottom: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between'
+                                      }}>
+                                        <span>橡皮擦大小</span>
+                                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>{eraserSize}px</span>
+                                      </div>
+                                      <Slider
+                                        min={1}
+                                        max={20}
+                                        value={eraserSize}
+                                        onChange={(value) => setEraserSize(value)}
+                                        style={{ width: '120px', margin: 0 }}
+                                        tooltip={{ formatter: (value) => `${value}px` }}
+                                      />
+                                    </div>
+                                  )}
                                 </>
                               ) : (
                                 /* 拓扑地图模式下显示原有的绘图工具 */
@@ -9513,16 +9723,18 @@ const MapManagement: React.FC = () => {
                                   <Button 
                                     type={selectedTool === 'point' ? 'primary' : 'text'}
                                     onClick={() => handleToolSelect('point')}
+                                    disabled={(mapType as string) === 'grayscale'}
                                     style={{
                                       height: '40px',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
                                       padding: '0 12px',
-                                      border: selectedTool === 'point' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'node' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
                                       borderRadius: '6px',
-                                      background: selectedTool === 'point' ? '#e6f7ff' : '#fff',
-                                      color: selectedTool === 'point' ? '#1890ff' : '#666'
+                                      background: (mapType as string) === 'grayscale' ? '#f5f5f5' : (selectedTool === 'point' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'node' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
                                     }}
                                   >
                                     <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -9547,16 +9759,18 @@ const MapManagement: React.FC = () => {
                                   <Button 
                                     type={selectedTool === 'double-line' ? 'primary' : 'text'}
                                     onClick={() => handleToolSelect('double-line')}
+                                    disabled={(mapType as string) === 'grayscale'}
                                     style={{
                                       height: '40px',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
                                       padding: '0 12px',
-                                      border: selectedTool === 'double-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'double-line' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
                                       borderRadius: '6px',
-                                      background: selectedTool === 'double-line' ? '#e6f7ff' : '#fff',
-                                      color: selectedTool === 'double-line' ? '#1890ff' : '#666'
+                                      background: (mapType as string) === 'grayscale' ? '#f5f5f5' : (selectedTool === 'double-line' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'double-line' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
                                     }}
                                   >
                                     <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -9582,16 +9796,18 @@ const MapManagement: React.FC = () => {
                                   <Button 
                                     type={selectedTool === 'single-line' ? 'primary' : 'text'}
                                     onClick={() => handleToolSelect('single-line')}
+                                    disabled={(mapType as string) === 'grayscale'}
                                     style={{
                                       height: '40px',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
                                       padding: '0 12px',
-                                      border: selectedTool === 'single-line' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'single-line' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
                                       borderRadius: '6px',
-                                      background: selectedTool === 'single-line' ? '#e6f7ff' : '#fff',
-                                      color: selectedTool === 'single-line' ? '#1890ff' : '#666'
+                                      background: (mapType as string) === 'grayscale' ? '#fafafa' : (selectedTool === 'single-line' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'single-line' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
                                     }}
                                   >
                                     <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -9616,16 +9832,18 @@ const MapManagement: React.FC = () => {
                                   <Button 
                                     type={selectedTool === 'area' ? 'primary' : 'text'}
                                     onClick={() => handleToolSelect('area')}
+                                    disabled={(mapType as string) === 'grayscale'}
                                     style={{
                                       height: '40px',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
                                       padding: '0 12px',
-                                      border: selectedTool === 'area' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'area' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
                                       borderRadius: '6px',
-                                      background: selectedTool === 'area' ? '#e6f7ff' : '#fff',
-                                      color: selectedTool === 'area' ? '#1890ff' : '#666'
+                                      background: (mapType as string) === 'grayscale' ? '#fafafa' : (selectedTool === 'node' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'area' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
                                     }}
                                   >
                                     <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -9650,16 +9868,18 @@ const MapManagement: React.FC = () => {
                                   <Button 
                                     type={selectedTool === 'double-bezier' ? 'primary' : 'text'}
                                     onClick={() => handleToolSelect('double-bezier')}
+                                    disabled={(mapType as string) === 'grayscale'}
                                     style={{
                                       height: '40px',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
                                       padding: '0 12px',
-                                      border: selectedTool === 'double-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'double-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
                                       borderRadius: '6px',
-                                      background: selectedTool === 'double-bezier' ? '#e6f7ff' : '#fff',
-                                      color: selectedTool === 'double-bezier' ? '#1890ff' : '#666'
+                                      background: (mapType as string) === 'grayscale' ? '#f5f5f5' : (selectedTool === 'double-bezier' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'double-bezier' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
                                     }}
                                   >
                                     <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -9685,16 +9905,18 @@ const MapManagement: React.FC = () => {
                                   <Button 
                                     type={selectedTool === 'single-bezier' ? 'primary' : 'text'}
                                     onClick={() => handleToolSelect('single-bezier')}
+                                    disabled={(mapType as string) === 'grayscale'}
                                     style={{
                                       height: '40px',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'space-between',
                                       padding: '0 12px',
-                                      border: selectedTool === 'single-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'single-bezier' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
                                       borderRadius: '6px',
-                                      background: selectedTool === 'single-bezier' ? '#e6f7ff' : '#fff',
-                                      color: selectedTool === 'single-bezier' ? '#1890ff' : '#666'
+                                      background: (mapType as string) === 'grayscale' ? '#fafafa' : (selectedTool === 'single-bezier' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'single-bezier' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
                                     }}
                                   >
                                     <div style={{ display: 'flex', alignItems: 'center' }}>
