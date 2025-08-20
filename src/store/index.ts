@@ -16,29 +16,56 @@ interface AuthState {
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  isAuthenticated: false,
-  login: async (username: string, password: string) => {
-    // 模拟登录
-    if (username === 'admin' && password === '123456') {
-      const user: User = {
-        id: '1',
-        username: 'admin',
-        name: '管理员',
-        email: 'admin@example.com',
-        role: '超级管理员',
-        status: 'active'
-      };
-      set({ user, isAuthenticated: true });
-      return true;
-    }
-    return false;
-  },
-  logout: () => {
-    set({ user: null, isAuthenticated: false });
-  },
-}));
+// 从localStorage获取初始认证状态
+const getInitialAuthState = () => {
+  try {
+    const storedUser = localStorage.getItem('user');
+    const storedAuth = localStorage.getItem('isAuthenticated');
+    return {
+      user: storedUser ? JSON.parse(storedUser) : null,
+      isAuthenticated: storedAuth === 'true'
+    };
+  } catch {
+    return {
+      user: null,
+      isAuthenticated: false
+    };
+  }
+};
+
+export const useAuthStore = create<AuthState>((set) => {
+  const initialState = getInitialAuthState();
+  
+  return {
+    user: initialState.user,
+    isAuthenticated: initialState.isAuthenticated,
+    login: async (username: string, password: string) => {
+      // 模拟登录
+      if (username === 'admin' && password === '123456') {
+        const user: User = {
+          id: '1',
+          username: 'admin',
+          name: '管理员',
+          email: 'admin@example.com',
+          role: '超级管理员',
+          status: 'active'
+        };
+        // 保存到localStorage
+        localStorage.setItem('user', JSON.stringify(user));
+        localStorage.setItem('isAuthenticated', 'true');
+        set({ user, isAuthenticated: true });
+        return true;
+      }
+      return false;
+    },
+    logout: () => {
+      // 清除localStorage
+      localStorage.removeItem('user');
+      localStorage.removeItem('isAuthenticated');
+      set({ user: null, isAuthenticated: false });
+    },
+  };
+});
 
 interface AppState {
   collapsed: boolean;

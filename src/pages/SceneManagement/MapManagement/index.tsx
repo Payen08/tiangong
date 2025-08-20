@@ -96,6 +96,38 @@ interface MapData {
   updateUser: string;
 }
 
+// 地图线条数据类型
+interface MapLine {
+  id: string;
+  name: string;
+  startPointId: string;
+  endPointId: string;
+  type: 'straight' | 'curve' | 'doubleStraight' | 'doubleCurve' | 'single-bezier' | 'double-bezier' | 'single-line' | 'double-line';
+  color: string;
+  width: number;
+  cp1?: { x: number; y: number }; // 贝塞尔曲线控制点1
+  cp2?: { x: number; y: number }; // 贝塞尔曲线控制点2
+  controlPoints?: {
+    cp1?: { x: number; y: number };
+    cp2?: { x: number; y: number };
+  };
+  length?: number; // 线的长度
+}
+
+// 地图区域数据类型
+interface MapArea {
+  id: string;
+  name: string;
+  type: '禁行区域' | '调速区域' | 'forbidden' | 'cleaning' | 'virtual_wall' | 'slow_cleaning';
+  points: { x: number; y: number }[];
+  color: string;
+  fillOpacity: number;
+  fillColor?: string; // 填充颜色
+  strokeColor?: string; // 边框颜色
+  opacity?: number; // 透明度
+  speed?: number; // 调速区域的速度值
+}
+
 // 地图文件数据类型
 interface MapFile {
   id: string;
@@ -103,6 +135,21 @@ interface MapFile {
   thumbnail: string;
   status: 'active' | 'inactive';
   format: string;
+  topologyData?: {
+    points?: any[];
+    lines?: MapLine[];
+    areas?: MapArea[];
+    strokes?: any[];
+  };
+  grayscaleData?: string; // base64 图片数据
+  mapInfo?: {
+    originX?: number;
+    originY?: number;
+    direction?: number;
+    width?: number;
+    height?: number;
+    resolution?: number;
+  };
 }
 
 // 机器人设备类型
@@ -228,33 +275,7 @@ const MapManagement: React.FC = () => {
     return `1:${ratio}`;
   };
   
-  // 连线数据类型
-  interface MapLine {
-    id: string;
-    name: string; // 线名称，从e1开始
-    startPointId: string;
-    endPointId: string;
-    type: 'double-line' | 'single-line' | 'double-bezier' | 'single-bezier';
-    color?: string;
-    length?: number; // 线长度（像素）
-    // 贝塞尔曲线控制点（仅对贝塞尔曲线类型有效）
-    controlPoints?: {
-      cp1?: { x: number; y: number }; // 第一个控制点
-      cp2?: { x: number; y: number }; // 第二个控制点（双贝塞尔曲线使用）
-    };
-  }
-
-  // 区域数据类型
-  interface MapArea {
-    id: string;
-    name: string; // 区域名称，从a1开始
-    points: { x: number; y: number }[]; // 区域的顶点坐标
-    type?: string; // 区域类型：禁行区域、调速区域
-    speed?: number; // 调速值（仅调速区域使用）
-    fillColor: string; // 填充颜色
-    strokeColor: string; // 描边颜色
-    opacity: number; // 透明度
-  }
+  // 删除重复的接口定义，这些接口已在文件其他地方定义
 
   // 根据区域类型和速度获取颜色
   const getAreaColors = (area: MapArea) => {
@@ -1232,10 +1253,13 @@ const MapManagement: React.FC = () => {
   const completeAreaDrawing = () => {
     if (currentAreaPoints.length >= 3) {
       // 创建新区域
-      const newArea = {
+      const newArea: MapArea = {
         id: `area_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: `区域${areaCounter}`,
+        type: 'forbidden',
         points: [...currentAreaPoints],
+        color: '#1890ff',
+        fillOpacity: 0.3,
         fillColor: '#1890ff', // 蓝色填充
         strokeColor: '#1890ff', // 蓝色描边
         opacity: 0.3
@@ -2759,9 +2783,133 @@ const MapManagement: React.FC = () => {
 
   // 处理地图文件图片点击事件
   const handleImageClick = (file: MapFile) => {
-    // 地图缩略图点击事件 - 保持干净，不进行页面跳转
-    console.log('地图缩略图被点击:', file.name);
-  };
+    // 设置当前编辑的地图文件
+    setMapFileUploadedImage({
+      url: file.thumbnail,
+      name: file.name
+    });
+    
+    // 加载拓扑路网数据
+    if (file.topologyData) {
+      // 加载点数据
+      if (file.topologyData.points) {
+        setMapPoints(file.topologyData.points);
+        // 更新点计数器
+        const maxPointNumber = file.topologyData.points.reduce((max: number, point: any) => {
+          const pointNumber = parseInt(point.name.replace('p', ''));
+          return pointNumber > max ? pointNumber : max;
+        }, 0);
+        setPointCounter(maxPointNumber + 1);
+      }
+      
+      // 加载线数据
+      if (file.topologyData.lines) {
+        setMapLines(file.topologyData.lines);
+        // 更新线计数器
+        const maxLineNumber = file.topologyData.lines.reduce((max: number, line: MapLine) => {
+          const lineNumber = parseInt(line.name.replace('e', ''));
+          return lineNumber > max ? lineNumber : max;
+        }, 0);
+        setLineCounter(maxLineNumber + 1);
+      }
+      
+      // 加载区域数据
+      if (file.topologyData.areas) {
+        setMapAreas(file.topologyData.areas);
+        // 更新区域计数器
+        const maxAreaNumber = file.topologyData.areas.reduce((max: number, area: MapArea) => {
+          const areaNumber = parseInt(area.name.replace('a', ''));
+          return areaNumber > max ? areaNumber : max;
+        }, 0);
+        setAreaCounter(maxAreaNumber + 1);
+      }
+      
+      // 加载笔画数据
+      if (file.topologyData.strokes && pngCanvasRef.current) {
+        const canvas = pngCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // 清空画布
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          
+          // 重绘所有笔画
+          file.topologyData.strokes.forEach((stroke: any) => {
+            if (stroke.points && stroke.points.length > 0) {
+              ctx.beginPath();
+              ctx.strokeStyle = stroke.color || '#000000';
+              ctx.lineWidth = stroke.lineWidth || 2;
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              
+              ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+              for (let i = 1; i < stroke.points.length; i++) {
+                ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+              }
+              ctx.stroke();
+            }
+          });
+        }
+      }
+    }
+    
+    // 加载黑白地图数据到PNG画布
+    if (file.grayscaleData && pngCanvasRef.current) {
+      const canvas = pngCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const img = new Image();
+        img.onload = () => {
+          // 设置画布尺寸为图片尺寸
+          canvas.width = img.width;
+          canvas.height = img.height;
+          
+          // 绘制黑白底图
+          ctx.drawImage(img, 0, 0);
+          
+          // 如果有笔画数据，在底图上重绘
+          if (file.topologyData?.strokes) {
+            file.topologyData.strokes.forEach((stroke: any) => {
+              if (stroke.points && stroke.points.length > 0) {
+                ctx.beginPath();
+                ctx.strokeStyle = stroke.color || '#000000';
+                ctx.lineWidth = stroke.lineWidth || 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+                for (let i = 1; i < stroke.points.length; i++) {
+                  ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+                }
+                ctx.stroke();
+              }
+            });
+          }
+        };
+        img.src = file.grayscaleData;
+      }
+    }
+    
+    // 设置地图编辑器的初始状态
+    setMapInfo({
+      mapName: file.name,
+      originX: file.mapInfo?.originX || 0,
+      originY: file.mapInfo?.originY || 0,
+      direction: file.mapInfo?.direction || 0,
+      width: file.mapInfo?.width || 100,
+      height: file.mapInfo?.height || 100,
+      resolution: file.mapInfo?.resolution || 0.05
+    });
+    
+    // 设置为阅览模式
+    setCurrentMode('view');
+    setIsReadOnlyMode(true);
+    
+    // 进入地图编辑步骤并显示侧滑抽屉
+    setAddMapFileStep(2);
+    setAddMapFileDrawerVisible(true);
+    
+    message.info('进入拓扑地图阅览模式');
+   };
 
   // 新增地图文件相关处理函数
   const handleAddMapFile = () => {
@@ -2781,18 +2929,62 @@ const MapManagement: React.FC = () => {
     setAddMapFileStep(1);
   };
 
+  // 生成包含拓扑数据的缩略图
+  const generateThumbnailWithTopology = () => {
+    return mapFileUploadedImage?.url || 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center';
+  };
+  
+
+
   const handleAddMapFileSubmit = async (values: any) => {
     try {
       setSubmitAndExitLoading(true);
+      
+      // 获取PNG画布数据
+      let pngData = null;
+      try {
+        if (pngCanvasRef.current) {
+          pngData = pngCanvasRef.current.toDataURL('image/png');
+          console.log('📸 [PNG数据获取] 成功获取PNG画布数据:', {
+            '数据长度': pngData.length,
+            '数据前缀': pngData.substring(0, 50) + '...'
+          });
+        } else {
+          console.warn('⚠️ [PNG数据获取] PNG画布引用不存在');
+        }
+      } catch (pngError) {
+        console.error('❌ [PNG数据获取] 获取PNG数据失败:', pngError);
+      }
+      
+      // 生成包含拓扑数据的缩略图
+      const thumbnailWithTopology = await generateThumbnailWithTopology();
+      
       // 模拟API调用
       await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log('💾 [地图文件保存] 保存数据:', {
+        '地图文件名': values.mapFileName,
+        'PNG数据': pngData ? '已获取' : '未获取',
+        '笔画数据': allStrokes.length + ' 条笔画',
+        '擦除点数据': erasedPixels.length + ' 个擦除点',
+        '拓扑数据': `${mapPoints.length}个点, ${mapLines.length}条线, ${mapAreas.length}个区域`
+      });
       
       const newMapFile: MapFile = {
         id: `file_${Date.now()}`,
         name: values.mapFileName,
-        thumbnail: mapFileUploadedImage?.url || 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
+        thumbnail: thumbnailWithTopology, // 使用包含拓扑数据的缩略图
         status: 'inactive',
         format: 'PNG',
+        // 保存地图编辑器中的数据
+        topologyData: {
+          points: mapPoints,
+          lines: mapLines,
+          areas: mapAreas,
+          strokes: allStrokes
+        },
+        grayscaleData: pngData || undefined, // 保存PNG画布数据
+        mapInfo: mapInfo
       };
       
       // 将新地图文件添加到对应地图的文件列表中
@@ -2813,7 +3005,7 @@ const MapManagement: React.FC = () => {
     } catch (error) {
       message.error('添加失败，请重试');
     } finally {
-      setSubmitAndNextLoading(false);
+      setSubmitAndExitLoading(false);
     }
   };
 
@@ -2826,12 +3018,21 @@ const MapManagement: React.FC = () => {
       // 模拟API调用
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      // 生成包含拓扑数据的缩略图
+      const thumbnailData = generateThumbnailWithTopology();
+      
       const newMapFile: MapFile = {
         id: `file_${Date.now()}`,
         name: values.mapFileName,
-        thumbnail: mapFileUploadedImage?.url || 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
+        thumbnail: thumbnailData,
         status: 'inactive',
         format: 'PNG',
+        topologyData: {
+          points: mapPoints,
+          lines: mapLines,
+          areas: mapAreas // 保存区域数据
+        },
+        grayscaleData: '' // 空的base64图片数据
       };
       
       // 将新地图文件添加到对应地图的文件列表中
@@ -2875,12 +3076,29 @@ const MapManagement: React.FC = () => {
       // 模拟API调用
       await new Promise(resolve => setTimeout(resolve, 1000));
       
+      // 生成包含拓扑数据的缩略图
+      const thumbnailData = generateThumbnailWithTopology();
+      
       const newMapFile: MapFile = {
         id: `file_${Date.now()}`,
         name: values.mapFileName,
-        thumbnail: mapFileUploadedImage?.url || 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
+        thumbnail: thumbnailData,
         status: 'inactive',
         format: 'PNG',
+        topologyData: {
+          points: mapPoints,
+          lines: mapLines,
+          areas: mapAreas // 保存区域数据
+        },
+        grayscaleData: '', // 空的base64图片数据
+        mapInfo: {
+          originX: mapInfo.originX,
+          originY: mapInfo.originY,
+          direction: mapInfo.direction,
+          width: mapInfo.width,
+          height: mapInfo.height,
+          resolution: mapInfo.resolution
+        }
       };
       
       // 将新地图文件添加到对应地图的文件列表中
@@ -2973,7 +3191,7 @@ const MapManagement: React.FC = () => {
   
   // 地图编辑状态跟踪
   const [, setHasUnsavedChanges] = useState(false);
-  const [initialMapState, setInitialMapState] = useState<{points: any[], lines: MapLine[]}>({points: [], lines: []});
+  const [initialMapState, setInitialMapState] = useState<{points: any[], lines: MapLine[], areas?: MapArea[]}>({points: [], lines: [], areas: []});
   
   // 检查是否有未保存的修改
   const checkForUnsavedChanges = () => {
@@ -3003,20 +3221,61 @@ const MapManagement: React.FC = () => {
 
   
   const handleSave = () => {
-    // 保存当前地图编辑状态（不提交到后台）
-    const currentState = { points: mapPoints, lines: mapLines };
+    // 保存当前地图编辑状态（不提交到后台），包括区域数据
+    const currentState = { points: mapPoints, lines: mapLines, areas: mapAreas };
     setInitialMapState(currentState);
     setHasUnsavedChanges(false);
+    
+    // 获取PNG画布数据
+    let pngImageData = null;
+    if (pngCanvasRef.current) {
+      try {
+        // 将Canvas内容转换为Base64格式的PNG数据
+        pngImageData = pngCanvasRef.current.toDataURL('image/png');
+        console.log('PNG画布数据已获取:', pngImageData ? '数据长度: ' + pngImageData.length : '无数据');
+      } catch (error) {
+        console.error('获取PNG画布数据失败:', error);
+        message.warning('PNG画布数据获取失败，但其他数据已保存');
+      }
+    }
+    
     message.success('地图已保存');
-    console.log('保存地图数据:', { mapPoints, mapLines });
+    console.log('保存地图数据:', { 
+      mapPoints, 
+      mapLines, 
+      mapAreas,  // 添加区域数据到日志
+      pngImageData: pngImageData ? '已获取PNG数据' : '无PNG数据',
+      allStrokes: allStrokes.length + '个笔画',
+      erasedPixels: erasedPixels.length + '个擦除点'
+    });
   };
   
   // handleSubmit函数已移除
   
   const handleSubmitAndExit = () => {
+    // 获取PNG画布数据
+    let pngImageData = null;
+    if (pngCanvasRef.current) {
+      try {
+        // 将Canvas内容转换为Base64格式的PNG数据
+        pngImageData = pngCanvasRef.current.toDataURL('image/png');
+        console.log('PNG画布数据已获取:', pngImageData ? '数据长度: ' + pngImageData.length : '无数据');
+      } catch (error) {
+        console.error('获取PNG画布数据失败:', error);
+        message.warning('PNG画布数据获取失败，但其他数据将正常提交');
+      }
+    }
+    
     // 提交并退出
     message.success('地图已提交，正在退出编辑器');
-    console.log('提交并退出:', { mapPoints, mapLines });
+    console.log('提交并退出:', { 
+      mapPoints, 
+      mapLines, 
+      mapAreas,  // 添加区域数据到日志
+      pngImageData: pngImageData ? '已获取PNG数据' : '无PNG数据',
+      allStrokes: allStrokes.length + '个笔画',
+      erasedPixels: erasedPixels.length + '个擦除点'
+    });
     setTimeout(() => {
       handleCloseAddMapFileDrawer();
     }, 1000);
@@ -3743,27 +4002,37 @@ const MapManagement: React.FC = () => {
     event.stopPropagation();
     
     // 连线工具模式处理
-    if (['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(selectedTool)) {      handlePointConnection(pointId);
+    if (['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(selectedTool)) {
+      handlePointConnection(pointId);
       return;
     }
     
-    if (selectedTool === 'select') {      let newSelectedPoints: string[];
+    if (selectedTool === 'select') {
+      let newSelectedPoints: string[];
       
-      if (event.ctrlKey || event.metaKey) {        // Ctrl/Cmd + 点击：多选
+      if (event.ctrlKey || event.metaKey) {
+        // Ctrl/Cmd + 点击：多选
         const wasSelected = selectedPoints.includes(pointId);
         newSelectedPoints = wasSelected
           ? selectedPoints.filter(id => id !== pointId)
-          : [...selectedPoints, pointId];      } else {        // 普通点击：单选
-        newSelectedPoints = [pointId];      }      setSelectedPoints(newSelectedPoints);
+          : [...selectedPoints, pointId];
+      } else {
+        // 普通点击：单选
+        newSelectedPoints = [pointId];
+      }
+      setSelectedPoints(newSelectedPoints);
       
       // 清除线的选中状态（点和线不能同时选中）
-      if (selectedLines.length > 0) {        setSelectedLines([]);
+      if (selectedLines.length > 0) {
+        setSelectedLines([]);
       }
       
       // 注意：不清除区域的选中状态，允许顶点选择和区域选择同时存在
       
       // 更新框选矩形以围绕选中的点
-       if (newSelectedPoints.length > 0) {         const selectedPointsData = mapPoints.filter(point => newSelectedPoints.includes(point.id));         // 考虑点的实际大小（半径8px）和选中时的缩放（1.2倍）
+       if (newSelectedPoints.length > 0) {
+         const selectedPointsData = mapPoints.filter(point => newSelectedPoints.includes(point.id));
+         // 考虑点的实际大小（半径8px）和选中时的缩放（1.2倍）
          const pointRadius = 8 * 1.2; // 选中时点会放大到1.2倍
          const pointMinX = Math.min(...selectedPointsData.map(p => p.x - pointRadius));
          const pointMaxX = Math.max(...selectedPointsData.map(p => p.x + pointRadius));
@@ -3784,11 +4053,12 @@ const MapManagement: React.FC = () => {
          
          setSelectionStart(newSelectionStart);
          setSelectionEnd(newSelectionEnd);
-      } else {        // 没有选中点时清除框选
+      } else {
+        // 没有选中点时清除框选
         setSelectionStart(null);
         setSelectionEnd(null);
       }
-    } else {    }
+    }
   };
 
   // 处理点连接逻辑
@@ -3807,9 +4077,6 @@ const MapManagement: React.FC = () => {
   };
 
   const handlePointConnection = (pointId: string) => {
-
-
-    
     if (!isConnecting && !continuousConnecting) {
       // 开始连线模式
       setIsConnecting(true);
@@ -3850,6 +4117,7 @@ const MapManagement: React.FC = () => {
             endPointId: pointId,
             type: 'double-line',
             color: '#87CEEB',
+            width: 2,
             length: Math.round(lineLength)
           };
           
@@ -3869,6 +4137,7 @@ const MapManagement: React.FC = () => {
             endPointId: pointId,
             type: selectedTool as 'single-line' | 'double-bezier' | 'single-bezier',
             color: '#87CEEB',
+            width: 2,
             length: Math.round(lineLength)
           };
           
@@ -3932,7 +4201,55 @@ const MapManagement: React.FC = () => {
     }
   };
 
-  // 框选开始处理
+  // 框选结束处理函数
+  const handleSelectionEndWithState = (isSelecting: boolean, selectionStart: {x: number, y: number} | null, selectionEnd: {x: number, y: number} | null) => {
+    if (isSelecting && selectionStart && selectionEnd) {
+      const minX = Math.min(selectionStart.x, selectionEnd.x);
+      const maxX = Math.max(selectionStart.x, selectionEnd.x);
+      const minY = Math.min(selectionStart.y, selectionEnd.y);
+      const maxY = Math.max(selectionStart.y, selectionEnd.y);
+      
+      // 检查框选区域大小（至少5像素）
+      if (Math.abs(maxX - minX) > 5 && Math.abs(maxY - minY) > 5) {
+        // 查找框选区域内的点
+        const pointsInSelection = mapPoints.filter(point => {
+          return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
+        });
+        
+        setSelectedPoints(pointsInSelection.map(p => p.id));
+        
+        if (pointsInSelection.length > 0) {
+          // 有选中的点，计算选中点的边界
+          const selectedPointsData = pointsInSelection;
+          const pointRadius = 8; // 点的半径
+          const pointMinX = Math.min(...selectedPointsData.map(p => p.x - pointRadius));
+          const pointMaxX = Math.max(...selectedPointsData.map(p => p.x + pointRadius));
+          const pointMinY = Math.min(...selectedPointsData.map(p => p.y - pointRadius));
+          const pointMaxY = Math.max(...selectedPointsData.map(p => p.y + pointRadius));
+          
+          // 更新框选区域为选中点的边界
+          setSelectionStart({ x: pointMinX, y: pointMinY });
+          setSelectionEnd({ x: pointMaxX, y: pointMaxY });
+        } else {
+          // 没有选中任何点，清除框选状态
+          setIsSelecting(false);
+          setSelectionStart(null);
+          setSelectionEnd(null);
+        }
+      } else {
+        // 框选区域太小，清除选择
+        setSelectedPoints([]);
+        setIsSelecting(false);
+        setSelectionStart(null);
+        setSelectionEnd(null);
+      }
+    } else {
+      // 没有有效的框选，清除状态
+      setIsSelecting(false);
+      setSelectionStart(null);
+      setSelectionEnd(null);
+    }
+  };
 
   // 框选开始处理
   const handleSelectionStart = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -4014,120 +4331,7 @@ const MapManagement: React.FC = () => {
   
   // 框选移动处理（现在由全局事件处理，这个函数保留但不使用）
   // 框选移动处理函数 - 已移除未使用的函数
-  
-  // 框选结束处理（带状态参数）
-  const handleSelectionEndWithState = (wasSelecting: boolean, startPos: {x: number, y: number} | null, endPos: {x: number, y: number} | null) => {
-    if (wasSelecting && startPos && endPos) {
-      // startPos和endPos已经是画布坐标，直接使用即可
-      // 计算框选区域（画布坐标）
-      const minX = Math.min(startPos.x, endPos.x);
-      const maxX = Math.max(startPos.x, endPos.x);
-      const minY = Math.min(startPos.y, endPos.y);
-      const maxY = Math.max(startPos.y, endPos.y);
-      
-      // 检查框选区域是否足够大（避免误触）
-      const width = maxX - minX;
-      const height = maxY - minY;
-      const minSelectionSize = 1; // 进一步降低最小框选尺寸，提高敏感度
-      
-      console.log('🎯 [框选调试] handleSelectionEndWithState 框选结束处理:', {
-        '1_框选状态': wasSelecting,
-        '2_起始画布坐标': startPos ? `{x: ${startPos.x.toFixed(2)}, y: ${startPos.y.toFixed(2)}}` : 'null',
-        '3_结束画布坐标': endPos ? `{x: ${endPos.x.toFixed(2)}, y: ${endPos.y.toFixed(2)}}` : 'null',
-        '4_框选区域': `{minX: ${minX.toFixed(2)}, maxX: ${maxX.toFixed(2)}, minY: ${minY.toFixed(2)}, maxY: ${maxY.toFixed(2)}}`,
-        '5_区域大小': `{width: ${width.toFixed(2)}, height: ${height.toFixed(2)}}`,
-        '6_最小尺寸要求': minSelectionSize,
-        '7_是否满足尺寸': width > minSelectionSize || height > minSelectionSize
-      });
-      
-      if (width > minSelectionSize || height > minSelectionSize) {
-        // 找出在框选区域内的点（使用画布坐标判断，考虑点的半径）
-        console.log('🔍 [碰撞检测] 开始检测点与框选区域的碰撞:', {
-          '总点数': mapPoints.length,
-          '框选区域': `{minX: ${minX.toFixed(2)}, maxX: ${maxX.toFixed(2)}, minY: ${minY.toFixed(2)}, maxY: ${maxY.toFixed(2)}}`
-        });
-        
-        const selectedPointIds = mapPoints
-          .filter(point => {
-            // 点的半径（包括选中时的缩放效果）
-            const pointRadius = 8;
-            
-            // 检查圆形与矩形是否相交
-            // 计算圆心到矩形的最近距离
-            const closestX = Math.max(minX, Math.min(point.x, maxX));
-            const closestY = Math.max(minY, Math.min(point.y, maxY));
-            
-            // 计算圆心到最近点的距离
-            const distanceX = point.x - closestX;
-            const distanceY = point.y - closestY;
-            const distanceSquared = distanceX * distanceX + distanceY * distanceY;
-            
-            // 如果距离小于等于半径，则相交
-            const inSelection = distanceSquared <= (pointRadius * pointRadius);
-            
-            // 调试每个点的检测过程
-            console.log(`🔍 [碰撞检测] 点 ${point.name} (${point.id}):`, {
-              '点坐标': `{x: ${point.x.toFixed(2)}, y: ${point.y.toFixed(2)}}`,
-              '最近点': `{x: ${closestX.toFixed(2)}, y: ${closestY.toFixed(2)}}`,
-              '距离': `{dx: ${distanceX.toFixed(2)}, dy: ${distanceY.toFixed(2)}, distance: ${Math.sqrt(distanceSquared).toFixed(2)}}`,
-              '半径': pointRadius,
-              '是否相交': inSelection
-            });
-            
-            return inSelection;
-          })
-          .map(point => point.id);
-        
-        console.log('✅ [框选结果] 碰撞检测完成:', {
-          '选中点数量': selectedPointIds.length,
-          '选中点ID': selectedPointIds,
-          '选中点详情': selectedPointIds.map(id => {
-            const point = mapPoints.find(p => p.id === id);
-            return point ? `${point.name}(${point.x.toFixed(2)}, ${point.y.toFixed(2)})` : id;
-          })
-        });
-        
-        setSelectedPoints(selectedPointIds);
-        
-        // 如果有选中的点，保持框选状态但更新框选区域为选中点的边界
-        if (selectedPointIds.length > 0) {
-          const selectedPointsData = mapPoints.filter(point => selectedPointIds.includes(point.id));
-          // 考虑点的实际大小（半径8px）和选中时的缩放（1.2倍）
-          const pointRadius = 8 * 1.2; // 选中时点会放大到1.2倍
-          const pointMinX = Math.min(...selectedPointsData.map(p => p.x - pointRadius));
-          const pointMaxX = Math.max(...selectedPointsData.map(p => p.x + pointRadius));
-          const pointMinY = Math.min(...selectedPointsData.map(p => p.y - pointRadius));
-          const pointMaxY = Math.max(...selectedPointsData.map(p => p.y + pointRadius));
-          
-          // 添加少量边距让框选框紧贴圆圈边缘
-          const padding = 3;
-          const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
-          const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
-          
-          setSelectionStart(newSelectionStart);
-          setSelectionEnd(newSelectionEnd);
-          setIsSelecting(false); // 结束拖拽状态但保持框选显示
-        } else {
-          // 没有选中点时清除框选
-          setIsSelecting(false);
-          setSelectionStart(null);
-          setSelectionEnd(null);
-        }
-      } else {
-        // 框选区域太小，清除框选
-        setIsSelecting(false);
-        setSelectionStart(null);
-        setSelectionEnd(null);
-      }
-    } else {
-      setIsSelecting(false);
-      setSelectionStart(null);
-      setSelectionEnd(null);
-    }
-  };
-  
-  // 框选结束处理（兼容旧接口）
-  // 框选结束处理函数 - 已移除未使用的函数
+
 
   // 保存点编辑
   const handleSavePointEdit = (values: any) => {
@@ -4594,6 +4798,8 @@ const MapManagement: React.FC = () => {
               points: [...currentAreaPoints],
               type: '调速区域',
               speed: 0.8,
+              color: getAreaColors({ type: '调速区域', speed: 0.8 } as MapArea).strokeColor,
+              fillOpacity: 0.3,
               fillColor: getAreaColors({ type: '调速区域', speed: 0.8 } as MapArea).fillColor,
               strokeColor: getAreaColors({ type: '调速区域', speed: 0.8 } as MapArea).strokeColor,
               opacity: 0.3
@@ -4677,10 +4883,14 @@ const MapManagement: React.FC = () => {
          const newArea: MapArea = {
            id: `area_${Date.now()}`,
            name: `a${mapAreas.length + 1}`,
+           type: '调速区域',
            points: [...currentAreaPoints],
+           color: '#1890ff',
+           fillOpacity: 0.3,
            fillColor: '#1890ff',
            strokeColor: '#1890ff',
-           opacity: 0.3
+           opacity: 0.3,
+           speed: 50
          };
          
          setMapAreas(prev => [...prev, newArea]);
@@ -5126,7 +5336,7 @@ const MapManagement: React.FC = () => {
     const angle = Math.atan2(dy, dx);
     
     switch (line.type) {
-      case 'double-line':
+      case 'double-line': {
         // 双向直线：渲染一条带双向箭头的线
         const isSelected = isLineSelected(line.id);
         const selectedStroke = isSelected ? '#1890ff' : lineColor;
@@ -5157,8 +5367,9 @@ const MapManagement: React.FC = () => {
             {renderArrow(startCoords.x, startCoords.y, angle + Math.PI, selectedStroke, `${line.id}-start-arrow`)}
           </g>
         );
+      }
         
-      case 'single-line':
+      case 'single-line': {
         // 单向直线，单向箭头指向终点
         const isSelectedSingle = isLineSelected(line.id);
         const selectedStrokeSingle = isSelectedSingle ? '#1890ff' : lineColor;
@@ -5185,8 +5396,9 @@ const MapManagement: React.FC = () => {
             {renderArrow(endCoords.x, endCoords.y, angle, selectedStrokeSingle, `${line.id}-arrow`)}
           </g>
         );
+      }
         
-      case 'double-bezier':
+      case 'double-bezier': {
         // 双向贝塞尔曲线，使用三次贝塞尔曲线（C命令）实现真正的S形曲线
         const controlOffset = 50 * canvasScale; // 控制点偏移也需要根据缩放调整
         const isSelectedDoubleBezier = isLineSelected(line.id);
@@ -5227,8 +5439,9 @@ const MapManagement: React.FC = () => {
             {renderArrow(endCoords.x, endCoords.y, endTangentAngleDouble, selectedStrokeDoubleBezier, `${line.id}-end-arrow`)}
           </g>
         );
+      }
         
-      case 'single-bezier':
+      case 'single-bezier': {
         // 单向贝塞尔曲线，使用三次贝塞尔曲线（C命令）支持两个控制点绘制S形
         const controlOffset_single = 50 * canvasScale; // 控制点偏移也需要根据缩放调整
         const isSelectedSingleBezier = isLineSelected(line.id);
@@ -5266,6 +5479,7 @@ const MapManagement: React.FC = () => {
             {renderArrow(endCoords.x, endCoords.y, endTangentAngleSingle, selectedStrokeSingleBezier, `${line.id}-arrow`)}
           </g>
         );
+      }
         
       default:
         return null;
@@ -5386,19 +5600,29 @@ const MapManagement: React.FC = () => {
     if (!clickedLine) {
       console.error('❌ [线点击埋点] 未找到对应的线数据', { lineId, availableLines: mapLines.map(l => l.id) });
       return;
-    }    event.stopPropagation();
+    }
     
-    if (selectedTool === 'select') {      let newSelectedLines: string[];
+    event.stopPropagation();
+    
+    if (selectedTool === 'select') {
+      let newSelectedLines: string[];
       
-      if (event.ctrlKey || event.metaKey) {        // Ctrl/Cmd + 点击：多选
+      if (event.ctrlKey || event.metaKey) {
+        // Ctrl/Cmd + 点击：多选
         const wasSelected = selectedLines.includes(lineId);
         newSelectedLines = wasSelected
           ? selectedLines.filter(id => id !== lineId)
-          : [...selectedLines, lineId];      } else {        // 普通点击：单选
-        newSelectedLines = [lineId];      }      setSelectedLines(newSelectedLines);
+          : [...selectedLines, lineId];
+      } else {
+        // 普通点击：单选
+        newSelectedLines = [lineId];
+      }
+      
+      setSelectedLines(newSelectedLines);
       
       // 清除点的选中状态（线和点不能同时选中）
-      if (selectedPoints.length > 0) {        setSelectedPoints([]);
+      if (selectedPoints.length > 0) {
+        setSelectedPoints([]);
         setSelectionStart(null);
         setSelectionEnd(null);
       }
@@ -5605,7 +5829,7 @@ const MapManagement: React.FC = () => {
         version: '1.0.0',
         status: 'inactive',
         thumbnail: '/api/placeholder/150/100',
-        description: values.description || '',
+        description: values.description ?? '',
         createTime: now.toISOString().split('T')[0],
         updateTime: now.toISOString().split('T')[0] + ' ' + now.toTimeString().split(' ')[0],
         updateUser: '当前用户'
@@ -8575,9 +8799,8 @@ const MapManagement: React.FC = () => {
                           mousePositionRef.current = newMousePosition; // 立即更新ref
                           // 立即触发强制重新渲染，确保虚线能及时显示
                           setForceRender(prev => prev + 1);
-                        } else {
-                    
                         }
+                        // else 分支暂时无需处理
                         
                         // 在区域绘制模式下更新鼠标位置
                         if (isDrawingArea && currentAreaPoints.length > 0) {
