@@ -67,6 +67,20 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
+// 添加CSS样式
+const thumbnailHoverStyle = `
+  .thumbnail-overlay:hover {
+    opacity: 1 !important;
+  }
+`;
+
+// 将样式注入到页面中
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = thumbnailHoverStyle;
+  document.head.appendChild(styleElement);
+}
+
 const { Title } = Typography;
 
 // 地图数据类型
@@ -2745,32 +2759,8 @@ const MapManagement: React.FC = () => {
 
   // 处理地图文件图片点击事件
   const handleImageClick = (file: MapFile) => {
-    // 进入阅览模式的拓扑地图编辑器
-    setAddMapFileStep(2); // 进入地图编辑步骤
-    setAddMapFileDrawerVisible(true);
-    
-    // 设置阅览模式的地图信息
-    setMapInfo({
-      mapName: file.name,
-      originX: 0,
-      originY: 0,
-      direction: 0,
-      width: 100,
-      height: 100,
-      resolution: 0.05
-    });
-    
-    // 设置上传的图片
-    setMapFileUploadedImage({
-      url: file.thumbnail,
-      name: file.name
-    });
-    
-    // 设置为阅览模式（拓扑地图）
-    setMapMode('topology'); // 设置地图类型为拓扑地图
-    setIsReadOnlyMode(true); // 设置为阅览模式
-    
-    message.info('进入拓扑地图阅览模式');
+    // 地图缩略图点击事件 - 保持干净，不进行页面跳转
+    console.log('地图缩略图被点击:', file.name);
   };
 
   // 新增地图文件相关处理函数
@@ -5513,15 +5503,54 @@ const MapManagement: React.FC = () => {
                 size="small"
                 hoverable
                 cover={
-                  <img
-                    alt={file.name}
-                    src={file.thumbnail}
-                    style={{
-                      height: 120,
-                      objectFit: 'cover',
-                      backgroundColor: '#f5f5f5',
-                    }}
-                  />
+                  <div style={{ position: 'relative', overflow: 'hidden' }}>
+                    <img
+                      alt={file.name}
+                      src={file.thumbnail}
+                      style={{
+                        height: 120,
+                        objectFit: 'cover',
+                        backgroundColor: '#f5f5f5',
+                        width: '100%',
+                        transition: 'all 0.3s ease',
+                      }}
+                      onClick={() => handleImageClick(file)}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        opacity: 0,
+                        transition: 'opacity 0.3s ease',
+                        cursor: 'pointer',
+                      }}
+                      className="thumbnail-overlay"
+                      onClick={() => handleImageClick(file)}
+                    >
+                      <EyeOutlined
+                        style={{
+                          fontSize: '24px',
+                          color: 'white',
+                        }}
+                      />
+                      <span
+                        style={{
+                          color: 'white',
+                          marginLeft: '8px',
+                          fontSize: '14px',
+                        }}
+                      >
+                        查看详情
+                      </span>
+                    </div>
+                  </div>
                 }
                 actions={[
 
@@ -5531,7 +5560,7 @@ const MapManagement: React.FC = () => {
                     title="删除"
                   />,
 
-                  <EyeOutlined
+                  <EditOutlined
                     key="details"
                     onClick={() => handleViewDetails(file)}
                     title="编辑"
@@ -6116,15 +6145,54 @@ const MapManagement: React.FC = () => {
                     size="small"
                             hoverable
                             cover={
-                              <img
-                                alt={file.name}
-                                src={file.thumbnail}
-                                style={{
-                                  height: 120,
-                                  objectFit: 'cover',
-                                  backgroundColor: '#f5f5f5',
-                                }}
-                              />
+                              <div style={{ position: 'relative', overflow: 'hidden' }}>
+                                <img
+                                  alt={file.name}
+                                  src={file.thumbnail}
+                                  style={{
+                                    height: 120,
+                                    objectFit: 'cover',
+                                    backgroundColor: '#f5f5f5',
+                                    width: '100%',
+                                    transition: 'all 0.3s ease',
+                                  }}
+                                  onClick={() => handleImageClick(file)}
+                                />
+                                <div
+                                  style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    opacity: 0,
+                                    transition: 'opacity 0.3s ease',
+                                    cursor: 'pointer',
+                                  }}
+                                  className="thumbnail-overlay"
+                                  onClick={() => handleImageClick(file)}
+                                >
+                                  <EyeOutlined
+                                    style={{
+                                      fontSize: '24px',
+                                      color: 'white',
+                                    }}
+                                  />
+                                  <span
+                                    style={{
+                                      color: 'white',
+                                      marginLeft: '8px',
+                                      fontSize: '14px',
+                                    }}
+                                  >
+                                    查看详情
+                                  </span>
+                                </div>
+                              </div>
                             }
                             actions={[
                               <DeleteOutlined
@@ -6132,7 +6200,7 @@ const MapManagement: React.FC = () => {
                                 onClick={() => handleDeleteFile(file)}
                                 title="删除"
                               />,
-                              <EyeOutlined
+                              <EditOutlined
                                 key="detail"
                                 onClick={() => handleDetail(file)}
                                 title="编辑"
