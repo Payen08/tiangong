@@ -135,6 +135,7 @@ interface MapFile {
   thumbnail: string;
   status: 'active' | 'inactive';
   format: string;
+  description?: string;
   topologyData?: {
     points?: any[];
     lines?: MapLine[];
@@ -143,6 +144,7 @@ interface MapFile {
   };
   grayscaleData?: string; // base64 图片数据
   mapInfo?: {
+    mapName?: string;
     originX?: number;
     originY?: number;
     direction?: number;
@@ -245,6 +247,8 @@ const MapManagement: React.FC = () => {
   const [mapFileUploadedImage, setMapFileUploadedImage] = useState<any>(null);
   const [submitAndNextLoading, setSubmitAndNextLoading] = useState(false);
   const [submitAndExitLoading, setSubmitAndExitLoading] = useState(false);
+  const [currentEditFile, setCurrentEditFile] = useState<MapFile | null>(null); // 当前编辑的地图文件
+  const [isEditMode, setIsEditMode] = useState(false); // 是否为编辑模式
 
   
   // 地图信息相关状态
@@ -2732,7 +2736,162 @@ const MapManagement: React.FC = () => {
   };
 
   const handleDetail = (file: MapFile) => {
-    console.log('查看文件详情:', file);
+    console.log('🔧 [地图文件编辑标识] 开始编辑地图文件:', {
+      '文件ID': file.id,
+      '文件名称': file.name,
+      '文件状态': file.status,
+      '缩略图': file.thumbnail
+    });
+    
+    // 设置当前编辑的地图文件
+    setCurrentEditFile(file);
+    console.log('🔧 [地图文件编辑标识] 设置currentEditFile完成:', file);
+    
+    setMapFileUploadedImage({
+      url: file.thumbnail,
+      name: file.name
+    });
+    console.log('🔧 [地图文件编辑标识] 设置mapFileUploadedImage完成:', {
+      url: file.thumbnail,
+      name: file.name
+    });
+    
+    // 预加载拓扑路网数据（为后续进入地图编辑器做准备）
+    if (file.topologyData) {
+      // 加载点数据
+      if (file.topologyData.points) {
+        setMapPoints(file.topologyData.points);
+        // 更新点计数器
+        const maxPointNumber = file.topologyData.points.reduce((max: number, point: any) => {
+          const pointNumber = parseInt(point.name.replace('p', ''));
+          return pointNumber > max ? pointNumber : max;
+        }, 0);
+        setPointCounter(maxPointNumber + 1);
+      }
+      
+      // 加载线数据
+      if (file.topologyData.lines) {
+        setMapLines(file.topologyData.lines);
+        // 更新线计数器
+        const maxLineNumber = file.topologyData.lines.reduce((max: number, line: MapLine) => {
+          const lineNumber = parseInt(line.name.replace('e', ''));
+          return lineNumber > max ? lineNumber : max;
+        }, 0);
+        setLineCounter(maxLineNumber + 1);
+      }
+      
+      // 加载区域数据
+      if (file.topologyData.areas) {
+        console.log('🔄 [编辑模式] 预加载区域数据:', file.topologyData.areas);
+        setMapAreas(file.topologyData.areas);
+        // 更新区域计数器
+        const maxAreaNumber = file.topologyData.areas.reduce((max: number, area: MapArea) => {
+          const areaNumber = parseInt(area.name.replace('a', ''));
+          return areaNumber > max ? areaNumber : max;
+        }, 0);
+        setAreaCounter(maxAreaNumber + 1);
+      } else {
+        console.log('⚠️ [编辑模式] 没有区域数据');
+        setMapAreas([]);
+      }
+      
+      // 加载笔画数据
+      if (file.topologyData.strokes && pngCanvasRef.current) {
+        const canvas = pngCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // 清空画布
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          
+          // 重绘所有笔画
+          file.topologyData.strokes.forEach((stroke: any) => {
+            if (stroke.points && stroke.points.length > 0) {
+              ctx.beginPath();
+              ctx.strokeStyle = stroke.color || '#000000';
+              ctx.lineWidth = stroke.lineWidth || 2;
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+              
+              ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+              for (let i = 1; i < stroke.points.length; i++) {
+                ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+              }
+              ctx.stroke();
+            }
+          });
+        }
+      }
+    } else {
+      console.log('⚠️ [编辑模式] 没有拓扑数据');
+      setMapPoints([]);
+      setMapLines([]);
+      setMapAreas([]);
+    }
+    
+    // 加载黑白地图数据到PNG画布
+    if (file.grayscaleData && pngCanvasRef.current) {
+      const canvas = pngCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const img = new Image();
+        img.onload = () => {
+          // 设置画布尺寸为图片尺寸
+          canvas.width = img.width;
+          canvas.height = img.height;
+          
+          // 绘制黑白底图
+          ctx.drawImage(img, 0, 0);
+          
+          // 如果有笔画数据，在底图上重绘
+          if (file.topologyData?.strokes) {
+            file.topologyData.strokes.forEach((stroke: any) => {
+              if (stroke.points && stroke.points.length > 0) {
+                ctx.beginPath();
+                ctx.strokeStyle = stroke.color || '#000000';
+                ctx.lineWidth = stroke.lineWidth || 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                
+                ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+                for (let i = 1; i < stroke.points.length; i++) {
+                  ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+                }
+                ctx.stroke();
+              }
+            });
+          }
+        };
+        img.src = file.grayscaleData;
+      }
+    }
+    
+    // 设置地图基本信息
+    setMapInfo({
+      mapName: file.name,
+      originX: file.mapInfo?.originX || 0,
+      originY: file.mapInfo?.originY || 0,
+      direction: file.mapInfo?.direction || 0,
+      width: file.mapInfo?.width || 100,
+      height: file.mapInfo?.height || 100,
+      resolution: file.mapInfo?.resolution || 0.05
+    });
+    
+    // 填充表单数据
+    addMapFileForm.setFieldsValue({
+      mapFileName: file.name,
+      originX: file.mapInfo?.originX || 0,
+      originY: file.mapInfo?.originY || 0,
+      direction: file.mapInfo?.direction || 0,
+      width: file.mapInfo?.width || 100,
+      height: file.mapInfo?.height || 100,
+      resolution: file.mapInfo?.resolution || 0.05
+    });
+    
+    // 先进入地图文件基本信息编辑页面（步骤1）
+    setAddMapFileStep(1);
+    setAddMapFileDrawerVisible(true);
+    
+    message.info('进入地图文件编辑模式');
   };
 
   const handleEnableFile = (file: MapFile, mapId: string) => {
@@ -2937,82 +3096,130 @@ const MapManagement: React.FC = () => {
 
 
   const handleAddMapFileSubmit = async (values: any) => {
+    console.log('🔧 [地图文件重复] 进入 handleAddMapFileSubmit 函数', {
+      currentEditFile,
+      values,
+      selectedMap
+    });
     try {
-      setSubmitAndExitLoading(true);
+      setSubmitAndNextLoading(true);
       
-      // 获取PNG画布数据
-      let pngData = null;
-      try {
-        if (pngCanvasRef.current) {
-          pngData = pngCanvasRef.current.toDataURL('image/png');
-          console.log('📸 [PNG数据获取] 成功获取PNG画布数据:', {
-            '数据长度': pngData.length,
-            '数据前缀': pngData.substring(0, 50) + '...'
+      if (currentEditFile) {
+        console.log('🔧 [地图文件重复] 编辑模式下更新文件', currentEditFile);
+        // 编辑模式：直接保存并退出
+        const updatedMapFile: MapFile = {
+          ...currentEditFile,
+          name: values.mapFileName,
+          description: values.description,
+          // 保持原有的其他数据
+          topologyData: currentEditFile.topologyData,
+          grayscaleData: currentEditFile.grayscaleData,
+          mapInfo: {
+            ...currentEditFile.mapInfo
+          }
+        };
+        
+        // 更新地图文件列表中的对应文件
+        if (selectedMap) {
+          setMapFiles(prev => {
+            const updatedFiles = { ...prev };
+            const currentMapFiles = updatedFiles[selectedMap.id] || [];
+            
+            // 检查是否有同名文件（除了当前编辑的文件）
+            const existingSameNameFileIndex = currentMapFiles.findIndex(
+              f => f.name === values.mapFileName && f.id !== currentEditFile.id
+            );
+            
+            if (existingSameNameFileIndex !== -1) {
+              // 如果存在同名文件，覆盖同名文件
+              currentMapFiles.splice(existingSameNameFileIndex, 1);
+            }
+            
+            // 更新当前编辑的文件
+            const fileIndex = currentMapFiles.findIndex(f => f.id === currentEditFile.id);
+            if (fileIndex !== -1) {
+              currentMapFiles[fileIndex] = updatedMapFile;
+            }
+            
+            updatedFiles[selectedMap.id] = [...currentMapFiles];
+            return updatedFiles;
           });
-        } else {
-          console.warn('⚠️ [PNG数据获取] PNG画布引用不存在');
         }
-      } catch (pngError) {
-        console.error('❌ [PNG数据获取] 获取PNG数据失败:', pngError);
-      }
-      
-      // 生成包含拓扑数据的缩略图
-      const thumbnailWithTopology = await generateThumbnailWithTopology();
-      
-      // 模拟API调用
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('💾 [地图文件保存] 保存数据:', {
-        '地图文件名': values.mapFileName,
-        'PNG数据': pngData ? '已获取' : '未获取',
-        '笔画数据': allStrokes.length + ' 条笔画',
-        '擦除点数据': erasedPixels.length + ' 个擦除点',
-        '拓扑数据': `${mapPoints.length}个点, ${mapLines.length}条线, ${mapAreas.length}个区域`
-      });
-      
-      const newMapFile: MapFile = {
-        id: `file_${Date.now()}`,
-        name: values.mapFileName,
-        thumbnail: thumbnailWithTopology, // 使用包含拓扑数据的缩略图
-        status: 'inactive',
-        format: 'PNG',
-        // 保存地图编辑器中的数据
-        topologyData: {
-          points: mapPoints,
-          lines: mapLines,
-          areas: mapAreas,
-          strokes: allStrokes
-        },
-        grayscaleData: pngData || undefined, // 保存PNG画布数据
-        mapInfo: mapInfo
-      };
-      
-      // 将新地图文件添加到对应地图的文件列表中
-      if (selectedMap) {
-        setMapFiles(prev => {
-          const updatedFiles = { ...prev };
-          const currentMapFiles = updatedFiles[selectedMap.id] || [];
-          updatedFiles[selectedMap.id] = [newMapFile, ...currentMapFiles];
-          return updatedFiles;
+        
+        // 模拟API调用
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        message.success('地图文件更新成功！');
+        
+        // 重置状态并退出
+        console.log('🔧 [地图文件重复] 编辑模式保存成功，重置状态');
+        setAddMapFileDrawerVisible(false);
+        addMapFileForm.resetFields();
+        setMapFileUploadedImage(null);
+        setAddMapFileStep(1);
+        setCurrentEditFile(null);
+      } else {
+        console.log('🔧 [地图文件重复] 新增模式下创建文件');
+        // 新增模式：检查唯一性并进入下一步
+        if (selectedMap) {
+          const currentMapFiles = mapFiles[selectedMap.id] || [];
+          const existingSameNameFile = currentMapFiles.find(f => f.name === values.mapFileName);
+          
+          if (existingSameNameFile) {
+            message.error(`地图文件名称 "${values.mapFileName}" 已存在，请使用其他名称`);
+            return;
+          }
+        }
+        
+        // 更新地图基本信息
+        setMapInfo(prev => ({
+          ...prev,
+          mapName: values.mapFileName
+        }));
+        
+        // 模拟API调用
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        console.log('📝 [基本信息提交] 地图文件基本信息已保存:', {
+          '地图文件名': values.mapFileName,
+          '描述': values.description
         });
+        
+        // 进入下一步（地图编辑器）
+        setAddMapFileStep(2);
+        message.success('基本信息保存成功，请继续编辑地图');
       }
       
-      setAddMapFileDrawerVisible(false);
-      addMapFileForm.resetFields();
-      setMapFileUploadedImage(null);
-      setAddMapFileStep(1);
-      message.success('地图文件添加成功！');
     } catch (error) {
-      message.error('添加失败，请重试');
+      message.error('保存失败，请重试');
     } finally {
-      setSubmitAndExitLoading(false);
+      setSubmitAndNextLoading(false);
     }
   };
 
   // 提交并下一步：创建地图文件并进入地图编辑器
   const handleSubmitAndNext = async () => {
+    console.log('🚀 [地图文件编辑] handleSubmitAndNext 函数被调用');
+    console.log('📝 [地图文件编辑] 当前编辑文件:', currentEditFile);
+    console.log('📝 [地图文件编辑] 是否为编辑模式:', !!currentEditFile);
+    
     try {
       const values = await addMapFileForm.validateFields();
+      console.log('📝 [地图文件编辑] 表单验证通过，获取到的值:', values);
+      
+      // 检查地图文件名称唯一性
+      if (selectedMap) {
+        const currentMapFiles = mapFiles[selectedMap.id] || [];
+        const isDuplicateName = currentMapFiles.some(file => 
+          file.name === values.mapFileName && (!currentEditFile || file.id !== currentEditFile.id)
+        );
+        
+        if (isDuplicateName) {
+          message.error('地图文件名称已存在，请使用其他名称');
+          return;
+        }
+      }
+      
       setSubmitAndNextLoading(true);
       
       // 模拟API调用
@@ -3021,28 +3228,66 @@ const MapManagement: React.FC = () => {
       // 生成包含拓扑数据的缩略图
       const thumbnailData = generateThumbnailWithTopology();
       
-      const newMapFile: MapFile = {
-        id: `file_${Date.now()}`,
-        name: values.mapFileName,
-        thumbnail: thumbnailData,
-        status: 'inactive',
-        format: 'PNG',
-        topologyData: {
-          points: mapPoints,
-          lines: mapLines,
-          areas: mapAreas // 保存区域数据
-        },
-        grayscaleData: '' // 空的base64图片数据
-      };
-      
-      // 将新地图文件添加到对应地图的文件列表中
-      if (selectedMap) {
-        setMapFiles(prev => {
-          const updatedFiles = { ...prev };
-          const currentMapFiles = updatedFiles[selectedMap.id] || [];
-          updatedFiles[selectedMap.id] = [newMapFile, ...currentMapFiles];
-          return updatedFiles;
-        });
+      if (currentEditFile) {
+        // 编辑模式：更新现有地图文件
+        console.log('✏️ [地图文件编辑] 编辑模式：更新现有地图文件');
+        const updatedMapFile: MapFile = {
+          ...currentEditFile,
+          name: values.mapFileName,
+          thumbnail: thumbnailData,
+          topologyData: {
+            points: mapPoints,
+            lines: mapLines,
+            areas: mapAreas
+          }
+        };
+        
+        // 更新地图文件列表中的对应文件
+        if (selectedMap) {
+          setMapFiles(prev => {
+            const updatedFiles = { ...prev };
+            const currentMapFiles = updatedFiles[selectedMap.id] || [];
+            const fileIndex = currentMapFiles.findIndex(file => file.id === currentEditFile.id);
+            if (fileIndex !== -1) {
+              updatedFiles[selectedMap.id] = [
+                ...currentMapFiles.slice(0, fileIndex),
+                updatedMapFile,
+                ...currentMapFiles.slice(fileIndex + 1)
+              ];
+            }
+            return updatedFiles;
+          });
+        }
+        
+        message.success('地图文件更新成功');
+      } else {
+        // 新增模式：创建新地图文件
+        console.log('➕ [地图文件编辑] 新增模式：创建新地图文件');
+        const newMapFile: MapFile = {
+          id: `file_${Date.now()}`,
+          name: values.mapFileName,
+          thumbnail: thumbnailData,
+          status: 'inactive',
+          format: 'PNG',
+          topologyData: {
+            points: mapPoints,
+            lines: mapLines,
+            areas: mapAreas
+          },
+          grayscaleData: ''
+        };
+        
+        // 将新地图文件添加到对应地图的文件列表中
+        if (selectedMap) {
+          setMapFiles(prev => {
+            const updatedFiles = { ...prev };
+            const currentMapFiles = updatedFiles[selectedMap.id] || [];
+            updatedFiles[selectedMap.id] = [newMapFile, ...currentMapFiles];
+            return updatedFiles;
+          });
+        }
+        
+        message.success('地图文件创建成功');
       }
       
       // 进入地图编辑器（下一步）
@@ -3059,7 +3304,12 @@ const MapManagement: React.FC = () => {
       }));
       setHasUnsavedChanges(false);
       
-      message.success('地图文件创建成功，进入编辑器！');
+      // 根据模式显示不同的成功消息
+      if (currentEditFile) {
+        console.log('✅ [地图文件编辑] 编辑模式：地图文件更新成功，进入编辑器');
+      } else {
+        console.log('✅ [地图文件编辑] 新增模式：地图文件创建成功，进入编辑器');
+      }
     } catch (error) {
       message.error('创建失败，请重试');
     } finally {
@@ -3069,8 +3319,25 @@ const MapManagement: React.FC = () => {
 
   // 提交并退出到地图列表：创建地图文件并退出
   const handleCreateAndExit = async () => {
+    console.log('🚀 [地图文件编辑] handleCreateAndExit 函数被调用');
     try {
       const values = await addMapFileForm.validateFields();
+      console.log('📝 [地图文件编辑] 表单验证通过，获取到的值:', values);
+      console.log('🔍 [地图文件编辑] 当前编辑文件状态:', currentEditFile);
+      
+      // 检查地图文件名称唯一性
+      if (selectedMap) {
+        const currentMapFiles = mapFiles[selectedMap.id] || [];
+        const isDuplicateName = currentMapFiles.some(file => 
+          file.name === values.mapFileName && (!currentEditFile || file.id !== currentEditFile.id)
+        );
+        
+        if (isDuplicateName) {
+          message.error('地图文件名称已存在，请使用其他名称');
+          return;
+        }
+      }
+      
       setSubmitAndExitLoading(true);
       
       // 模拟API调用
@@ -3079,36 +3346,79 @@ const MapManagement: React.FC = () => {
       // 生成包含拓扑数据的缩略图
       const thumbnailData = generateThumbnailWithTopology();
       
-      const newMapFile: MapFile = {
-        id: `file_${Date.now()}`,
-        name: values.mapFileName,
-        thumbnail: thumbnailData,
-        status: 'inactive',
-        format: 'PNG',
-        topologyData: {
-          points: mapPoints,
-          lines: mapLines,
-          areas: mapAreas // 保存区域数据
-        },
-        grayscaleData: '', // 空的base64图片数据
-        mapInfo: {
-          originX: mapInfo.originX,
-          originY: mapInfo.originY,
-          direction: mapInfo.direction,
-          width: mapInfo.width,
-          height: mapInfo.height,
-          resolution: mapInfo.resolution
+      if (currentEditFile) {
+        // 编辑模式：更新现有文件
+        console.log('✏️ [地图文件编辑] 编辑模式：更新现有文件');
+        const updatedMapFile: MapFile = {
+          ...currentEditFile,
+          name: values.mapFileName,
+          thumbnail: thumbnailData,
+          topologyData: {
+            points: mapPoints,
+            lines: mapLines,
+            areas: mapAreas
+          },
+          mapInfo: {
+            originX: mapInfo.originX,
+            originY: mapInfo.originY,
+            direction: mapInfo.direction,
+            width: mapInfo.width,
+            height: mapInfo.height,
+            resolution: mapInfo.resolution
+          }
+        };
+        
+        // 更新地图文件列表中的对应文件
+        if (selectedMap) {
+          setMapFiles(prev => {
+            const updatedFiles = { ...prev };
+            const currentMapFiles = updatedFiles[selectedMap.id] || [];
+            const fileIndex = currentMapFiles.findIndex(file => file.id === currentEditFile.id);
+            if (fileIndex !== -1) {
+              currentMapFiles[fileIndex] = updatedMapFile;
+              updatedFiles[selectedMap.id] = [...currentMapFiles];
+            }
+            return updatedFiles;
+          });
         }
-      };
-      
-      // 将新地图文件添加到对应地图的文件列表中
-      if (selectedMap) {
-        setMapFiles(prev => {
-          const updatedFiles = { ...prev };
-          const currentMapFiles = updatedFiles[selectedMap.id] || [];
-          updatedFiles[selectedMap.id] = [newMapFile, ...currentMapFiles];
-          return updatedFiles;
-        });
+        
+        message.success('地图文件更新成功！');
+      } else {
+        // 新增模式：创建新文件
+        console.log('➕ [地图文件编辑] 新增模式：创建新文件');
+        const newMapFile: MapFile = {
+          id: `file_${Date.now()}`,
+          name: values.mapFileName,
+          thumbnail: thumbnailData,
+          status: 'inactive',
+          format: 'PNG',
+          topologyData: {
+            points: mapPoints,
+            lines: mapLines,
+            areas: mapAreas
+          },
+          grayscaleData: '',
+          mapInfo: {
+            originX: mapInfo.originX,
+            originY: mapInfo.originY,
+            direction: mapInfo.direction,
+            width: mapInfo.width,
+            height: mapInfo.height,
+            resolution: mapInfo.resolution
+          }
+        };
+        
+        // 将新地图文件添加到对应地图的文件列表中
+        if (selectedMap) {
+          setMapFiles(prev => {
+            const updatedFiles = { ...prev };
+            const currentMapFiles = updatedFiles[selectedMap.id] || [];
+            updatedFiles[selectedMap.id] = [newMapFile, ...currentMapFiles];
+            return updatedFiles;
+          });
+        }
+        
+        message.success('地图文件创建成功！');
       }
       
       // 退出到地图列表
@@ -3116,10 +3426,10 @@ const MapManagement: React.FC = () => {
       addMapFileForm.resetFields();
       setMapFileUploadedImage(null);
       setAddMapFileStep(1);
+      setCurrentEditFile(null); // 清空编辑状态
       
-      message.success('地图文件创建成功！');
     } catch (error) {
-      message.error('创建失败，请重试');
+      message.error(currentEditFile ? '更新失败，请重试' : '创建失败，请重试');
     } finally {
       setSubmitAndExitLoading(false);
     }
@@ -3186,6 +3496,8 @@ const MapManagement: React.FC = () => {
       resolution: 0.05
     });
     
+    // 重置编辑状态
+    setCurrentEditFile(null);
 
   };
   
@@ -3212,8 +3524,31 @@ const MapManagement: React.FC = () => {
       title: '确认取消',
       content: '取消后将丢失所有未保存的修改，确定要取消吗？',
       onOk: () => {
-        handleCloseAddMapFileDrawer();
-        message.info('已取消编辑');
+        console.log('🚫 [地图文件编辑] handleCancel 被调用', {
+          '当前编辑文件': currentEditFile,
+          '是否为编辑模式': currentEditFile !== null,
+          '当前步骤': addMapFileStep
+        });
+        
+        if (currentEditFile === null) {
+          // 新增模式：只退回到第一步，不重置表单数据
+          console.log('🔄 [地图文件编辑] 新增模式：退回到第一步，保留表单数据');
+          setAddMapFileStep(1);
+          // 重置地图编辑器状态，但保留表单数据
+          setSelectedTool('select');
+          setMapPoints([]);
+          setMapLines([]);
+          setMapAreas([]);
+          setAllStrokes([]);
+          setCanvasOffset({ x: 0, y: 0 });
+          setCanvasScale(1);
+          message.info('已退回到基本信息步骤');
+        } else {
+          // 编辑模式：完全重置
+          console.log('🔄 [地图文件编辑] 编辑模式：完全重置所有数据');
+          handleCloseAddMapFileDrawer();
+          message.info('已取消编辑');
+        }
       }
     });
   };
@@ -3252,33 +3587,291 @@ const MapManagement: React.FC = () => {
   
   // handleSubmit函数已移除
   
-  const handleSubmitAndExit = () => {
-    // 获取PNG画布数据
-    let pngImageData = null;
-    if (pngCanvasRef.current) {
-      try {
-        // 将Canvas内容转换为Base64格式的PNG数据
-        pngImageData = pngCanvasRef.current.toDataURL('image/png');
-        console.log('PNG画布数据已获取:', pngImageData ? '数据长度: ' + pngImageData.length : '无数据');
-      } catch (error) {
-        console.error('获取PNG画布数据失败:', error);
-        message.warning('PNG画布数据获取失败，但其他数据将正常提交');
+  const handleSubmitAndExit = async () => {
+    try {
+      console.log('地图文件重复：进入 handleSubmitAndExit 函数', {
+        '当前编辑文件': currentEditFile,
+        '表单数据': addMapFileForm.getFieldsValue(),
+        '选中地图': selectedMap,
+        'mapInfo': mapInfo
+      });
+      setSubmitAndExitLoading(true);
+      
+      // 获取地图文件名称：优先从mapInfo中获取，如果没有则从表单中获取
+      let mapFileName = mapInfo.mapName;
+      if (!mapFileName || mapFileName === '新建地图文件') {
+        try {
+          const values = await addMapFileForm.validateFields();
+          mapFileName = values.mapFileName;
+        } catch (error) {
+          console.error('❌ [地图文件保存] 表单验证失败:', error);
+          message.error('请填写地图文件名称');
+          setSubmitAndExitLoading(false);
+          return;
+        }
       }
+      
+      console.log('📝 [地图文件保存] 获取到的地图文件名称:', {
+        '从mapInfo获取': mapInfo.mapName,
+        '最终使用': mapFileName
+      });
+      
+      // 获取PNG画布数据
+      let pngImageData = null;
+      try {
+        if (pngCanvasRef.current) {
+          pngImageData = pngCanvasRef.current.toDataURL('image/png');
+          console.log('📸 [PNG数据获取] 成功获取PNG画布数据:', {
+            '数据长度': pngImageData.length,
+            '数据前缀': pngImageData.substring(0, 50) + '...'
+          });
+        } else {
+          console.warn('⚠️ [PNG数据获取] PNG画布引用不存在');
+        }
+      } catch (pngError) {
+        console.error('❌ [PNG数据获取] 获取PNG数据失败:', pngError);
+      }
+      
+      // 生成包含拓扑数据的缩略图
+      const thumbnailWithTopology = await generateThumbnailWithTopology();
+      
+      // 模拟API调用
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      console.log('💾 [地图文件保存] 保存数据:', {
+        '地图文件名': mapFileName,
+        'PNG数据': pngImageData ? '已获取' : '未获取',
+        '笔画数据': allStrokes.length + ' 条笔画',
+        '擦除点数据': erasedPixels.length + ' 个擦除点',
+        '拓扑数据': `${mapPoints.length}个点, ${mapLines.length}条线, ${mapAreas.length}个区域`
+      });
+      
+      if (currentEditFile) {
+        console.log('地图文件重复：编辑模式下更新文件', {
+          '编辑文件ID': currentEditFile.id,
+          '新文件名': mapFileName,
+          '原文件名': currentEditFile.name
+        });
+        // 编辑模式：更新现有文件
+        const updatedMapFile: MapFile = {
+          ...currentEditFile,
+          name: mapFileName,
+          thumbnail: thumbnailWithTopology,
+          // 保存地图编辑器中的数据
+          topologyData: {
+            points: mapPoints,
+            lines: mapLines,
+            areas: mapAreas,
+            strokes: allStrokes
+          },
+          grayscaleData: pngImageData || currentEditFile.grayscaleData,
+          mapInfo: {
+            ...mapInfo,
+            mapName: mapFileName
+          }
+        };
+        
+        // 更新地图文件列表中的对应文件
+        if (selectedMap) {
+          setMapFiles(prev => {
+            const updatedFiles = { ...prev };
+            const currentMapFiles = updatedFiles[selectedMap.id] || [];
+            
+            // 检查是否有同名文件（除了当前编辑的文件）
+            const existingSameNameFileIndex = currentMapFiles.findIndex(
+              f => f.name === mapFileName && f.id !== currentEditFile.id
+            );
+            
+            if (existingSameNameFileIndex !== -1) {
+              // 如果存在同名文件，覆盖同名文件
+              currentMapFiles.splice(existingSameNameFileIndex, 1);
+            }
+            
+            // 更新当前编辑的文件
+        const fileIndex = currentMapFiles.findIndex(f => f.id === currentEditFile.id);
+        console.log('🗺️ [地图文件编辑] 更新现有文件索引查找', {
+          '文件ID': currentEditFile.id,
+          '找到的索引': fileIndex,
+          '当前文件列表长度': currentMapFiles.length
+        });
+        
+        if (fileIndex !== -1) {
+          currentMapFiles[fileIndex] = updatedMapFile;
+          console.log('🗺️ [地图文件编辑] 文件更新完成', {
+            '更新的文件': updatedMapFile,
+            '文件名称': updatedMapFile.name,
+            'mapInfo中的mapName': updatedMapFile.mapInfo?.mapName
+          });
+        }
+        
+        updatedFiles[selectedMap.id] = [...currentMapFiles];
+        return updatedFiles;
+      });
     }
     
-    // 提交并退出
-    message.success('地图已提交，正在退出编辑器');
-    console.log('提交并退出:', { 
-      mapPoints, 
-      mapLines, 
-      mapAreas,  // 添加区域数据到日志
-      pngImageData: pngImageData ? '已获取PNG数据' : '无PNG数据',
-      allStrokes: allStrokes.length + '个笔画',
-      erasedPixels: erasedPixels.length + '个擦除点'
-    });
-    setTimeout(() => {
-      handleCloseAddMapFileDrawer();
-    }, 1000);
+    message.success('地图文件更新成功！');
+      } else {
+        console.log('地图文件重复：新增模式下创建文件', {
+          '新文件名': mapFileName,
+          '选中地图ID': selectedMap?.id
+        });
+        // 新增模式：创建新文件或覆盖同名文件
+        console.log('🗺️ [地图文件编辑] 创建新文件对象', {
+          '表单文件名': mapFileName,
+          '当前mapInfo': mapInfo,
+          '即将设置的mapName': mapFileName
+        });
+        
+        const newMapFile: MapFile = {
+          id: `file_${Date.now()}`,
+          name: mapFileName,
+          thumbnail: thumbnailWithTopology,
+          status: 'inactive',
+          format: 'PNG',
+          // 保存地图编辑器中的数据
+          topologyData: {
+            points: mapPoints,
+            lines: mapLines,
+            areas: mapAreas,
+            strokes: allStrokes
+          },
+          grayscaleData: pngImageData || undefined,
+          mapInfo: {
+            ...mapInfo,
+            mapName: mapFileName
+          }
+        };
+        
+        console.log('🗺️ [地图文件编辑] 新文件对象创建完成', {
+          '新文件': newMapFile,
+          '文件名称': newMapFile.name,
+          'mapInfo中的mapName': newMapFile.mapInfo?.mapName
+        });
+        
+        // 将新地图文件添加到对应地图的文件列表中
+        if (selectedMap) {
+          setMapFiles(prev => {
+            const updatedFiles = { ...prev };
+            const currentMapFiles = updatedFiles[selectedMap.id] || [];
+            
+            // 检查是否有同名文件
+            const existingSameNameFileIndex = currentMapFiles.findIndex(
+              f => f.name === mapFileName
+            );
+            
+            if (existingSameNameFileIndex !== -1) {
+              // 如果存在同名文件，覆盖它
+              currentMapFiles[existingSameNameFileIndex] = newMapFile;
+              message.success('地图文件已覆盖更新！');
+            } else {
+              // 如果不存在同名文件，添加新文件
+              currentMapFiles.unshift(newMapFile);
+              message.success('地图文件创建成功！');
+            }
+            
+            updatedFiles[selectedMap.id] = [...currentMapFiles];
+            return updatedFiles;
+          });
+        }
+      }
+      
+      console.log('地图文件重复：保存成功，准备重置状态', {
+        '编辑模式': !!currentEditFile,
+        '当前编辑文件': currentEditFile
+      });
+      
+      // 重置状态并退出编辑器
+      setTimeout(() => {
+        // 关闭抽屉但保持编辑状态（如果是编辑模式）
+        setAddMapFileDrawerVisible(false);
+        addMapFileForm.resetFields();
+        setMapFileUploadedImage(null);
+        setAddMapFileStep(1);
+        
+        // 重置地图编辑器状态
+        setSelectedTool('select');
+        setMapType('topology');
+        setCurrentMode('edit');
+        setMapPoints(defaultMapPoints);
+        setPointCounter(1);
+        setSelectedPoints([]);
+        setIsSelecting(false);
+        setSelectionStart(null);
+        setSelectionEnd(null);
+        setEditingPoint(null);
+        setPointEditModalVisible(false);
+        pointEditForm.resetFields();
+        setActiveTabKey('tools');
+        
+        // 重置线条相关状态
+        setMapLines(defaultMapLines);
+        setLineCounter(1);
+        
+        // 重置区域相关状态
+        setMapAreas([]);
+        setAreaCounter(1);
+        setSelectedAreas([]);
+        setIsDrawingArea(false);
+        setCurrentAreaPoints([]);
+        setMousePosition(null);
+        setEditingArea(null);
+        setAreaEditModalVisible(false);
+        areaEditForm.resetFields();
+        
+        // 重置所有笔画绘制状态
+        setAllStrokes([]);
+        
+        // 清除PNG画布内容
+        if (pngCanvasRef.current) {
+          const canvas = pngCanvasRef.current;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+          }
+        }
+        
+        // 保存当前编辑文件的名称（在重置currentEditFile之前）
+        const currentFileName = currentEditFile ? currentEditFile.name : '';
+        
+        // 重置编辑状态
+        console.log('地图文件重复：重置编辑状态，设置 currentEditFile 为 null');
+        setCurrentEditFile(null);
+        
+        // 重置地图信息（保留当前地图文件名称）
+        console.log('🗺️ [地图文件编辑] 重置mapInfo状态', {
+          '当前文件名': currentFileName,
+          '是否编辑模式': !!currentEditFile,
+          '重置前mapInfo': mapInfo
+        });
+        
+        setMapInfo(prev => {
+          const newMapInfo = {
+            ...prev,
+            // 如果是编辑模式，保留当前地图文件名称；如果是新增模式，重置为空
+            mapName: currentFileName,
+            originX: 0,
+            originY: 0,
+            direction: 0,
+            width: 0,
+            height: 0,
+            resolution: 0.05
+          };
+          
+          console.log('🗺️ [地图文件编辑] mapInfo重置完成', {
+            '新mapInfo': newMapInfo,
+            '新mapName': newMapInfo.mapName
+          });
+          
+          return newMapInfo;
+        });
+      }, 1000);
+      
+    } catch (error) {
+      console.error('保存失败:', error);
+      message.error(currentEditFile ? '更新失败，请重试' : '创建失败，请重试');
+    } finally {
+      setSubmitAndExitLoading(false);
+    }
   };
 
   // 模式切换处理函数
@@ -7934,7 +8527,7 @@ const MapManagement: React.FC = () => {
 
       {/* 新增地图文件侧滑抽屉 */}
       <Drawer
-        title="新增地图文件"
+        title={mapFileUploadedImage?.url ? "编辑地图文件" : "新增地图文件"}
         placement="right"
         width="100vw"
         open={addMapFileDrawerVisible}
@@ -7993,7 +8586,7 @@ const MapManagement: React.FC = () => {
               <Form
                 form={addMapFileForm}
                 layout="vertical"
-                onFinish={handleAddMapFileSubmit}
+                onFinish={addMapFileStep === 1 ? handleAddMapFileSubmit : undefined}
                 style={{ maxWidth: 600, margin: '0 auto' }}
               >
                 <Form.Item
