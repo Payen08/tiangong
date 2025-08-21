@@ -6330,6 +6330,9 @@ const MapManagement: React.FC = () => {
                         backgroundColor: '#f5f5f5',
                         width: '100%',
                         transition: 'all 0.3s ease',
+                        border: '1px solid #f0f0f0',
+                                     borderRadius: '6px',
+                                     boxShadow: '0 1px 4px rgba(0,21,41,.08)',
                       }}
                       onClick={() => handleImageClick(file)}
                     />
@@ -6972,6 +6975,9 @@ const MapManagement: React.FC = () => {
                                     backgroundColor: '#f5f5f5',
                                     width: '100%',
                                     transition: 'all 0.3s ease',
+                                    border: '1px solid #f0f0f0',
+                                     borderRadius: '6px',
+                                     boxShadow: '0 1px 4px rgba(0,21,41,.08)',
                                   }}
                                   onClick={() => handleImageClick(file)}
                                 />
@@ -7781,6 +7787,9 @@ const MapManagement: React.FC = () => {
                                      height: 80,
                                      objectFit: 'cover',
                                      backgroundColor: '#f5f5f5',
+                                     border: '1px solid #f0f0f0',
+                                     borderRadius: '6px',
+                                     boxShadow: '0 1px 4px rgba(0,21,41,.08)'
                                    }}
                                  />
                                }
