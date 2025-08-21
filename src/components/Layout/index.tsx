@@ -13,6 +13,7 @@ import {
   DatabaseOutlined,
   EnvironmentOutlined,
   NodeIndexOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useAppStore } from '@/store';
@@ -47,6 +48,11 @@ const Layout: React.FC = () => {
           key: '/scene/maps',
           icon: <NodeIndexOutlined />,
           label: '地图管理',
+        },
+        {
+          key: '/scene/cross-map-connections',
+          icon: <ShareAltOutlined />,
+          label: '跨地图连接',
         },
       ],
     },
