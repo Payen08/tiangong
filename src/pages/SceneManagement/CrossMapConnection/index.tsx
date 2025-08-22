@@ -241,7 +241,7 @@ const CrossMapConnectionManagement: React.FC = () => {
             {getTypeTag(record.type)}
           </div>
           <div style={{ fontSize: '12px', color: '#666' }}>
-            <span>{record.remark || '无备注'} | {record.updateUser}</span>
+            <span>{record.updateUser}</span>
           </div>
         </div>
       ),
@@ -312,21 +312,6 @@ const CrossMapConnectionManagement: React.FC = () => {
       width: getColumnWidth(120),
       align: 'left',
       render: (type: string) => getTypeTag(type),
-    },
-    {
-      title: '备注',
-      dataIndex: 'remark',
-      key: 'remark',
-      width: getColumnWidth(200),
-      align: 'left',
-      ellipsis: true,
-      render: (text: string) => (
-        <Tooltip title={text || '无备注'}>
-          <span style={{ color: text ? '#333' : '#999' }}>
-            {text || '无备注'}
-          </span>
-        </Tooltip>
-      ),
     },
     {
       title: '更新时间',

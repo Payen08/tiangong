@@ -10,6 +10,8 @@ import AddProduct from '@/pages/ProductManagement/AddProduct';
 import DeviceManagement from '@/pages/DeviceManagement/index';
 import MapManagement from '@/pages/SceneManagement/MapManagement';
 import CrossMapConnectionManagement from '@/pages/SystemManagement/CrossMapConnection';
+import BusinessProcess from '@/pages/ScheduleManagement/BusinessProcess';
+
 
 
 
@@ -54,6 +56,16 @@ export const router = createBrowserRouter([
             path: 'devices',
             element: <DeviceManagement />,
           },
+        ],
+      },
+      {
+        path: 'schedule',
+        children: [
+          {
+            path: 'business-process',
+            element: <BusinessProcess />,
+          },
+
         ],
       },
       {

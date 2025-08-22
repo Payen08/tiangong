@@ -107,9 +107,7 @@ const CrossMapConnectionManagement: React.FC = () => {
           <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
             <span>类型: {record.type}</span>
           </div>
-          <div style={{ fontSize: '12px', color: '#666' }}>
-            <span>{record.remark || '暂无备注'}</span>
-          </div>
+
         </div>
       ),
     },
@@ -179,21 +177,6 @@ const CrossMapConnectionManagement: React.FC = () => {
       render: (type: string) => (
         <Tooltip title={type}>
           <span>{type}</span>
-        </Tooltip>
-      ),
-    },
-    {
-      title: '备注',
-      dataIndex: 'remark',
-      key: 'remark',
-      width: getColumnWidth(200),
-      align: 'left',
-      ellipsis: true,
-      render: (remark: string) => (
-        <Tooltip title={remark || '暂无备注'}>
-          <span style={{ color: remark ? '#333' : '#999' }}>
-            {remark || '暂无备注'}
-          </span>
         </Tooltip>
       ),
     },

@@ -14,6 +14,8 @@ import {
   EnvironmentOutlined,
   NodeIndexOutlined,
   ShareAltOutlined,
+  ScheduleOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useAppStore } from '@/store';
@@ -70,6 +72,18 @@ const Layout: React.FC = () => {
           key: '/resources/devices',
           icon: <SettingOutlined />,
           label: '设备管理',
+        },
+      ],
+    },
+    {
+      key: 'schedule',
+      icon: <ScheduleOutlined />,
+      label: '排程管理',
+      children: [
+        {
+          key: '/schedule/business-process',
+          icon: <ApartmentOutlined />,
+          label: '业务流程',
         },
       ],
     },

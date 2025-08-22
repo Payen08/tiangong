@@ -1,6 +1,6 @@
 import React from 'react';
 import { Breadcrumb as AntBreadcrumb } from 'antd';
-import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined } from '@ant-design/icons';
+import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined } from '@ant-design/icons';
 import { useLocation, Link } from 'react-router-dom';
 
 const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
@@ -16,6 +16,9 @@ const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
   '/system/users': { title: '用户管理', icon: <TeamOutlined /> },
   '/system/roles': { title: '角色管理', icon: <SafetyOutlined /> },
   '/system/permissions': { title: '权限管理', icon: <SafetyOutlined /> },
+  '/schedule': { title: '排程管理', icon: <ScheduleOutlined /> },
+  '/schedule/business-process': { title: '业务流程', icon: <ApartmentOutlined /> },
+  
 };
 
 const Breadcrumb: React.FC = () => {

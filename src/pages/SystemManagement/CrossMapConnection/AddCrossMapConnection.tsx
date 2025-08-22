@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Drawer, Steps, Form, Input, Select, Button, message, Row, Col } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Drawer, Steps, Form, Input, Select, Button, message, Row, Col, Tooltip } from 'antd';
+import { ArrowLeftOutlined, UndoOutlined, RedoOutlined, ZoomInOutlined, ZoomOutOutlined, HomeOutlined } from '@ant-design/icons';
 
 const { Option } = Select;
 const { Step } = Steps;
@@ -23,6 +23,12 @@ interface CanvasState {
   lastMouseY: number;
 }
 
+interface HistoryState {
+  offsetX: number;
+  offsetY: number;
+  scale: number;
+}
+
 const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
   visible,
   onClose,
@@ -42,6 +48,10 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     lastMouseY: 0
   });
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  
+  // 历史记录状态
+  const [history, setHistory] = useState<HistoryState[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   // 绘制网格和画布内容
   const drawCanvas = useCallback(() => {
@@ -71,7 +81,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     const endY = startY + canvasHeight + gridSize;
 
     ctx.strokeStyle = '#e8e8e8';
-    ctx.lineWidth = 0.5;
+    ctx.lineWidth = 0.6;
     ctx.beginPath();
 
     // 垂直线
@@ -101,6 +111,84 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     // ctx.fillText(`坐标: (${Math.round(worldX)}, ${Math.round(worldY)})`, 10, 20);
     // ctx.fillText(`缩放: ${(canvasState.scale * 100).toFixed(0)}%`, 10, 40);
   }, [canvasState, mousePosition]);
+
+  // 保存历史记录
+  const saveToHistory = useCallback(() => {
+    const newState: HistoryState = {
+      offsetX: canvasState.offsetX,
+      offsetY: canvasState.offsetY,
+      scale: canvasState.scale
+    };
+    
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(newState);
+    
+    // 限制历史记录数量
+    if (newHistory.length > 50) {
+      newHistory.shift();
+    } else {
+      setHistoryIndex(prev => prev + 1);
+    }
+    
+    setHistory(newHistory);
+  }, [canvasState, history, historyIndex]);
+
+  // 撤回功能
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const prevState = history[historyIndex - 1];
+      setCanvasState(prev => ({
+        ...prev,
+        offsetX: prevState.offsetX,
+        offsetY: prevState.offsetY,
+        scale: prevState.scale
+      }));
+      setHistoryIndex(prev => prev - 1);
+    }
+  }, [history, historyIndex]);
+
+  // 重做功能
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const nextState = history[historyIndex + 1];
+      setCanvasState(prev => ({
+        ...prev,
+        offsetX: nextState.offsetX,
+        offsetY: nextState.offsetY,
+        scale: nextState.scale
+      }));
+      setHistoryIndex(prev => prev + 1);
+    }
+  }, [history, historyIndex]);
+
+  // 放大功能
+  const handleZoomIn = useCallback(() => {
+    saveToHistory();
+    setCanvasState(prev => ({
+      ...prev,
+      scale: Math.min(prev.scale * 1.2, 5) // 最大放大5倍
+    }));
+  }, [saveToHistory]);
+
+  // 缩小功能
+  const handleZoomOut = useCallback(() => {
+    saveToHistory();
+    setCanvasState(prev => ({
+      ...prev,
+      scale: Math.max(prev.scale / 1.2, 0.1) // 最小缩小到0.1倍
+    }));
+  }, [saveToHistory]);
+
+  // 回到初始位置功能
+  const handleResetPosition = useCallback(() => {
+    saveToHistory();
+    setCanvasState(prev => ({
+      ...prev,
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1
+    }));
+  }, [saveToHistory]);
 
   // 键盘事件处理
   useEffect(() => {
@@ -138,6 +226,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
   // 鼠标事件处理
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (canvasState.isSpacePressed) {
+      saveToHistory(); // 在开始拖拽时保存历史记录
       setCanvasState(prev => ({
         ...prev,
         isDragging: true,
@@ -184,6 +273,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
 
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
+    saveToHistory(); // 在缩放时保存历史记录
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     const newScale = Math.max(0.1, Math.min(3, canvasState.scale * delta));
     
@@ -192,12 +282,14 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
 
   // 重绘画布
   useEffect(() => {
-    drawCanvas();
-  }, [drawCanvas]);
+    if (currentStep === 1) {
+      drawCanvas();
+    }
+  }, [drawCanvas, currentStep]);
 
   // 初始化画布尺寸
   useEffect(() => {
-    if (visible && canvasRef.current) {
+    if (visible && canvasRef.current && currentStep === 1) {
       const canvas = canvasRef.current;
       const container = canvas.parentElement;
       if (container) {
@@ -206,13 +298,13 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         drawCanvas();
       }
     }
-  }, [visible, drawCanvas]);
+  }, [visible, drawCanvas, currentStep]);
 
   // 重置表单和状态
   useEffect(() => {
     if (visible) {
       setCurrentStep(0);
-      setCanvasState({
+      const initialState = {
         offsetX: 0,
         offsetY: 0,
         scale: 1,
@@ -220,7 +312,12 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         isSpacePressed: false,
         lastMouseX: 0,
         lastMouseY: 0
-      });
+      };
+      setCanvasState(initialState);
+      
+      // 初始化历史记录
+      setHistory([{ offsetX: 0, offsetY: 0, scale: 1 }]);
+      setHistoryIndex(0);
       
       if (editData) {
         form.setFieldsValue(editData);
@@ -376,6 +473,49 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         {/* 底部操作栏 */}
         <div className="flex justify-center items-center pt-4 border-t border-gray-200">
           <div className="flex gap-2">
+            {/* 画布操作按钮（仅在画布步骤显示） */}
+            {currentStep === 1 && (
+              <>
+                <Tooltip title="撤回">
+                  <Button 
+                    icon={<UndoOutlined />} 
+                    onClick={handleUndo}
+                    disabled={historyIndex <= 0}
+                  />
+                </Tooltip>
+                <Tooltip title="重做">
+                  <Button 
+                    icon={<RedoOutlined />} 
+                    onClick={handleRedo}
+                    disabled={historyIndex >= history.length - 1}
+                  />
+                </Tooltip>
+                <Tooltip title="放大">
+                  <Button 
+                    icon={<ZoomInOutlined />} 
+                    onClick={handleZoomIn}
+                    disabled={canvasState.scale >= 3}
+                  />
+                </Tooltip>
+                <Tooltip title="缩小">
+                  <Button 
+                    icon={<ZoomOutOutlined />} 
+                    onClick={handleZoomOut}
+                    disabled={canvasState.scale <= 0.1}
+                  />
+                </Tooltip>
+                <Tooltip title="回到初始位置">
+                  <Button 
+                    icon={<HomeOutlined />} 
+                    onClick={handleResetPosition}
+                  />
+                </Tooltip>
+                {/* 分隔线 */}
+                <div style={{ width: '1px', height: '24px', backgroundColor: '#d9d9d9', margin: '0 8px' }} />
+              </>
+            )}
+            
+            {/* 主要操作按钮 */}
             <Button onClick={onClose}>
               取消
             </Button>
