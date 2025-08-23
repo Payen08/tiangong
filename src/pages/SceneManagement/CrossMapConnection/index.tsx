@@ -465,6 +465,7 @@ const CrossMapConnectionManagement: React.FC = () => {
         }}
       >
         <AddCrossMapConnection 
+          visible={drawerVisible}
           onClose={handleDrawerClose} 
           onConnectionCreated={handleConnectionCreated}
           editingConnection={editingConnection}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, Table, Button, Input, Select, Space, Modal, message, Row, Col, Tooltip } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
-import AddCrossMapConnection from './AddCrossMapConnection.tsx';
+import AddSystemCrossMapConnection from './AddSystemCrossMapConnection';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Option } = Select;
@@ -422,7 +422,7 @@ const CrossMapConnectionManagement: React.FC = () => {
       </Card>
 
       {/* 新增/编辑弹窗 */}
-      <AddCrossMapConnection
+      <AddSystemCrossMapConnection
         visible={isAddModalVisible}
         onClose={handleModalClose}
         onSave={handleSave}
