@@ -16,6 +16,7 @@ import {
   ShareAltOutlined,
   ScheduleOutlined,
   ApartmentOutlined,
+  ClusterOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useAppStore } from '@/store';
@@ -55,6 +56,11 @@ const Layout: React.FC = () => {
           key: '/scene/cross-map-connections',
           icon: <ShareAltOutlined />,
           label: '跨地图连接',
+        },
+        {
+          key: '/scene/cross-map-path-groups',
+          icon: <ClusterOutlined />,
+          label: '跨地图路径组',
         },
       ],
     },

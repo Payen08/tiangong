@@ -1,56 +1,92 @@
 import React, { useState } from 'react';
-import { Card, Table, Button, Input, Select, Space, Modal, message, Row, Col, Tooltip } from 'antd';
+import { Card, Table, Button, Input, Select, Space, Modal, message, Row, Col, Tooltip, Tag } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
-import AddSystemCrossMapConnection from './AddSystemCrossMapConnection';
+import AddCrossMapPathGroup from './AddCrossMapPathGroup';
 import type { ColumnsType } from 'antd/es/table';
 
 const { Option } = Select;
 
-interface CrossMapConnection {
+interface PathGroupItem {
   id: string;
   name: string;
-  type: '跨地图连接' | '跨区域连接';
-  remark?: string;
-  updateTime: string;
-  updatedBy: string;
-  mapCards?: any[];
-  connections?: any[];
-  canvasState?: any;
+  mapName: string;
+  pathGroups: string[];
 }
 
-const CrossMapConnectionManagement: React.FC = () => {
-  const [connections, setConnections] = useState<CrossMapConnection[]>([
+interface CrossMapPathGroup {
+  id: string;
+  name: string;
+  description?: string;
+  items: PathGroupItem[];
+  updateTime: string;
+  updatedBy: string;
+}
+
+const CrossMapPathGroupManagement: React.FC = () => {
+  const [pathGroups, setPathGroups] = useState<CrossMapPathGroup[]>([
     {
       id: '1',
-      name: '生产区域A到仓储区域B连接',
-      type: '跨地图连接',
-      remark: '用于生产数据同步的跨地图连接配置',
+      name: '生产区域路径组配置',
+      description: '生产区域内各地图的路径组配置管理',
+      items: [
+        {
+          id: 'item_1_1',
+          name: '生产区域路径组配置',
+          mapName: '一楼生产车间',
+          pathGroups: ['路径组A', '路径组B', '路径组C']
+        },
+        {
+          id: 'item_1_2',
+          name: '生产区域路径组配置',
+          mapName: '二楼装配车间',
+          pathGroups: ['路径组D', '路径组E']
+        }
+      ],
       updateTime: '2024-01-16 14:30:25',
       updatedBy: '张三'
     },
     {
       id: '2',
-      name: '办公区域到生产区域连接',
-      type: '跨区域连接',
-      remark: '办公区域与生产区域的数据交互连接',
+      name: '仓储区域路径组配置',
+      description: '仓储区域跨楼层路径组配置',
+      items: [
+        {
+          id: 'item_2_1',
+          name: '仓储区域路径组配置',
+          mapName: '地下一层仓库',
+          pathGroups: ['入库路径组', '出库路径组', '盘点路径组']
+        },
+        {
+          id: 'item_2_2',
+          name: '仓储区域路径组配置',
+          mapName: '地下二层仓库',
+          pathGroups: ['货架路径组', '通道路径组']
+        }
+      ],
       updateTime: '2024-01-15 09:15:10',
       updatedBy: '李四'
     },
     {
       id: '3',
-      name: '仓储区域内部连接',
-      type: '跨地图连接',
-      remark: '仓储区域内不同楼层间的连接配置',
+      name: '办公区域路径组配置',
+      description: '办公区域内部路径组配置',
+      items: [
+        {
+          id: 'item_3_1',
+          name: '办公区域路径组配置',
+          mapName: '三楼办公区',
+          pathGroups: ['会议室路径组', '办公室路径组']
+        }
+      ],
       updateTime: '2024-01-14 16:45:33',
       updatedBy: '王五'
     }
   ]);
 
   const [searchText, setSearchText] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
-  const [editingConnection, setEditingConnection] = useState<CrossMapConnection | null>(null);
+  const [editingPathGroup, setEditingPathGroup] = useState<CrossMapPathGroup | null>(null);
 
   // 检测屏幕尺寸
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -74,27 +110,30 @@ const CrossMapConnectionManagement: React.FC = () => {
   };
 
   // 筛选数据并按更新时间倒序排序
-  const filteredConnections = connections
-    .filter(connection => {
-      // 确保name字段存在且为字符串
-      const connectionName = connection.name || '';
+  const filteredPathGroups = pathGroups
+    .filter(pathGroup => {
+      const pathGroupName = pathGroup.name || '';
+      const pathGroupDescription = pathGroup.description || '';
       
-      const matchesSearch = connectionName.toLowerCase().includes(searchText.toLowerCase());
-      const matchesType = !typeFilter || connection.type === typeFilter;
-      return matchesSearch && matchesType;
+      const matchesSearch = pathGroupName.toLowerCase().includes(searchText.toLowerCase()) ||
+                           pathGroupDescription.toLowerCase().includes(searchText.toLowerCase()) ||
+                           pathGroup.items.some(item => 
+                             item.mapName.toLowerCase().includes(searchText.toLowerCase()) ||
+                             item.pathGroups.some(pg => pg.toLowerCase().includes(searchText.toLowerCase()))
+                           );
+      return matchesSearch;
     })
     .sort((a, b) => {
-      // 按更新时间倒序排序，最新的在前面
       return new Date(b.updateTime).getTime() - new Date(a.updateTime).getTime();
     });
 
   // 移动端列配置
-  const mobileColumns: ColumnsType<CrossMapConnection> = [
+  const mobileColumns: ColumnsType<CrossMapPathGroup> = [
     {
-      title: '连接信息',
-      key: 'connectionInfo',
+      title: '路径组信息',
+      key: 'pathGroupInfo',
       fixed: 'left',
-      render: (_: any, record: CrossMapConnection) => (
+      render: (_: any, record: CrossMapPathGroup) => (
         <div style={{ padding: '8px 0' }}>
           <div style={{ marginBottom: '4px' }}>
             <span 
@@ -110,9 +149,11 @@ const CrossMapConnectionManagement: React.FC = () => {
             </span>
           </div>
           <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
-            <span>类型: {record.type}</span>
+            <span>地图数量: {record.items.length}</span>
           </div>
-
+          <div style={{ fontSize: '12px', color: '#666' }}>
+            <span>更新时间: {record.updateTime}</span>
+          </div>
         </div>
       ),
     },
@@ -122,7 +163,7 @@ const CrossMapConnectionManagement: React.FC = () => {
       width: 80,
       align: 'right',
       fixed: 'right',
-      render: (_: any, record: CrossMapConnection) => (
+      render: (_: any, record: CrossMapPathGroup) => (
         <Space size={4}>
           <Tooltip title="编辑">
             <Button
@@ -152,16 +193,16 @@ const CrossMapConnectionManagement: React.FC = () => {
   ];
 
   // 桌面端列配置
-  const desktopColumns: ColumnsType<CrossMapConnection> = [
+  const desktopColumns: ColumnsType<CrossMapPathGroup> = [
     {
-      title: '连接名称',
+      title: '名称',
       dataIndex: 'name',
       key: 'name',
       width: getColumnWidth(200),
       align: 'left',
       ellipsis: true,
       fixed: 'left',
-      render: (text: string, record: CrossMapConnection) => (
+      render: (text: string, record: CrossMapPathGroup) => (
         <Tooltip title={text}>
           <span 
             style={{ color: '#1890ff', cursor: 'pointer' }}
@@ -173,16 +214,50 @@ const CrossMapConnectionManagement: React.FC = () => {
       ),
     },
     {
-      title: '连接类型',
-      dataIndex: 'type',
-      key: 'type',
-      width: getColumnWidth(120),
+      title: '地图',
+      key: 'maps',
+      width: getColumnWidth(150),
       align: 'left',
-      ellipsis: true,
-      render: (type: string) => (
-        <Tooltip title={type}>
-          <span>{type}</span>
-        </Tooltip>
+      render: (_: any, record: CrossMapPathGroup) => (
+          <div>
+            {record.items.map((item, index) => (
+              <div key={item.id} style={{
+                marginBottom: index < record.items.length - 1 ? '12px' : '0',
+                paddingBottom: index < record.items.length - 1 ? '12px' : '0',
+                borderBottom: index < record.items.length - 1 ? '1px solid #f0f0f0' : 'none'
+              }}>
+                <span style={{ color: '#333', fontSize: '14px' }}>
+                  {item.mapName}
+                </span>
+              </div>
+            ))}
+          </div>
+        ),
+    },
+    {
+      title: '路径组',
+      key: 'pathGroups',
+      width: getColumnWidth(250),
+      align: 'left',
+      render: (_: any, record: CrossMapPathGroup) => (
+        <div>
+          {record.items.map((item, index) => (
+            <div key={item.id} style={{
+              marginBottom: index < record.items.length - 1 ? '12px' : '0',
+              paddingBottom: index < record.items.length - 1 ? '12px' : '0',
+              borderBottom: index < record.items.length - 1 ? '1px solid #f0f0f0' : 'none'
+            }}>
+              {item.pathGroups.map((pathGroup, pathIndex) => (
+                <Tag key={pathIndex} color="green" size="small" style={{ 
+                  marginBottom: '2px',
+                  marginRight: '4px'
+                }}>
+                  {pathGroup}
+                </Tag>
+              ))}
+            </div>
+          ))}
+        </div>
       ),
     },
     {
@@ -192,7 +267,7 @@ const CrossMapConnectionManagement: React.FC = () => {
       width: getColumnWidth(140),
       align: 'left',
       ellipsis: true,
-      sorter: (a: CrossMapConnection, b: CrossMapConnection) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
+      sorter: (a: CrossMapPathGroup, b: CrossMapPathGroup) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
       render: (time: string) => {
         const date = new Date(time);
         const dateStr = date.toLocaleDateString('zh-CN');
@@ -226,9 +301,9 @@ const CrossMapConnectionManagement: React.FC = () => {
       width: getColumnWidth(110),
       align: 'right',
       fixed: 'right',
-      render: (_: any, record: CrossMapConnection) => (
+      render: (_: any, record: CrossMapPathGroup) => (
         <Space size={4}>
-          <Tooltip title="编辑连接">
+          <Tooltip title="编辑路径组">
             <Button
               type="link"
               icon={<EditOutlined />}
@@ -239,7 +314,7 @@ const CrossMapConnectionManagement: React.FC = () => {
               编辑
             </Button>
           </Tooltip>
-          <Tooltip title="删除连接">
+          <Tooltip title="删除路径组">
             <Button
               type="link"
               danger
@@ -262,9 +337,9 @@ const CrossMapConnectionManagement: React.FC = () => {
     if (isMobile) {
       scrollWidth = 'max-content';
     } else if (isLargeScreen) {
-      scrollWidth = Math.max(1000, columnCount * 150);
+      scrollWidth = Math.max(1200, columnCount * 180);
     } else {
-      scrollWidth = Math.max(800, columnCount * 120);
+      scrollWidth = Math.max(1000, columnCount * 150);
     }
     
     return {
@@ -276,21 +351,21 @@ const CrossMapConnectionManagement: React.FC = () => {
   const tableConfig = getTableConfig(isMobile, isLargeScreen, desktopColumns.length);
 
   const handleAdd = () => {
-    setEditingConnection(null);
+    setEditingPathGroup(null);
     setIsAddModalVisible(true);
   };
 
-  const handleEdit = (connection: CrossMapConnection) => {
-    setEditingConnection(connection);
+  const handleEdit = (pathGroup: CrossMapPathGroup) => {
+    setEditingPathGroup(pathGroup);
     setIsAddModalVisible(true);
   };
 
   const handleDelete = (id: string) => {
     Modal.confirm({
       title: '确认删除',
-      content: '确定要删除这个跨地图连接吗？',
+      content: '确定要删除这个跨地图路径组吗？',
       onOk: () => {
-        setConnections(connections.filter(conn => conn.id !== id));
+        setPathGroups(pathGroups.filter(pg => pg.id !== id));
         message.success('删除成功');
       },
     });
@@ -298,7 +373,7 @@ const CrossMapConnectionManagement: React.FC = () => {
 
   const handleModalClose = () => {
     setIsAddModalVisible(false);
-    setEditingConnection(null);
+    setEditingPathGroup(null);
   };
 
   const handleRefresh = () => {
@@ -310,26 +385,16 @@ const CrossMapConnectionManagement: React.FC = () => {
     }, 1000);
   };
 
-  const handleSave = (connectionData: any) => {
-    console.log('接收到的连接数据:', connectionData);
+  const handleSave = (pathGroupData: any) => {
+    console.log('接收到的路径组数据:', pathGroupData);
     
-    // 映射字段名称
-    const mappedData = {
-      name: connectionData.connectionName || '未命名连接',
-      type: connectionData.connectionType === 'cross_map' ? '跨地图连接' as const : '跨区域连接' as const,
-      remark: connectionData.remark || '',
-      mapCards: connectionData.mapCards || [],
-      connections: connectionData.connections || [],
-      canvasState: connectionData.canvasState || null
-    };
-    
-    if (editingConnection) {
+    if (editingPathGroup) {
       // 编辑模式
-      setConnections(connections.map(conn => 
-        conn.id === editingConnection.id 
+      setPathGroups(pathGroups.map(pg => 
+        pg.id === editingPathGroup.id 
           ? { 
-              ...conn, 
-              ...mappedData,
+              ...pg, 
+              ...pathGroupData,
               updateTime: new Date().toLocaleString('zh-CN', {
                 year: 'numeric',
                 month: '2-digit',
@@ -341,14 +406,14 @@ const CrossMapConnectionManagement: React.FC = () => {
               }).replace(/\//g, '-'),
               updatedBy: '当前用户'
             }
-          : conn
+          : pg
       ));
-      message.success('跨地图连接编辑成功');
+      message.success('跨地图路径组编辑成功');
     } else {
       // 新增模式
-      const newConnection: CrossMapConnection = {
+      const newPathGroup: CrossMapPathGroup = {
         id: Date.now().toString(),
-        ...mappedData,
+        ...pathGroupData,
         updateTime: new Date().toLocaleString('zh-CN', {
           year: 'numeric',
           month: '2-digit',
@@ -360,8 +425,8 @@ const CrossMapConnectionManagement: React.FC = () => {
         }).replace(/\//g, '-'),
         updatedBy: '当前用户'
       };
-      setConnections([newConnection, ...connections]);
-      message.success('跨地图连接创建成功');
+      setPathGroups([newPathGroup, ...pathGroups]);
+      message.success('跨地图路径组创建成功');
     }
     handleModalClose();
   };
@@ -371,9 +436,9 @@ const CrossMapConnectionManagement: React.FC = () => {
       <Card style={{ marginBottom: 16 }}>
         {/* 搜索和筛选区域 */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col xs={24} sm={24} md={10} lg={8} xl={isLargeScreen ? 10 : 8} xxl={12}>
+          <Col xs={24} sm={24} md={12} lg={10} xl={isLargeScreen ? 12 : 10} xxl={14}>
             <Input
-              placeholder="请输入连接名称搜索"
+              placeholder="请输入名称、地图或路径组搜索"
               prefix={<SearchOutlined />}
               value={searchText}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
@@ -381,20 +446,7 @@ const CrossMapConnectionManagement: React.FC = () => {
               size={isMobile ? 'large' : 'middle'}
             />
           </Col>
-          <Col xs={12} sm={12} md={5} lg={4} xl={isLargeScreen ? 4 : 4} xxl={4}>
-            <Select
-              placeholder="全部类型"
-              value={typeFilter || undefined}
-              onChange={(value: string | undefined) => setTypeFilter(value || '')}
-              allowClear
-              style={{ width: '100%' }}
-              size={isMobile ? 'large' : 'middle'}
-            >
-              <Option value="跨地图连接">跨地图连接</Option>
-              <Option value="跨区域连接">跨区域连接</Option>
-            </Select>
-          </Col>
-          <Col xs={6} sm={6} md={3} lg={4} xl={isLargeScreen ? 3 : 4} xxl={3}>
+          <Col xs={12} sm={12} md={4} lg={4} xl={isLargeScreen ? 4 : 4} xxl={4}>
             <Button
               icon={<ReloadOutlined />}
               onClick={handleRefresh}
@@ -405,7 +457,7 @@ const CrossMapConnectionManagement: React.FC = () => {
               {isMobile ? '' : '刷新'}
             </Button>
           </Col>
-          <Col xs={6} sm={6} md={6} lg={8} xl={isLargeScreen ? 7 : 8} xxl={5}>
+          <Col xs={12} sm={12} md={8} lg={10} xl={isLargeScreen ? 8 : 10} xxl={6}>
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -419,11 +471,11 @@ const CrossMapConnectionManagement: React.FC = () => {
         </Row>
         <Table
           columns={isMobile ? mobileColumns : desktopColumns}
-          dataSource={filteredConnections}
+          dataSource={filteredPathGroups}
           rowKey="id"
           loading={loading}
           pagination={{
-            total: filteredConnections.length,
+            total: filteredPathGroups.length,
             pageSize: isMobile ? 5 : isLargeScreen ? 15 : 10,
             showSizeChanger: !isMobile,
             showQuickJumper: !isMobile,
@@ -439,14 +491,16 @@ const CrossMapConnectionManagement: React.FC = () => {
       </Card>
 
       {/* 新增/编辑弹窗 */}
-      <AddSystemCrossMapConnection
+      <AddCrossMapPathGroup
         visible={isAddModalVisible}
         onClose={handleModalClose}
         onSave={handleSave}
-        editData={editingConnection}
+        editData={editingPathGroup}
+        placement="right"
+        width="66.67%"
       />
     </div>
   );
 };
 
-export default CrossMapConnectionManagement;
+export default CrossMapPathGroupManagement;

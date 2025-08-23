@@ -425,7 +425,7 @@ const CrossMapConnectionManagement: React.FC = () => {
               size={isMobile ? 'large' : 'middle'}
               style={{ width: '100%' }}
             >
-              {isMobile ? '新增' : '新增连接'}
+              新增
             </Button>
           </Col>
         </Row>

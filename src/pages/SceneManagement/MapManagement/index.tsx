@@ -118,7 +118,7 @@ interface MapLine {
 interface MapArea {
   id: string;
   name: string;
-  type: '禁行区域' | '调速区域' | 'forbidden' | 'cleaning' | 'virtual_wall' | 'slow_cleaning';
+  type: '禁行区域' | '调速区域' | '多路网区' | 'forbidden' | 'cleaning' | 'virtual_wall' | 'slow_cleaning';
   points: { x: number; y: number }[];
   color: string;
   fillOpacity: number;
@@ -126,6 +126,8 @@ interface MapArea {
   strokeColor?: string; // 边框颜色
   opacity?: number; // 透明度
   speed?: number; // 调速区域的速度值
+  networkGroupId?: string; // 关联的路网组ID
+  robotId?: string; // 关联的机器人ID
 }
 
 // 地图文件数据类型
@@ -172,6 +174,37 @@ interface RobotDevice {
   updateTime: string;
   updatedBy: string;
   lastConnectTime: string;
+}
+
+// 路网节点接口
+interface NetworkNode {
+  id: string;
+  name: string;
+  description: string;
+}
+
+// 路网路径接口
+interface NetworkPath {
+  id: string;
+  name: string;
+  description: string;
+}
+
+// 路网组接口
+interface NetworkGroup {
+  id: string;
+  name: string;
+  description?: string;
+  createTime?: string;
+  updateTime?: string;
+  nodes: NetworkNode[];
+  paths: NetworkPath[];
+}
+
+// 多路网区域配置接口
+interface MultiNetworkAreaConfig {
+  networkGroupId: string;
+  associatedRobots: string[]; // 关联的机器人ID列表
 }
 
 // 同步状态接口
@@ -309,6 +342,12 @@ const MapManagement: React.FC = () => {
           strokeColor: '#ff9c6e'
         };
       }
+    } else if (area.type === '多路网区') {
+      // 多路网区：青色
+      return {
+        fillColor: '#87e8de',
+        strokeColor: '#36cfc9'
+      };
     }
     // 默认颜色（调速区域）
     return {
@@ -340,6 +379,15 @@ const MapManagement: React.FC = () => {
   const [isSelecting, setIsSelecting] = useState(false); // 是否正在框选
   const [selectionStart, setSelectionStart] = useState<{x: number, y: number} | null>(null); // 框选起始点
   const [selectionEnd, setSelectionEnd] = useState<{x: number, y: number} | null>(null); // 框选结束点
+  const [hoveredAreaId, setHoveredAreaId] = useState<string | null>(null); // 鼠标悬停的区域ID
+  
+  // 复制粘贴相关状态
+  const [copiedElements, setCopiedElements] = useState<{
+    points: any[];
+    lines: MapLine[];
+    areas: MapArea[];
+  } | null>(null); // 复制的元素数据
+  const [lastClickPosition, setLastClickPosition] = useState<{x: number, y: number} | null>(null); // 最后点击的位置，用于粘贴定位
   const [editingPoint, setEditingPoint] = useState<any | null>(null); // 正在编辑的点
   const [pointEditModalVisible, setPointEditModalVisible] = useState(false); // 点编辑弹窗显示状态
   const [pointEditForm] = Form.useForm(); // 点编辑表单
@@ -351,6 +399,13 @@ const MapManagement: React.FC = () => {
   const [editingArea, setEditingArea] = useState<MapArea | null>(null); // 正在编辑的区域
   const [areaEditModalVisible, setAreaEditModalVisible] = useState(false); // 区域编辑弹窗显示状态
   const [areaEditForm] = Form.useForm(); // 区域编辑表单
+  const [networkConfigs, setNetworkConfigs] = useState<Array<{id: string, networkGroupId?: string, associatedRobots?: string[], priority?: number}>>([{id: '1'}]); // 动态路网配置
+  
+  // 路网组相关状态
+  // 路网组列表状态已在下方定义
+  const [addNetworkGroupModalVisible, setAddNetworkGroupModalVisible] = useState(false); // 新增路网组弹窗显示状态
+  const [addNetworkGroupForm] = Form.useForm(); // 新增路网组表单
+  const [addNetworkGroupLoading, setAddNetworkGroupLoading] = useState(false); // 新增路网组加载状态
   
   // 连线相关状态
   const [isConnecting, setIsConnecting] = useState(false); // 是否正在连线
@@ -965,13 +1020,6 @@ const MapManagement: React.FC = () => {
     description: string;
   }
 
-  interface NetworkGroup {
-    id: string;
-    name: string;
-    nodes: NetworkNode[];
-    paths: NetworkPath[];
-  }
-
   // 路径组数据结构
   interface PathGroupPath {
     id: string;
@@ -1039,10 +1087,18 @@ const MapManagement: React.FC = () => {
   // 路径组选择弹窗相关状态
   const [pathGroupSelectModalVisible, setPathGroupSelectModalVisible] = useState(false);
   const [pathGroupSelectForm] = Form.useForm();
-  
+
   // 新增路径组气泡相关状态
   const [addPathGroupPopoverVisible, setAddPathGroupPopoverVisible] = useState(false);
   const [newPathGroupName, setNewPathGroupName] = useState('');
+
+  // 路网组选择弹窗相关状态
+  const [networkGroupSelectModalVisible, setNetworkGroupSelectModalVisible] = useState(false);
+  const [networkGroupSelectForm] = Form.useForm();
+
+  // 新增路网组气泡相关状态
+  const [addNetworkGroupPopoverVisible, setAddNetworkGroupPopoverVisible] = useState(false);
+  const [newNetworkGroupName, setNewNetworkGroupName] = useState('');
 
   // 移除节点函数
   const removeNodeFromGroup = (groupId: string, nodeId: string) => {
@@ -1178,6 +1234,29 @@ const MapManagement: React.FC = () => {
       onOk: () => {
         setPathGroups(prev => prev.filter(group => group.id !== groupId));
         message.success('路径组已删除');
+      }
+    });
+  };
+
+  // 删除区域
+  const handleDeleteArea = (areaId: string) => {
+    const area = mapAreas.find(a => a.id === areaId);
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除区域 "${area?.name}" 吗？删除后无法恢复。`,
+      okText: '确认删除',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: () => {
+        // 从区域列表中删除
+        setMapAreas(prev => prev.filter(area => area.id !== areaId));
+        
+        // 如果该区域当前被选中，清除选中状态
+        if (selectedAreas.includes(areaId)) {
+          setSelectedAreas(prev => prev.filter(id => id !== areaId));
+        }
+        
+        message.success('区域已删除');
       }
     });
   };
@@ -1378,6 +1457,21 @@ const MapManagement: React.FC = () => {
     }
   };
 
+  // 处理框选区域内线条加入路网组
+  const handleAddSelectionToNetworkGroup = () => {
+    const selectedLinesInSelection = getSelectedLinesInSelection();
+    
+    if (selectedLinesInSelection.length > 0) {
+      // 设置要加入路网组的线条ID
+      setContextMenuLineIds(selectedLinesInSelection);
+      setSelectionContextMenuVisible(false);
+      setNetworkGroupSelectModalVisible(true);
+      networkGroupSelectForm.resetFields();
+    } else {
+      message.warning('框选区域内没有可加入路网组的线条');
+    }
+  };
+
   // 打开路径组选择弹窗
   const handleOpenPathGroupSelect = () => {
     setLineContextMenuVisible(false);
@@ -1389,6 +1483,19 @@ const MapManagement: React.FC = () => {
   const handleClosePathGroupSelect = () => {
     setPathGroupSelectModalVisible(false);
     pathGroupSelectForm.resetFields();
+  };
+
+  // 打开路网组选择弹窗
+  const handleOpenNetworkGroupSelect = () => {
+    setLineContextMenuVisible(false);
+    setNetworkGroupSelectModalVisible(true);
+    networkGroupSelectForm.resetFields();
+  };
+
+  // 关闭路网组选择弹窗
+  const handleCloseNetworkGroupSelect = () => {
+    setNetworkGroupSelectModalVisible(false);
+    networkGroupSelectForm.resetFields();
   };
 
   // 处理新增路径组气泡确认
@@ -1419,6 +1526,37 @@ const MapManagement: React.FC = () => {
   const handleCancelCreatePathGroup = () => {
     setNewPathGroupName('');
     setAddPathGroupPopoverVisible(false);
+  };
+
+  // 处理新增路网组气泡确认
+  const handleCreateNewNetworkGroup = () => {
+    if (!newNetworkGroupName.trim()) {
+      message.error('请输入路网组名称');
+      return;
+    }
+    if (newNetworkGroupName.length > 6) {
+      message.error('路网组名称不能超过6个字符');
+      return;
+    }
+
+    const newGroup: NetworkGroup = {
+      id: `network-group-${Date.now()}`,
+      name: newNetworkGroupName.trim(),
+      nodes: [],
+      paths: []
+    };
+    setNetworkGroups(prev => [...prev, newGroup]);
+    message.success('新路网组已创建');
+
+    // 重置状态
+    setNewNetworkGroupName('');
+    setAddNetworkGroupPopoverVisible(false);
+  };
+
+  // 取消新增路网组
+  const handleCancelCreateNetworkGroup = () => {
+    setNewNetworkGroupName('');
+    setAddNetworkGroupPopoverVisible(false);
   };
 
   // 将选中线条加入路径组
@@ -1487,6 +1625,69 @@ const MapManagement: React.FC = () => {
       handleClosePathGroupSelect();
     } catch (error) {
       console.error('加入路径组失败:', error);
+    }
+  };
+
+  // 处理将选中的线条加入到路网组
+  const handleAddLinesToNetworkGroup = async () => {
+    try {
+      const values = await networkGroupSelectForm.validateFields();
+      const { networkGroupId } = values;
+      
+      if (networkGroupId) {
+        // 路网组允许重复路径，所以不需要检查重复
+        const validLineIds = contextMenuLineIds.filter(lineId => 
+          mapLines.some(line => line.id === lineId)
+        );
+        
+        if (validLineIds.length === 0) {
+          message.warning('选中的线条不存在');
+          handleCloseNetworkGroupSelect();
+          return;
+        }
+        
+        // 将选中的线条加入到路网组
+        const linesToAdd = validLineIds.map(lineId => {
+          const line = mapLines.find(l => l.id === lineId);
+          // 获取线条的起始和结束节点名称
+          const startPoint = getPointById(line?.startPointId || '');
+          const endPoint = getPointById(line?.endPointId || '');
+          const startNode = startPoint?.name || 'n1';
+          const endNode = endPoint?.name || 'n2';
+          const lineName = line?.name || lineId;
+          
+          // 根据线条类型决定箭头格式
+          let arrow = '-->';
+          if (line?.type === 'double-line') {
+            arrow = '<-->';
+          }
+          
+          return {
+            id: lineId,
+            name: lineName,
+            description: `${startNode}${arrow}${endNode}`,
+            startNode,
+            endNode
+          };
+        });
+        
+        setNetworkGroups(prev => prev.map(group => {
+          if (group.id === networkGroupId) {
+            return {
+              ...group,
+              paths: [...group.paths, ...linesToAdd]
+            };
+          }
+          return group;
+        }));
+        
+        const groupName = networkGroups.find(g => g.id === networkGroupId)?.name || '路网组';
+        message.success(`已将 ${validLineIds.length} 条线加入到 ${groupName}`);
+      }
+      
+      handleCloseNetworkGroupSelect();
+    } catch (error) {
+      console.error('加入路网组失败:', error);
     }
   };
 
@@ -3304,6 +3505,12 @@ const MapManagement: React.FC = () => {
       }));
       setHasUnsavedChanges(false);
       
+      // 设置地图编辑器默认状态：编辑模式、拓扑地图类型、绘图工具
+      setCurrentMode('edit'); // 默认编辑模式
+      setMapType('topology'); // 默认拓扑地图类型
+      setSelectedTool('draw'); // 默认选中绘图工具
+      setIsReadOnlyMode(false); // 确保不是只读模式
+      
       // 根据模式显示不同的成功消息
       if (currentEditFile) {
         console.log('✅ [地图文件编辑] 编辑模式：地图文件更新成功，进入编辑器');
@@ -3530,22 +3737,14 @@ const MapManagement: React.FC = () => {
           '当前步骤': addMapFileStep
         });
         
-        if (currentEditFile === null) {
-          // 新增模式：只退回到第一步，不重置表单数据
-          console.log('🔄 [地图文件编辑] 新增模式：退回到第一步，保留表单数据');
-          setAddMapFileStep(1);
-          // 重置地图编辑器状态，但保留表单数据
-          setSelectedTool('select');
-          setMapPoints([]);
-          setMapLines([]);
-          setMapAreas([]);
-          setAllStrokes([]);
-          setCanvasOffset({ x: 0, y: 0 });
-          setCanvasScale(1);
-          message.info('已退回到基本信息步骤');
+        if (addMapFileStep === 2) {
+          // 在地图编辑器（步骤2）中取消：直接退出到地图管理页面
+          console.log('🔄 [地图文件编辑] 地图编辑器中取消：直接退出到地图管理页面');
+          handleCloseAddMapFileDrawer();
+          message.info('已取消编辑');
         } else {
-          // 编辑模式：完全重置
-          console.log('🔄 [地图文件编辑] 编辑模式：完全重置所有数据');
+          // 在步骤1中取消：也直接退出到地图管理页面
+          console.log('🔄 [地图文件编辑] 基本信息步骤中取消：退出到地图管理页面');
           handleCloseAddMapFileDrawer();
           message.info('已取消编辑');
         }
@@ -3583,6 +3782,137 @@ const MapManagement: React.FC = () => {
       allStrokes: allStrokes.length + '个笔画',
       erasedPixels: erasedPixels.length + '个擦除点'
     });
+  };
+
+  // 复制选中的元素
+  const handleCopyElements = () => {
+    const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
+    const selectedLinesData = mapLines.filter(line => selectedLines.includes(line.id));
+    const selectedAreasData = mapAreas.filter(area => selectedAreas.includes(area.id));
+    
+    if (selectedPointsData.length === 0 && selectedLinesData.length === 0 && selectedAreasData.length === 0) {
+      message.warning('请先选择要复制的元素');
+      return;
+    }
+    
+    setCopiedElements({
+      points: selectedPointsData,
+      lines: selectedLinesData,
+      areas: selectedAreasData
+    });
+    
+    const totalCount = selectedPointsData.length + selectedLinesData.length + selectedAreasData.length;
+    message.success(`已复制 ${totalCount} 个元素`);
+    console.log('复制元素:', { points: selectedPointsData.length, lines: selectedLinesData.length, areas: selectedAreasData.length });
+  };
+
+  // 粘贴复制的元素
+  const handlePasteElements = () => {
+    if (!copiedElements || (copiedElements.points.length === 0 && copiedElements.lines.length === 0 && copiedElements.areas.length === 0)) {
+      message.warning('没有可粘贴的元素');
+      return;
+    }
+    
+    // 如果没有记录鼠标点击位置，使用默认偏移
+    if (!lastClickPosition) {
+      message.warning('请先在画布上点击确定粘贴位置');
+      return;
+    }
+    
+    const newPoints: any[] = [];
+    const newLines: MapLine[] = [];
+    const newAreas: MapArea[] = [];
+    const pointIdMap: Record<string, string> = {}; // 旧ID到新ID的映射
+    
+    // 计算复制元素的中心点
+    let centerX = 0, centerY = 0, totalElements = 0;
+    
+    // 计算点的中心
+    copiedElements.points.forEach(point => {
+      centerX += point.x;
+      centerY += point.y;
+      totalElements++;
+    });
+    
+    // 计算区域的中心
+    copiedElements.areas.forEach(area => {
+      area.points.forEach(point => {
+        centerX += point.x;
+        centerY += point.y;
+        totalElements++;
+      });
+    });
+    
+    if (totalElements > 0) {
+      centerX /= totalElements;
+      centerY /= totalElements;
+    }
+    
+    // 计算偏移量：从中心点到鼠标点击位置
+    const offsetX = lastClickPosition.x - centerX;
+    const offsetY = lastClickPosition.y - centerY;
+    
+    // 复制点
+    copiedElements.points.forEach(point => {
+      const newId = `point_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      pointIdMap[point.id] = newId;
+      
+      const newPoint = {
+        ...point,
+        id: newId,
+        name: `${point.name}_副本`,
+        x: point.x + offsetX,
+        y: point.y + offsetY
+      };
+      newPoints.push(newPoint);
+    });
+    
+    // 复制线（需要更新点ID引用）
+    copiedElements.lines.forEach(line => {
+      const newId = `line_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      // 只有当起始点和结束点都在复制的点中时，才复制这条线
+      if (pointIdMap[line.startPointId] && pointIdMap[line.endPointId]) {
+        const newLine: MapLine = {
+          ...line,
+          id: newId,
+          name: `${line.name}_副本`,
+          startPointId: pointIdMap[line.startPointId],
+          endPointId: pointIdMap[line.endPointId]
+        };
+        newLines.push(newLine);
+      }
+    });
+    
+    // 复制区域
+    copiedElements.areas.forEach(area => {
+      const newId = `area_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      const newArea: MapArea = {
+        ...area,
+        id: newId,
+        name: `${area.name}_副本`,
+        points: area.points.map(point => ({
+          x: point.x + offsetX,
+          y: point.y + offsetY
+        }))
+      };
+      newAreas.push(newArea);
+    });
+    
+    // 更新状态
+    setMapPoints(prev => [...prev, ...newPoints]);
+    setMapLines(prev => [...prev, ...newLines]);
+    setMapAreas(prev => [...prev, ...newAreas]);
+    
+    // 选中新粘贴的元素
+    setSelectedPoints(newPoints.map(p => p.id));
+    setSelectedLines(newLines.map(l => l.id));
+    setSelectedAreas(newAreas.map(a => a.id));
+    
+    const totalCount = newPoints.length + newLines.length + newAreas.length;
+    message.success(`已粘贴 ${totalCount} 个元素`);
+    console.log('粘贴元素:', { points: newPoints.length, lines: newLines.length, areas: newAreas.length });
   };
   
   // handleSubmit函数已移除
@@ -4306,6 +4636,11 @@ const MapManagement: React.FC = () => {
       时间戳: new Date().toISOString()
     });
     
+    // 记录鼠标点击位置，用于粘贴功能
+    const canvasElement = event.currentTarget;
+    const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+    setLastClickPosition({ x, y });
+    
     // 设置画布被点击状态，用于启用双指缩放功能
     setIsCanvasClicked(true);
     
@@ -4594,6 +4929,14 @@ const MapManagement: React.FC = () => {
   const handlePointClick = (event: React.MouseEvent, pointId: string) => {
     event.stopPropagation();
     
+    // 记录点击位置用于粘贴
+    const canvasElement = event.currentTarget.closest('.canvas-container') as HTMLDivElement;
+    if (canvasElement) {
+      const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+      setLastClickPosition({ x, y });
+      console.log('🎯 [点击调试] handlePointClick 记录位置:', { x: x.toFixed(2), y: y.toFixed(2) });
+    }
+    
     // 连线工具模式处理
     if (['double-line', 'single-line', 'double-bezier', 'single-bezier'].includes(selectedTool)) {
       handlePointConnection(pointId);
@@ -4784,17 +5127,68 @@ const MapManagement: React.FC = () => {
     if (selectedTool === 'select') {
       // 打开区域编辑弹窗
       setEditingArea(area);
+      
+      // 设置基本表单字段
       areaEditForm.setFieldsValue({
         name: area.name,
         type: area.type,
         speed: area.speed,
         description: area.description
       });
+      
+      // 如果是多路网区，需要设置networkConfigs数据
+      if (area.type === '多路网区' && area.networkGroupId && area.robotId) {
+        const networkConfig = {
+          id: '1',
+          networkGroupId: area.networkGroupId,
+          associatedRobots: [area.robotId]
+        };
+        setNetworkConfigs([networkConfig]);
+        
+        // 设置表单字段值
+        areaEditForm.setFieldsValue({
+          [`networkGroupId_${networkConfig.id}`]: area.networkGroupId,
+          [`associatedRobots_${networkConfig.id}`]: [area.robotId]
+        });
+      } else {
+        // 重置为默认配置
+        setNetworkConfigs([{id: '1'}]);
+      }
+      
       setAreaEditModalVisible(true);
     }
   };
 
   // 框选结束处理函数
+  // 检测线段与矩形是否相交的工具函数
+  const lineIntersectsRect = (x1: number, y1: number, x2: number, y2: number, rectX1: number, rectY1: number, rectX2: number, rectY2: number): boolean => {
+    // 检查线段端点是否在矩形内
+    const pointInRect = (x: number, y: number) => {
+      return x >= rectX1 && x <= rectX2 && y >= rectY1 && y <= rectY2;
+    };
+    
+    if (pointInRect(x1, y1) || pointInRect(x2, y2)) {
+      return true;
+    }
+    
+    // 检查线段是否与矩形的四条边相交
+    const lineIntersectsLine = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, x4: number, y4: number): boolean => {
+      const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+      if (Math.abs(denom) < 1e-10) return false; // 平行线
+      
+      const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+      const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+      
+      return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+    };
+    
+    // 检查与矩形四条边的相交
+    return lineIntersectsLine(x1, y1, x2, y2, rectX1, rectY1, rectX2, rectY1) || // 上边
+           lineIntersectsLine(x1, y1, x2, y2, rectX2, rectY1, rectX2, rectY2) || // 右边
+           lineIntersectsLine(x1, y1, x2, y2, rectX2, rectY2, rectX1, rectY2) || // 下边
+           lineIntersectsLine(x1, y1, x2, y2, rectX1, rectY2, rectX1, rectY1);   // 左边
+  };
+
   const handleSelectionEndWithState = (isSelecting: boolean, selectionStart: {x: number, y: number} | null, selectionEnd: {x: number, y: number} | null) => {
     if (isSelecting && selectionStart && selectionEnd) {
       const minX = Math.min(selectionStart.x, selectionEnd.x);
@@ -4809,7 +5203,41 @@ const MapManagement: React.FC = () => {
           return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
         });
         
+        // 设置选中的点
         setSelectedPoints(pointsInSelection.map(p => p.id));
+        
+        // 查找框选区域内的线条（包括与框选区域相交的线条）
+        const selectedPointIds = new Set(pointsInSelection.map(p => p.id));
+        const linesInSelection = mapLines.filter(line => {
+          // 如果线的两个端点都在框选区域内，直接选中
+          if (selectedPointIds.has(line.startPointId) && selectedPointIds.has(line.endPointId)) {
+            return true;
+          }
+          
+          // 检查线段是否与框选矩形相交
+          const startPoint = mapPoints.find(p => p.id === line.startPointId);
+          const endPoint = mapPoints.find(p => p.id === line.endPointId);
+          
+          if (!startPoint || !endPoint) return false;
+          
+          // 使用线段与矩形相交算法
+          return lineIntersectsRect(
+            startPoint.x, startPoint.y,
+            endPoint.x, endPoint.y,
+            minX, minY, maxX, maxY
+          );
+        });
+        
+        // 设置选中的线条
+        setSelectedLines(linesInSelection.map(line => line.id));
+        
+        // 调试日志
+        console.log('📦 [框选调试] 选中结果:', {
+          '选中点数量': pointsInSelection.length,
+          '选中线数量': linesInSelection.length,
+          '选中点ID': pointsInSelection.map(p => p.id),
+          '选中线ID': linesInSelection.map(l => l.id)
+        });
         
         if (pointsInSelection.length > 0) {
           // 有选中的点，计算选中点的边界
@@ -4825,6 +5253,7 @@ const MapManagement: React.FC = () => {
           setSelectionEnd({ x: pointMaxX, y: pointMaxY });
         } else {
           // 没有选中任何点，清除框选状态
+          setSelectedLines([]);
           setIsSelecting(false);
           setSelectionStart(null);
           setSelectionEnd(null);
@@ -4832,6 +5261,7 @@ const MapManagement: React.FC = () => {
       } else {
         // 框选区域太小，清除选择
         setSelectedPoints([]);
+        setSelectedLines([]);
         setIsSelecting(false);
         setSelectionStart(null);
         setSelectionEnd(null);
@@ -4955,12 +5385,23 @@ const MapManagement: React.FC = () => {
       const updatedArea = { ...editingArea, ...values };
       const colors = getAreaColors(updatedArea);
       
+      // 处理多路网区的数据
+      let areaUpdateData = { ...values };
+      if (values.type === '多路网区' && networkConfigs.length > 0) {
+        // 获取第一个配置的数据（目前只支持一个配置）
+        const firstConfig = networkConfigs[0];
+        if (firstConfig.networkGroupId && firstConfig.associatedRobots && firstConfig.associatedRobots.length > 0) {
+          areaUpdateData.networkGroupId = firstConfig.networkGroupId;
+          areaUpdateData.robotId = firstConfig.associatedRobots[0]; // 取第一个机器人
+        }
+      }
+      
       setMapAreas(prev => 
         prev.map(area => 
           area.id === editingArea.id 
             ? { 
                 ...area, 
-                ...values, 
+                ...areaUpdateData, 
                 fillColor: colors.fillColor,
                 strokeColor: colors.strokeColor
               }
@@ -4970,6 +5411,8 @@ const MapManagement: React.FC = () => {
       setAreaEditModalVisible(false);
       setEditingArea(null);
       areaEditForm.resetFields();
+      // 重置networkConfigs
+      setNetworkConfigs([{id: '1'}]);
       message.success('区域编辑成功');
     }
   };
@@ -5519,6 +5962,43 @@ const MapManagement: React.FC = () => {
           redoStroke();
         } else {
           handleRedo();
+        }
+        return;
+      }
+      
+      // 处理复制粘贴快捷键 (Ctrl+C/Cmd+C 复制, Ctrl+V/Cmd+V 粘贴)
+      if (event.key === 'c' || event.key === 'C') {
+        // 检查当前焦点是否在输入框或其他表单元素上
+        const activeElement = document.activeElement;
+        const isInputFocused = activeElement && (
+          activeElement.tagName === 'INPUT' ||
+          activeElement.tagName === 'TEXTAREA' ||
+          (activeElement as HTMLElement).contentEditable === 'true' ||
+          activeElement.getAttribute('role') === 'textbox'
+        );
+        
+        // 如果焦点在输入框上，不拦截键盘事件，让输入框正常处理
+        if (!isInputFocused) {
+          event.preventDefault();
+          handleCopyElements();
+        }
+        return;
+      }
+      
+      if (event.key === 'v' || event.key === 'V') {
+        // 检查当前焦点是否在输入框或其他表单元素上
+        const activeElement = document.activeElement;
+        const isInputFocused = activeElement && (
+          activeElement.tagName === 'INPUT' ||
+          activeElement.tagName === 'TEXTAREA' ||
+          (activeElement as HTMLElement).contentEditable === 'true' ||
+          activeElement.getAttribute('role') === 'textbox'
+        );
+        
+        // 如果焦点在输入框上，不拦截键盘事件，让输入框正常处理
+        if (!isInputFocused) {
+          event.preventDefault();
+          handlePasteElements();
         }
         return;
       }
@@ -6195,9 +6675,108 @@ const MapManagement: React.FC = () => {
       return;
     }
     
+    // 记录鼠标点击位置到lastClickPosition
+    const canvasElement = event.currentTarget.closest('.map-canvas') as HTMLDivElement;
+    if (canvasElement) {
+      const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+      setLastClickPosition({ x, y });
+      console.log('📍 [线点击] 记录鼠标位置到lastClickPosition:', { x: x.toFixed(2), y: y.toFixed(2) });
+    }
+    
     event.stopPropagation();
     
     if (selectedTool === 'select') {
+      // Shift + 点击：在线上插入节点
+      if (event.shiftKey) {
+        // 获取点击位置的画布坐标
+        if (!canvasRef.current) {
+          console.error('❌ [插入节点] 未找到画布元素');
+          return;
+        }
+        
+        const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasRef.current);
+        
+        // 获取线的起点和终点
+        const startPoint = mapPoints.find(p => p.id === clickedLine.startPointId);
+        const endPoint = mapPoints.find(p => p.id === clickedLine.endPointId);
+        
+        if (!startPoint || !endPoint) {
+          console.error('❌ [插入节点] 未找到线的起点或终点', { startPointId: clickedLine.startPointId, endPointId: clickedLine.endPointId });
+          return;
+        }
+        
+        // 创建新节点
+        const newPointId = `point_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const newPoint = {
+          id: newPointId,
+          name: `P${pointCounter}`,
+          x: x,
+          y: y,
+          type: '节点' as const,
+          description: '插入的节点',
+          createTime: new Date().toISOString(),
+          updateTime: new Date().toISOString(),
+          updateUser: '当前用户'
+        };
+        
+        // 创建两条新线段
+        const newLine1Id = `line_${Date.now()}_1_${Math.random().toString(36).substr(2, 9)}`;
+        const newLine2Id = `line_${Date.now()}_2_${Math.random().toString(36).substr(2, 9)}`;
+        
+        const newLine1: MapLine = {
+          id: newLine1Id,
+          name: `${clickedLine.name}_1`,
+          startPointId: clickedLine.startPointId,
+          endPointId: newPointId,
+          type: clickedLine.type,
+          color: clickedLine.color,
+          width: clickedLine.width,
+          controlPoints: clickedLine.controlPoints ? {
+            cp1: clickedLine.controlPoints.cp1,
+            cp2: { x: (clickedLine.controlPoints.cp1!.x + x) / 2, y: (clickedLine.controlPoints.cp1!.y + y) / 2 }
+          } : undefined
+        };
+        
+        const newLine2: MapLine = {
+          id: newLine2Id,
+          name: `${clickedLine.name}_2`,
+          startPointId: newPointId,
+          endPointId: clickedLine.endPointId,
+          type: clickedLine.type,
+          color: clickedLine.color,
+          width: clickedLine.width,
+          controlPoints: clickedLine.controlPoints ? {
+            cp1: { x: (x + clickedLine.controlPoints.cp2!.x) / 2, y: (y + clickedLine.controlPoints.cp2!.y) / 2 },
+            cp2: clickedLine.controlPoints.cp2
+          } : undefined
+        };
+        
+        // 更新状态
+        setMapPoints(prev => [...prev, newPoint]);
+        setMapLines(prev => {
+          // 移除原线，添加两条新线
+          const filteredLines = prev.filter(line => line.id !== lineId);
+          return [...filteredLines, newLine1, newLine2];
+        });
+        
+        // 更新计数器
+        setPointCounter(prev => prev + 1);
+        
+        // 选中新创建的节点
+        setSelectedPoints([newPointId]);
+        setSelectedLines([]);
+        
+        console.log('✅ [插入节点] 成功在线上插入节点', {
+          originalLine: clickedLine.name,
+          newPoint: newPoint.name,
+          newLine1: newLine1.name,
+          newLine2: newLine2.name,
+          insertPosition: { x, y }
+        });
+        
+        return;
+      }
+      
       let newSelectedLines: string[];
       
       if (event.ctrlKey || event.metaKey) {
@@ -9638,6 +10217,14 @@ const MapManagement: React.FC = () => {
                                 if (selectedTool === 'select') {
                                   console.log('🔍 [区域点击调试] 选择工具模式 - 阻止事件传播');
                                   
+                                  // 记录鼠标点击位置到lastClickPosition
+                                  const canvasElement = e.currentTarget.closest('.map-canvas') as HTMLDivElement;
+                                  if (canvasElement) {
+                                    const { x, y } = screenToCanvasCoordinates(e.clientX, e.clientY, canvasElement);
+                                    setLastClickPosition({ x, y });
+                                    console.log('🔍 [区域点击调试] 记录鼠标位置:', { x, y });
+                                  }
+                                  
                                   // 立即设置区域点击标记，阻止SVG事件触发
                                   areaClickedFlag.current = true;
                                   console.log('🔍 [区域点击调试] 设置区域点击标记为true');
@@ -11017,66 +11604,104 @@ const MapManagement: React.FC = () => {
                                   ),
                                   children: (
                                     <div style={{ paddingLeft: '16px' }}>
-                                      {mapAreas.map((area) => (
-                                        <div 
-                                          key={area.id} 
-                                          style={{ 
-                                            fontSize: '12px', 
-                                            lineHeight: '1.6',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center',
-                                            padding: '2px 4px',
-                                            borderRadius: '4px',
-                                            transition: 'background-color 0.2s',
-                                            cursor: 'pointer'
-                                          }}
-                                          onClick={() => handleAreaListClick(area.id)}
-                                          onMouseEnter={(e) => {
-                                            e.currentTarget.style.backgroundColor = '#f5f5f5';
-                                            const deleteBtn = e.currentTarget.querySelector('.delete-btn') as HTMLElement;
-                                            if (deleteBtn) deleteBtn.style.opacity = '1';
-                                          }}
-                                          onMouseLeave={(e) => {
-                                            e.currentTarget.style.backgroundColor = 'transparent';
-                                            const deleteBtn = e.currentTarget.querySelector('.delete-btn') as HTMLElement;
-                                            if (deleteBtn) deleteBtn.style.opacity = '0';
-                                          }}
-                                        >
-                                          <span>{area.name} ({area.type || '区域'})</span>
-                                          {currentMode === 'edit' && (
-                                            <Button 
-                                              className="delete-btn"
-                                              type="text" 
-                                              size="small" 
-                                              danger
-                                              onClick={(e: React.MouseEvent) => {
-                                                e.stopPropagation(); // 阻止事件冒泡到父元素
-                                                Modal.confirm({
-                                                  title: '确认删除',
-                                                  content: `确定要删除区域 "${area.name}" 吗？删除后无法恢复。`,
-                                                  okText: '确认删除',
-                                                  cancelText: '取消',
-                                                  okType: 'danger',
-                                                  onOk: () => {
-                                                    setMapAreas(prev => prev.filter(a => a.id !== area.id));
-                                                    message.success(`区域 "${area.name}" 已删除`);
-                                                  }
-                                                });
-                                              }}
+                                      {mapAreas.map((area) => {
+                                        // 获取关联的路网组信息
+                                        const networkGroup = area.networkGroupId ? networkGroups.find(ng => ng.id === area.networkGroupId) : null;
+                                        const robotDevice = area.robotId ? robotDevices.find(rd => rd.id === area.robotId) : null;
+                                        
+                                        return (
+                                          <div key={area.id}>
+                                            <div 
                                               style={{ 
-                                                opacity: 0, 
-                                                transition: 'opacity 0.2s',
-                                                fontSize: '10px',
-                                                height: '20px',
-                                                padding: '0 4px'
+                                                fontSize: '12px', 
+                                                lineHeight: '1.6',
+                                                display: 'flex',
+                                                justifyContent: 'space-between',
+                                                alignItems: 'center',
+                                                padding: '2px 4px',
+                                                borderRadius: '4px',
+                                                transition: 'background-color 0.2s',
+                                                cursor: 'pointer',
+                                                position: 'relative'
+                                              }}
+                                              onClick={() => handleAreaListClick(area.id)}
+                                              onMouseEnter={(e) => {
+                                                e.currentTarget.style.backgroundColor = '#f5f5f5';
+                                                setHoveredAreaId(area.id);
+                                              }}
+                                              onMouseLeave={(e) => {
+                                                e.currentTarget.style.backgroundColor = 'transparent';
+                                                setHoveredAreaId(null);
                                               }}
                                             >
-                                              删除
-                                            </Button>
-                                          )}
-                                        </div>
-                                      ))}
+                                              <div style={{ flex: 1 }}>
+                                                <div>{area.name} ({area.type || '区域'})</div>
+                                                {area.type === '多路网区' && networkGroup && (
+                                                  <div style={{ marginTop: '4px', paddingLeft: '8px' }}>
+                                                    <Collapse
+                                                      size="small"
+                                                      ghost
+                                                      items={[{
+                                                        key: networkGroup.id,
+                                                        label: (
+                                                          <div style={{ 
+                                                            fontSize: '11px', 
+                                                            color: '#1890ff'
+                                                          }}>
+                                                            {networkGroup.name}
+                                                          </div>
+                                                        ),
+                                                        children: (
+                                                          <div style={{ paddingLeft: '8px' }}>
+                                                            {networkGroup.paths.map(path => (
+                                                              <div 
+                                                                key={path.id}
+                                                                style={{ 
+                                                                  fontSize: '11px', 
+                                                                  lineHeight: '1.4',
+                                                                  color: '#666',
+                                                                  marginBottom: '2px'
+                                                                }}
+                                                              >
+                                                                {path.name}（{path.description}）
+                                                              </div>
+                                                            ))}
+                                                          </div>
+                                                        )
+                                                      }]}
+                                                    />
+                                                  </div>
+                                                )}
+                                              </div>
+                                              {hoveredAreaId === area.id && (
+                                                <Button
+                                                  type="text"
+                                                  danger
+                                                  size="small"
+                                                  icon={<DeleteOutlined />}
+                                                  onClick={(e: React.MouseEvent) => {
+                                                     e.stopPropagation();
+                                                     handleDeleteArea(area.id);
+                                                   }}
+                                                  style={{
+                                                    opacity: 0.8,
+                                                    transition: 'opacity 0.2s',
+                                                    fontSize: '10px',
+                                                    height: '20px',
+                                                    padding: '0 4px',
+                                                    position: 'absolute',
+                                                    right: '4px',
+                                                    top: '50%',
+                                                    transform: 'translateY(-50%)'
+                                                  }}
+                                                  title="删除区域"
+                                                />
+                                              )}
+                                            </div>
+
+                                          </div>
+                                        );
+                                      })}
                                       {mapAreas.length === 0 && (
                                         <div style={{ fontSize: '12px', color: '#999', textAlign: 'center', padding: '16px 0' }}>
                                           暂无功能区域数据
@@ -11245,6 +11870,181 @@ const MapManagement: React.FC = () => {
                                                             e.stopPropagation();
                                                             removePathFromPathGroup(group.id, path.id);
                                                           }}
+                                                        >
+                                                          移除
+                                                        </Button>
+                                                      )}
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )
+                                        }))}
+                                      />
+                                    </div>
+                                  )
+                                },
+                                {key: 'network-groups',
+                                  label: (
+                                    <div 
+                                      style={{ 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        gap: '8px',
+                                        position: 'relative'
+                                      }}
+                                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                                        const addBtn = e.currentTarget.querySelector('.network-group-add-btn') as HTMLElement;
+                                        if (addBtn) addBtn.style.opacity = '1';
+                                      }}
+                                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                                        const addBtn = e.currentTarget.querySelector('.network-group-add-btn') as HTMLElement;
+                                        if (addBtn) addBtn.style.opacity = '0';
+                                      }}
+                                    >
+                                      <GroupOutlined style={{ color: '#1890ff' }} />
+                                      <span>路网组</span>
+                                      <Badge count={networkGroups.length} size="small" style={{ backgroundColor: '#1890ff' }} />
+                                      {currentMode === 'edit' && (
+                                        <Button 
+                                          className="network-group-add-btn"
+                                          type="text" 
+                                          size="small" 
+                                          icon={<PlusOutlined />}
+                                          style={{ 
+                                            opacity: 0, 
+                                            transition: 'opacity 0.2s',
+                                            fontSize: '12px',
+                                            height: '20px',
+                                            padding: '0 4px',
+                                            marginLeft: '4px'
+                                          }}
+                                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                            e.stopPropagation();
+                                            handleAddNetworkGroup();
+                                          }}
+                                        >
+                                          新增
+                                        </Button>
+                                      )}
+                                    </div>
+                                  ),
+                                  children: (
+                                    <div style={{ paddingLeft: '8px' }}>
+                                      <Collapse
+                                        size="small"
+                                        ghost
+                                        items={networkGroups.map(group => ({
+                                          key: group.id,
+                                          label: (
+                                            <div 
+                                              style={{ 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: '8px',
+                                                justifyContent: 'space-between',
+                                                width: '100%'
+                                              }}
+                                              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                                                const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
+                                                if (actionBtns) actionBtns.style.opacity = '1';
+                                              }}
+                                              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                                                const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
+                                                if (actionBtns) actionBtns.style.opacity = '0';
+                                              }}
+                                            >
+                                              <span>{group.name}</span>
+                                              {currentMode === 'edit' && (
+                                                <div 
+                                                  className="network-group-actions"
+                                                  style={{ 
+                                                    opacity: 0, 
+                                                    transition: 'opacity 0.2s',
+                                                    display: 'flex',
+                                                    gap: '4px'
+                                                  }}
+                                                >
+                                                  <Button 
+                                                    type="text" 
+                                                    size="small" 
+                                                    icon={<EditOutlined />}
+                                                    style={{ 
+                                                      fontSize: '12px',
+                                                      height: '20px',
+                                                      padding: '0 4px'
+                                                    }}
+                                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                                      e.stopPropagation();
+                                                      handleEditNetworkGroup(group);
+                                                    }}
+                                                  />
+                                                  <Button 
+                                                    type="text" 
+                                                    size="small" 
+                                                    danger
+                                                    icon={<DeleteOutlined />}
+                                                    style={{ 
+                                                      fontSize: '12px',
+                                                      height: '20px',
+                                                      padding: '0 4px'
+                                                    }}
+                                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                                      e.stopPropagation();
+                                                      handleDeleteNetworkGroup(group.id);
+                                                    }}
+                                                  />
+                                                </div>
+                                              )}
+                                            </div>
+                                          ),
+                                          children: (
+                                            <div style={{ paddingLeft: '8px' }}>
+                                              <div>
+                                                <div style={{ fontSize: '12px', lineHeight: '1.4' }}>
+                                                  {group.paths.map(path => (
+                                                    <div 
+                                                      key={path.id}
+                                                      style={{ 
+                                                        fontSize: '12px', 
+                                                        lineHeight: '1.4',
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        padding: '1px 4px',
+                                                        borderRadius: '4px',
+                                                        transition: 'background-color 0.2s'
+                                                      }}
+                                                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                                                        e.currentTarget.style.backgroundColor = '#f5f5f5';
+                                                        const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
+                                                        if (removeBtn) removeBtn.style.opacity = '1';
+                                                      }}
+                                                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                                                        e.currentTarget.style.backgroundColor = 'transparent';
+                                                        const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
+                                                        if (removeBtn) removeBtn.style.opacity = '0';
+                                                      }}
+                                                    >
+                                                      <span>{path.name} ({path.description})</span>
+                                                      {currentMode === 'edit' && (
+                                                        <Button 
+                                                          className="remove-btn"
+                                                          type="text" 
+                                                          size="small" 
+                                                          danger
+                                                          style={{ 
+                                                            opacity: 0, 
+                                                            transition: 'opacity 0.2s',
+                                                            fontSize: '10px',
+                                                            height: '20px',
+                                                            padding: '0 4px'
+                                                          }}
+                                                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                                             e.stopPropagation();
+                                                             removePathFromGroup(group.id, path.id);
+                                                           }}
                                                         >
                                                           移除
                                                         </Button>
@@ -11770,6 +12570,7 @@ const MapManagement: React.FC = () => {
             <Select placeholder="请选择区域类型" disabled={currentMode === 'view'}>
               <Select.Option value="禁行区域">禁行区域</Select.Option>
               <Select.Option value="调速区域">调速区域</Select.Option>
+              <Select.Option value="多路网区">多路网区</Select.Option>
             </Select>
           </Form.Item>
           
@@ -11820,6 +12621,178 @@ const MapManagement: React.FC = () => {
                       }}
                     />
                   </Form.Item>
+                );
+              }
+              
+              // 多路网区显示路网组选择和机器人关联字段
+              if (areaType === '多路网区') {
+                return (
+                  <>
+                    {/* 配置路网组 */}
+                    <Form.Item
+                      label="配置路网组"
+                      style={{ marginBottom: 16 }}
+                    >
+                      <Button 
+                        type="default" 
+                        icon={<PlusOutlined />} 
+                        onClick={() => {
+                          const newConfig = {
+                            id: Date.now().toString(),
+                            networkGroupId: undefined,
+                            associatedRobots: [],
+                            priority: 0
+                          };
+                          setNetworkConfigs(prev => [...prev, newConfig]);
+                        }}
+                        disabled={currentMode === 'view'}
+                        style={{ width: '100%' }}
+                      >
+                        新增
+                      </Button>
+                    </Form.Item>
+
+                    {/* 动态生成的配置路网组 */}
+                    {networkConfigs.map((config, index) => (
+                      <div key={config.id} style={{ 
+                        border: '1px solid #f0f0f0', 
+                        borderRadius: '6px', 
+                        padding: '16px', 
+                        marginBottom: '16px',
+                        backgroundColor: '#fafafa'
+                      }}>
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          marginBottom: '12px'
+                        }}>
+                          <span style={{ fontWeight: 500, color: '#262626' }}>
+                            配置路网{index + 1}
+                          </span>
+                          {networkConfigs.length > 1 && (
+                            <Button 
+                              type="text" 
+                              danger 
+                              size="small"
+                              icon={<DeleteOutlined />}
+                              onClick={() => {
+                                setNetworkConfigs(prev => prev.filter(c => c.id !== config.id));
+                              }}
+                              disabled={currentMode === 'view'}
+                            >
+                              删除
+                            </Button>
+                          )}
+                        </div>
+                        
+                        {/* 选择路网组 */}
+                        <Form.Item
+                          name={`networkGroupId_${config.id}`}
+                          label="选择路网组"
+                          rules={[{ required: true, message: '请选择路网组' }]}
+                          style={{ marginBottom: 12 }}
+                        >
+                          <Input.Group compact>
+                            <Select 
+                              placeholder="请选择路网组" 
+                              disabled={currentMode === 'view'}
+                              value={config.networkGroupId}
+                              onChange={(value: string) => {
+                                 setNetworkConfigs(prev => 
+                                   prev.map(c => 
+                                     c.id === config.id 
+                                       ? { ...c, networkGroupId: value }
+                                       : c
+                                   )
+                                 );
+                                 // 同步更新表单字段值
+                                 areaEditForm.setFieldValue(`networkGroupId_${config.id}`, value);
+                               }}
+                              style={{ width: 'calc(100% - 80px)' }}
+                            >
+                              {networkGroups.map(group => (
+                                <Select.Option key={group.id} value={group.id}>
+                                  {group.name}
+                                </Select.Option>
+                              ))}
+                            </Select>
+                            <Button 
+                              type="primary" 
+                              icon={<PlusOutlined />}
+                              disabled={currentMode === 'view'}
+                              onClick={() => setAddNetworkGroupModalVisible(true)}
+                              style={{ width: '80px' }}
+                            >
+                              新增
+                            </Button>
+                          </Input.Group>
+                        </Form.Item>
+                        
+                        {/* 关联机器人 */}
+                        <Form.Item
+                          name={`associatedRobots_${config.id}`}
+                          label="关联机器人"
+                          rules={[{ required: true, message: '请选择关联机器人' }]}
+                          style={{ marginBottom: 16 }}
+                        >
+                          <Select 
+                            mode="multiple"
+                            placeholder="请选择关联机器人（可多选）" 
+                            disabled={currentMode === 'view'}
+                            showSearch
+                            value={config.associatedRobots}
+                            onChange={(value: string[]) => {
+                               setNetworkConfigs(prev => 
+                                 prev.map(c => 
+                                   c.id === config.id 
+                                     ? { ...c, associatedRobots: value }
+                                     : c
+                                 )
+                               );
+                               // 同步更新表单字段值
+                               areaEditForm.setFieldValue(`associatedRobots_${config.id}`, value);
+                             }}
+                            filterOption={(input: string, option: any) =>
+                              (option?.children as string)?.toLowerCase().includes(input.toLowerCase())
+                            }
+                          >
+                            {robotDevices.map(robot => (
+                              <Select.Option key={robot.id} value={robot.id}>
+                                {robot.deviceName}
+                              </Select.Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                        
+                        {/* 优先级 */}
+                        <Form.Item
+                          name={`priority_${config.id}`}
+                          label="优先级"
+                          style={{ marginBottom: 0 }}
+                        >
+                          <Input 
+                            type="number"
+                            placeholder="请输入优先级" 
+                            disabled={currentMode === 'view'}
+                            value={config.priority || 0}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                const value = parseInt(e.target.value) || 0;
+                                setNetworkConfigs(prev => 
+                                  prev.map(c => 
+                                    c.id === config.id 
+                                      ? { ...c, priority: value }
+                                      : c
+                                  )
+                                );
+                                // 同步更新表单字段值
+                                areaEditForm.setFieldValue(`priority_${config.id}`, value);
+                              }}
+                          />
+                        </Form.Item>
+                      </div>
+                    ))}
+                  </>
                 );
               }
               
@@ -12117,6 +13090,25 @@ const MapManagement: React.FC = () => {
           >
             加入路径组
           </div>
+          <div
+            style={{
+              padding: '5px 12px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              lineHeight: '22px',
+              color: 'rgba(0, 0, 0, 0.88)',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f5f5f5';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+            onClick={handleOpenNetworkGroupSelect}
+          >
+            加入到路网组
+          </div>
         </div>
       )}
 
@@ -12170,6 +13162,25 @@ const MapManagement: React.FC = () => {
             onClick={handleAddSelectionToPathGroup}
           >
             加入到路径组
+          </div>
+          <div
+            style={{
+              padding: '5px 12px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              lineHeight: '22px',
+              color: 'rgba(0, 0, 0, 0.88)',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = '#f5f5f5';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent';
+            }}
+            onClick={handleAddSelectionToNetworkGroup}
+          >
+            加入到路网组
           </div>
         </div>
       )}
@@ -12309,6 +13320,194 @@ const MapManagement: React.FC = () => {
           </Form.Item>
           
 
+        </Form>
+      </Modal>
+
+      {/* 路网组选择弹窗 */}
+      <Modal
+        title={`将 ${contextMenuLineIds.length} 条线加入路网组`}
+        open={networkGroupSelectModalVisible}
+        onOk={handleAddLinesToNetworkGroup}
+        onCancel={handleCloseNetworkGroupSelect}
+        okText="确认加入"
+        cancelText="取消"
+        width={500}
+      >
+        <Form
+          form={networkGroupSelectForm}
+          layout="vertical"
+          style={{ marginTop: '16px' }}
+        >
+          <Form.Item
+            label={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '16px' }}>
+                <span>选择路网组</span>
+                <Popover
+                  title="新增路网组"
+                  open={addNetworkGroupPopoverVisible}
+                  onOpenChange={setAddNetworkGroupPopoverVisible}
+                  content={
+                    <div style={{ width: '250px' }}>
+                      <Input
+                         placeholder="请输入路网组名称（不超过6个字符）"
+                         value={newNetworkGroupName}
+                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNetworkGroupName(e.target.value)}
+                         maxLength={6}
+                         showCount
+                         allowClear
+                         style={{ marginBottom: '12px' }}
+                       />
+                      <div style={{ textAlign: 'right' }}>
+                        <Space>
+                          <Button size="small" onClick={handleCancelCreateNetworkGroup}>
+                            取消
+                          </Button>
+                          <Button 
+                            type="primary" 
+                            size="small" 
+                            onClick={handleCreateNewNetworkGroup}
+                            disabled={!newNetworkGroupName.trim()}
+                          >
+                            确认
+                          </Button>
+                        </Space>
+                      </div>
+                    </div>
+                  }
+                  trigger="click"
+                  placement="top"
+                >
+                  <Button 
+                    type="dashed" 
+                    size="small"
+                    icon={<PlusOutlined />}
+                  >
+                    新增路网组
+                  </Button>
+                </Popover>
+              </div>
+            }
+            name="networkGroupId"
+            rules={[{ required: true, message: '请选择路网组' }]}
+          >
+            <Select
+               placeholder="请选择路网组"
+               style={{ width: '100%' }}
+             >
+               {networkGroups.map(group => (
+                 <Select.Option key={group.id} value={group.id}>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                     <span>{group.name}</span>
+                     <span style={{ color: '#666', fontSize: '12px' }}>({group.paths.length} 条路径)</span>
+                   </div>
+                 </Select.Option>
+               ))}
+             </Select>
+          </Form.Item>
+          
+          {/* 显示选中路网组的路径详情 */}
+          <Form.Item shouldUpdate>
+             {({ getFieldValue }: { getFieldValue: (name: string) => any }) => {
+              const selectedGroupId = getFieldValue('networkGroupId');
+              const selectedGroup = networkGroups.find(g => g.id === selectedGroupId);
+              
+              if (selectedGroup && selectedGroup.paths.length > 0) {
+                return (
+                  <div style={{ marginTop: '16px' }}>
+                    <div style={{ marginBottom: '8px', fontWeight: 500, color: '#666' }}>
+                      {selectedGroup.name} 中的路径：
+                    </div>
+                    <div style={{ 
+                      maxHeight: '120px', 
+                      overflowY: 'auto', 
+                      border: '1px solid #f0f0f0', 
+                      borderRadius: '6px', 
+                      padding: '8px',
+                      backgroundColor: '#fafafa'
+                    }}>
+                      {selectedGroup.paths.map((path, index) => (
+                        <div key={path.id} style={{ 
+                          padding: '4px 0', 
+                          borderBottom: index < selectedGroup.paths.length - 1 ? '1px solid #f0f0f0' : 'none',
+                          fontSize: '13px'
+                        }}>
+                          <span style={{ color: '#1890ff', fontWeight: 500 }}>{path.description}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            }}
+          </Form.Item>
+          
+
+        </Form>
+      </Modal>
+
+      {/* 新增路网组弹窗 */}
+      <Modal
+        title="新增路网组"
+        open={addNetworkGroupModalVisible}
+        zIndex={2100}
+        onOk={() => {
+           addNetworkGroupForm.validateFields().then(async (values: { name: string; description?: string }) => {
+            try {
+              setAddNetworkGroupLoading(true);
+              // 这里应该调用API创建路网组
+              console.log('创建路网组:', values);
+              
+              // 模拟API调用
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              
+              // 创建新的路网组对象
+              const newNetworkGroup: NetworkGroup = {
+                id: `group_${Date.now()}`,
+                name: values.name,
+                description: values.description || '',
+                createTime: new Date().toISOString(),
+                updateTime: new Date().toISOString(),
+                nodes: [],
+                paths: []
+              };
+              
+              // 更新路网组列表
+              setNetworkGroups(prev => [...prev, newNetworkGroup]);
+              
+              message.success('路网组创建成功');
+              setAddNetworkGroupModalVisible(false);
+              addNetworkGroupForm.resetFields();
+              
+            } catch (error) {
+              message.error('创建路网组失败');
+            } finally {
+              setAddNetworkGroupLoading(false);
+            }
+          });
+        }}
+        onCancel={() => {
+          setAddNetworkGroupModalVisible(false);
+          addNetworkGroupForm.resetFields();
+        }}
+        confirmLoading={addNetworkGroupLoading}
+        width={400}
+      >
+        <Form
+          form={addNetworkGroupForm}
+          layout="vertical"
+          style={{ marginTop: 16 }}
+        >
+          <Form.Item
+            label="路网组名称"
+            name="name"
+            rules={[
+              { required: true, message: '请输入路网组名称' },
+              { max: 50, message: '路网组名称不能超过50个字符' }
+            ]}
+          >
+            <Input placeholder="请输入路网组名称" />
+          </Form.Item>
         </Form>
       </Modal>
     </div>

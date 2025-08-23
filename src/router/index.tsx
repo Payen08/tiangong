@@ -10,6 +10,7 @@ import AddProduct from '@/pages/ProductManagement/AddProduct';
 import DeviceManagement from '@/pages/DeviceManagement/index';
 import MapManagement from '@/pages/SceneManagement/MapManagement';
 import CrossMapConnectionManagement from '@/pages/SystemManagement/CrossMapConnection';
+import CrossMapPathGroupManagement from '@/pages/SceneManagement/CrossMapPathGroup/index';
 import BusinessProcess from '@/pages/ScheduleManagement/BusinessProcess';
 
 
@@ -38,6 +39,10 @@ export const router = createBrowserRouter([
           {
             path: 'cross-map-connections',
             element: <CrossMapConnectionManagement />,
+          },
+          {
+            path: 'cross-map-path-groups',
+            element: <CrossMapPathGroupManagement />,
           },
         ],
       },

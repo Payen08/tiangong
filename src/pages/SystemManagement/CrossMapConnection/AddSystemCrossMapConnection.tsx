@@ -51,6 +51,8 @@ interface HistoryState {
   offsetX: number;
   offsetY: number;
   scale: number;
+  mapCards: any[];
+  connections: any[];
 }
 
 // 地图文件接口
@@ -139,6 +141,12 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     editingCardId: null,
     inputValue: ''
   });
+  
+  // 连接类型状态
+  const [connectionType, setConnectionType] = useState<string>('cross_map');
+  
+  // 提交校验状态
+  const [submitValidated, setSubmitValidated] = useState(false);
   
   // 曲线绘制状态
   const [curveDrawingState, setCurveDrawingState] = useState<{
@@ -362,15 +370,22 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
 
     ctx.stroke();
 
-    // 模拟电梯节点数据
-    const elevatorNodes = ['1号电梯切换点1', '2号电梯切换点2'];
+    // 根据连接类型动态生成节点数据
+    const getNodeData = () => {
+      if (connectionType === 'cross_region') {
+        return ['A区域切换点1', 'A区域切换点2'];
+      } else {
+        return ['1号电梯切换点1', '2号电梯切换点2'];
+      }
+    };
+    const elevatorNodes = getNodeData();
     
     // 绘制地图卡片
     mapCards.forEach(mapCard => {
       const cardWidth = 200;
       // 动态计算卡片高度：基础高度 + 电梯节点数量 * 节点高度
-      const baseHeight = 140; // 基础内容高度（标题、版本、楼层字段、楼层输入框、电梯内点标题）
-      const nodeHeight = 20; // 每个电梯节点的高度
+      const baseHeight = 156; // 基础内容高度（标题、版本、楼层字段、楼层输入框、电梯内点标题）- 增加6px适应标题与节点间距
+      const nodeHeight = 22; // 每个电梯节点的高度 - 增加2px适应更大字体
       const cardHeight = baseHeight + elevatorNodes.length * nodeHeight + 10; // 额外10px底部间距
       
       // 设置高质量渲染
@@ -446,16 +461,40 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         ctx.roundRect(mapCard.x, mapCard.y, cardWidth, cardHeight, cornerRadius);
         ctx.fill();
         
-        // 绘制普通边框
+        // 绘制边框（检查选中状态）
         ctx.shadowColor = 'transparent';
         ctx.shadowBlur = 0;
         ctx.shadowOffsetX = 0;
         ctx.shadowOffsetY = 0;
-        ctx.strokeStyle = '#e8e8e8';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect(mapCard.x, mapCard.y, cardWidth, cardHeight, cornerRadius);
-        ctx.stroke();
+        
+        if (selectedCardId === mapCard.id) {
+          // 选中状态 - 蓝色高亮边框
+          ctx.strokeStyle = '#1890ff';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.roundRect(mapCard.x, mapCard.y, cardWidth, cardHeight, cornerRadius);
+          ctx.stroke();
+          
+          // 添加选中状态的外发光效果
+          ctx.shadowColor = 'rgba(24, 144, 255, 0.3)';
+          ctx.shadowBlur = 10;
+          ctx.strokeStyle = '#1890ff';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.roundRect(mapCard.x - 2, mapCard.y - 2, cardWidth + 4, cardHeight + 4, cornerRadius + 2);
+          ctx.stroke();
+          
+          // 重置阴影
+          ctx.shadowColor = 'transparent';
+          ctx.shadowBlur = 0;
+        } else {
+          // 普通状态 - 灰色边框
+          ctx.strokeStyle = '#e8e8e8';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.roundRect(mapCard.x, mapCard.y, cardWidth, cardHeight, cornerRadius);
+          ctx.stroke();
+        }
         
         // 在变换状态下绘制卡片内容
         // 绘制地图名称
@@ -466,18 +505,19 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         
         // 绘制版本信息
         ctx.fillStyle = '#999999';
-        ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.fillText(`版本 ${mapCard.mapItem.currentVersion}`, mapCard.x + 16, mapCard.y + 50);
         
         // 绘制必填标识（红色星号）
         ctx.fillStyle = '#ff4d4f';
-        ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.fillText('*', mapCard.x + 16, mapCard.y + 72);
         
-        // 绘制楼层字段标签
+        // 绘制楼层字段标签（根据连接类型动态显示）
         ctx.fillStyle = '#333333';
-        ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.fillText('楼层', mapCard.x + 25, mapCard.y + 72);
+        ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        const fieldLabel = connectionType === 'cross_region' ? '区域' : '楼层';
+        ctx.fillText(fieldLabel, mapCard.x + 25, mapCard.y + 72);
         
         // 绘制楼层输入框
         const inputRadius = 4;
@@ -494,10 +534,11 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         ctx.roundRect(mapCard.x + 12, mapCard.y + 88, 176, 28, inputRadius);
         ctx.stroke();
         
-        // 绘制输入文本
-        const displayText = isEditing ? floorInputState.inputValue : (mapCard.floor || '请输入楼层');
+        // 绘制输入文本（根据连接类型动态显示占位符）
+        const placeholder = connectionType === 'cross_region' ? '请输入区域' : '请输入楼层';
+        const displayText = isEditing ? floorInputState.inputValue : (mapCard.floor || placeholder);
         ctx.fillStyle = (isEditing || mapCard.floor) ? '#333' : '#999';
-        ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.fillText(displayText, mapCard.x + 20, mapCard.y + 102);
         
         // 绘制光标（仅在编辑状态下）
@@ -515,14 +556,15 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
           ctx.stroke();
         }
         
-        // 绘制电梯节点区域标题
+        // 绘制电梯节点区域标题（根据连接类型动态显示）
         ctx.fillStyle = '#1f1f1f';
-        ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.fillText('电梯内点', mapCard.x + 16, mapCard.y + 134);
+        ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        const nodeAreaTitle = connectionType === 'cross_region' ? '区域切换点' : '电梯内点';
+        ctx.fillText(nodeAreaTitle, mapCard.x + 16, mapCard.y + 134);
         
         // 绘制电梯节点
         elevatorNodes.forEach((node, index) => {
-          const nodeY = mapCard.y + 156 + index * 20;
+          const nodeY = mapCard.y + 162 + index * 22;
           
           // 检测鼠标是否悬停在圆圈上
           const isMousePositionValid = mousePosition.x >= 0 && mousePosition.y >= 0;
@@ -548,7 +590,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
           
           // 节点名称
           ctx.fillStyle = '#4a4a4a';
-          ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
           ctx.fillText(node, mapCard.x + 20, nodeY);
           
           // 右侧连接圆圈
@@ -591,47 +633,53 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
       
       // 绘制版本信息 - 改进样式和位置，增加行间距
       ctx.fillStyle = '#999999';
-      ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       ctx.fillText(`版本 ${mapCard.mapItem.currentVersion}`, mapCard.x + 16, mapCard.y + 50);
       
       // 绘制必填标识（红色星号）- 放在左边
       ctx.fillStyle = '#ff4d4f';
-      ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       ctx.fillText('*', mapCard.x + 16, mapCard.y + 72);
       
-      // 绘制楼层字段标签 - 必填字段
+      // 绘制楼层字段标签 - 必填字段（根据连接类型动态显示）
       ctx.fillStyle = '#333333';
-      ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.fillText('楼层', mapCard.x + 25, mapCard.y + 72);
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const fieldLabel = connectionType === 'cross_region' ? '区域' : '楼层';
+      ctx.fillText(fieldLabel, mapCard.x + 25, mapCard.y + 72);
       
       // 绘制圆角楼层输入框 - 调整位置以适应新的布局
       const inputRadius = 4;
       const isEditing = floorInputState.isEditing && floorInputState.editingCardId === mapCard.id;
+      const hasFloorError = submitValidated && (!mapCard.floor || mapCard.floor.trim() === ''); // 只有在提交校验后且楼层信息为空时才显示错误
       
-      // 调试信息：输出当前卡片的编辑状态
-      if (mapCard.id === 'map_1') {
-        console.log('🎨 绘制卡片', mapCard.id, '编辑状态:', isEditing, 'floorInputState:', floorInputState);
-      }
-      
-      // 楼层输入框编辑状态判断
-      // const isEditing = floorInputState.isEditing && floorInputState.editingCardId === mapCard.id;
-      
-      // 根据编辑状态设置背景色和边框色
+      // 根据编辑状态和错误状态设置背景色和边框色
       ctx.fillStyle = isEditing ? '#ffffff' : '#f8f9fa';
       ctx.beginPath();
       ctx.roundRect(mapCard.x + 12, mapCard.y + 88, 176, 28, inputRadius);
       ctx.fill();
       
-      ctx.strokeStyle = isEditing ? '#1890ff' : '#e1e5e9';
-      ctx.lineWidth = isEditing ? 2 : 1;
+      // 设置边框颜色：编辑状态为蓝色，错误状态为红色，普通状态为灰色
+      if (isEditing) {
+        ctx.strokeStyle = '#1890ff';
+        ctx.lineWidth = 2;
+      } else if (hasFloorError) {
+        ctx.strokeStyle = '#ff4d4f'; // 红色边框表示错误
+        ctx.lineWidth = 1;
+      } else {
+        ctx.strokeStyle = '#e1e5e9';
+        ctx.lineWidth = 1;
+      }
+      
       ctx.beginPath();
       ctx.roundRect(mapCard.x + 12, mapCard.y + 88, 176, 28, inputRadius);
       ctx.stroke();
       
-      // 绘制输入文本
-      const displayText = isEditing ? floorInputState.inputValue : (mapCard.floor || '请输入楼层');
-      ctx.fillStyle = (isEditing || mapCard.floor) ? '#333' : '#999';
-      ctx.font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      // 绘制输入文本（根据连接类型动态显示占位符）
+      const placeholder = connectionType === 'cross_region' ? '请输入区域' : '请输入楼层';
+      const displayText = isEditing ? floorInputState.inputValue : (mapCard.floor || placeholder);
+      // 如果有错误状态，提示文字也显示红色
+      ctx.fillStyle = hasFloorError ? '#ff4d4f' : ((isEditing || mapCard.floor) ? '#333' : '#999');
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
       ctx.fillText(displayText, mapCard.x + 20, mapCard.y + 102);
       
       // 绘制光标（仅在编辑状态下）
@@ -649,14 +697,15 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         ctx.stroke();
       }
       
-      // 绘制电梯节点区域标题 - 左对齐，增加与输入框的间距
+      // 绘制电梯节点区域标题 - 左对齐，增加与输入框的间距（根据连接类型动态显示）
       ctx.fillStyle = '#1f1f1f';
-      ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.fillText('电梯内点', mapCard.x + 16, mapCard.y + 134);
+      ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      const nodeAreaTitle = connectionType === 'cross_region' ? '区域切换点' : '电梯内点';
+      ctx.fillText(nodeAreaTitle, mapCard.x + 16, mapCard.y + 134);
       
       // 绘制电梯节点
       elevatorNodes.forEach((node, index) => {
-        const nodeY = mapCard.y + 156 + index * 20;
+        const nodeY = mapCard.y + 162 + index * 22; // 增加标题与节点间距，从156调整为162
         
         // 检测鼠标是否悬停在圆圈上 - 只有当鼠标位置有效时才进行悬停检测
         const isMousePositionValid = mousePosition.x >= 0 && mousePosition.y >= 0;
@@ -682,7 +731,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         
         // 节点名称 - 改进文本样式
          ctx.fillStyle = '#4a4a4a';
-         ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+         ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
          ctx.fillText(node, mapCard.x + 20, nodeY);
         
         // 右侧连接圆圈 - 位于卡片右边缘
@@ -712,8 +761,8 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
       if (startCard && endCard) {
         const cardWidth = 200;
         // 计算圆圈中心位置 - 与圆圈绘制位置保持一致
-        const startY = startCard.y + 156 + connection.startNode * 20;
-        const endY = endCard.y + 156 + connection.endNode * 20;
+        const startY = startCard.y + 162 + connection.startNode * 22; // 增加标题与节点间距
+        const endY = endCard.y + 162 + connection.endNode * 22; // 增加标题与节点间距
         
         const startX = connection.startSide === 'left' ? startCard.x : startCard.x + cardWidth;
         const endX = connection.endSide === 'left' ? endCard.x : endCard.x + cardWidth;
@@ -796,7 +845,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     // ctx.fillText(`坐标: (${Math.round(worldX)}, ${Math.round(worldY)})`, 10, 20);
     // ctx.fillText(`缩放: ${(canvasState.scale * 100).toFixed(0)}%`, 10, 40);
     
-  }, [canvasState, mousePosition, selectedCardId, mapCards, connections, cursorVisible, curveDrawingState, selectedConnectionId, hoveredCardId, animationScale]);
+  }, [canvasState, mousePosition, selectedCardId, mapCards, connections, cursorVisible, curveDrawingState, selectedConnectionId, hoveredCardId, animationScale, floorInputState, submitValidated]);
 
   // 处理光标闪烁定时器
   useEffect(() => {
@@ -833,8 +882,8 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     
     // 动态计算卡片高度
     const elevatorNodes = ['1号电梯切换点1', '2号电梯切换点2'];
-    const baseHeight = 140;
-    const nodeHeight = 20;
+    const baseHeight = 156; // 增加6px以适应新的标题与节点间距
+    const nodeHeight = 22; // 与drawCanvas保持一致
     const cardHeight = baseHeight + elevatorNodes.length * nodeHeight + 10;
     
     return worldX >= mapCard.x && 
@@ -898,6 +947,12 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
             : card
         );
         console.log('🟡 更新地图卡片数据:', updated);
+        
+        // 如果输入了有效的楼层信息，重置校验状态
+        if (currentState.inputValue && currentState.inputValue.trim() !== '') {
+          setSubmitValidated(false);
+        }
+        
         return updated;
       });
       
@@ -930,7 +985,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
       const elevatorNodes = ['1号电梯切换点1', '2号电梯切换点2'];
       
       for (let index = 0; index < elevatorNodes.length; index++) {
-        const nodeY = mapCard.y + 156 + index * 20; // 修复：与drawCanvas保持一致，使用156而不是146
+        const nodeY = mapCard.y + 162 + index * 22; // 与drawCanvas保持一致，增加标题与节点间距
         
         // 检测左侧圆圈
         const leftDistance = Math.sqrt(Math.pow(worldX - mapCard.x, 2) + Math.pow(worldY - nodeY, 2));
@@ -977,8 +1032,8 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
       if (startCard && endCard) {
         const cardWidth = 200;
         // 计算连线的起始和结束点
-        const startY = startCard.y + 156 + connection.startNode * 20;
-        const endY = endCard.y + 156 + connection.endNode * 20;
+        const startY = startCard.y + 162 + connection.startNode * 22;
+        const endY = endCard.y + 162 + connection.endNode * 22;
         const startX = connection.startSide === 'left' ? startCard.x : startCard.x + cardWidth;
         const endX = connection.endSide === 'left' ? endCard.x : endCard.x + cardWidth;
         
@@ -1030,7 +1085,9 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     const newState: HistoryState = {
       offsetX: canvasState.offsetX,
       offsetY: canvasState.offsetY,
-      scale: canvasState.scale
+      scale: canvasState.scale,
+      mapCards: [...mapCards],
+      connections: [...connections]
     };
     
     const newHistory = history.slice(0, historyIndex + 1);
@@ -1044,7 +1101,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     }
     
     setHistory(newHistory);
-  }, [canvasState, history, historyIndex]);
+  }, [canvasState, history, historyIndex, mapCards, connections]);
 
   // 撤回功能
   const handleUndo = useCallback(() => {
@@ -1056,7 +1113,15 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         offsetY: prevState.offsetY,
         scale: prevState.scale
       }));
+      setMapCards([...prevState.mapCards]);
+      setConnections([...prevState.connections]);
       setHistoryIndex(prev => prev - 1);
+      
+      // 清除选中状态
+      setSelectedCardId(null);
+      setSelectedConnectionId(null);
+      
+      message.success('已撤销操作');
     }
   }, [history, historyIndex]);
 
@@ -1070,7 +1135,15 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         offsetY: nextState.offsetY,
         scale: nextState.scale
       }));
+      setMapCards([...nextState.mapCards]);
+      setConnections([...nextState.connections]);
       setHistoryIndex(prev => prev + 1);
+      
+      // 清除选中状态
+      setSelectedCardId(null);
+      setSelectedConnectionId(null);
+      
+      message.success('已重做操作');
     }
   }, [history, historyIndex]);
 
@@ -1145,6 +1218,12 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
               ? { ...card, floor: floorInputState.inputValue }
               : card
           ));
+          
+          // 如果输入了有效的楼层信息，重置校验状态
+          if (floorInputState.inputValue && floorInputState.inputValue.trim() !== '') {
+            setSubmitValidated(false);
+          }
+          
           setFloorInputState({
             isEditing: false,
             editingCardId: null,
@@ -1191,6 +1270,10 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         const connectionToDelete = connections.find(conn => conn.id === selectedConnectionId);
         if (connectionToDelete) {
           console.log('🗑️ [删除连线] 找到要删除的连线:', connectionToDelete);
+          
+          // 保存历史记录
+          saveToHistory();
+          
           setConnections(prev => {
             const filtered = prev.filter(conn => conn.id !== selectedConnectionId);
             console.log('🗑️ [删除连线] 删除完成:', {
@@ -1519,6 +1602,9 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
             endSide: circleInfo.side
           };
           
+          // 保存历史记录
+          saveToHistory();
+          
           setConnections(prev => [...prev, newConnection]);
         }
         
@@ -1539,7 +1625,8 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     
     // 结束地图卡片拖拽
     if (dragState.isDragging) {
-      // 结束拖拽地图卡片
+      // 保存历史记录
+      saveToHistory();
     }
     
     // 重置拖拽状态
@@ -1573,10 +1660,30 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     saveToHistory(); // 在缩放时保存历史记录
+    
+    // 获取鼠标在画布中的位置
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // 计算鼠标在世界坐标系中的位置（缩放前）
+    const worldX = (mouseX - canvasState.offsetX) / canvasState.scale;
+    const worldY = (mouseY - canvasState.offsetY) / canvasState.scale;
+    
+    // 计算新的缩放比例
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     const newScale = Math.max(0.1, Math.min(3, canvasState.scale * delta));
     
-    setCanvasState(prev => ({ ...prev, scale: newScale }));
+    // 计算新的偏移量，使鼠标位置保持不变
+    const newOffsetX = mouseX - worldX * newScale;
+    const newOffsetY = mouseY - worldY * newScale;
+    
+    setCanvasState(prev => ({ 
+      ...prev, 
+      scale: newScale,
+      offsetX: newOffsetX,
+      offsetY: newOffsetY
+    }));
   };
 
   // 重绘画布 - 优化性能，只在必要时重绘
@@ -1620,15 +1727,27 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
       setCanvasState(initialState);
       
       // 初始化历史记录
-      setHistory([{ offsetX: 0, offsetY: 0, scale: 1 }]);
+      setHistory([{ offsetX: 0, offsetY: 0, scale: 1, mapCards: [], connections: [] }]);
       setHistoryIndex(0);
       
       if (editData) {
         form.setFieldsValue(editData);
-        // 编辑模式
+        // 编辑模式 - 加载已有的画布数据
+        if (editData.mapCards) {
+          setMapCards(editData.mapCards);
+        }
+        if (editData.connections) {
+          setConnections(editData.connections);
+        }
       } else {
         form.resetFields();
-        // 新建模式
+        // 新建模式 - 清空画布数据
+        setMapCards([]);
+        setConnections([]);
+        setSelectedCardId(null);
+        setSelectedConnectionId(null);
+        setHoveredCardId(null);
+        setSelectedMapPosition(null);
       }
     }
   }, [visible, editData, form, mapListData.length]);
@@ -1640,6 +1759,9 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         if (event.key === 'Delete' || event.key === 'Backspace') {
           console.log('🗑️ Deleting card:', selectedCardId);
           console.log('📊 Before deletion - mapCards:', mapCards.length, 'connections:', connections.length);
+          
+          // 保存历史记录
+          saveToHistory();
           
           // 删除选中的卡片
           setMapCards(prev => {
@@ -1755,9 +1877,65 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
 
   const handleFinish = async (values: any) => {
     try {
-      const allValues = await form.validateFields();
-      onSave(allValues);
+      // 验证所有表单字段（包括第一步的基本信息）
+      const allValues = await form.validateFields(['connectionName', 'connectionType', 'remark']);
+      
+      // 验证第二步画布中的必填项
+      if (currentStep === 1) {
+        // 设置提交校验状态为true，触发错误状态显示
+        setSubmitValidated(true);
+        
+        // 检查是否至少添加了2个地图卡片
+        if (mapCards.length < 2) {
+          message.error('请至少添加2个地图卡片');
+          return;
+        }
+        
+        // 检查每个地图卡片是否都填写了楼层信息
+        const emptyFloorCards = mapCards.filter(card => !card.floor || card.floor.trim() === '');
+        if (emptyFloorCards.length > 0) {
+          message.error('请为所有地图卡片填写楼层信息');
+          // 立即重绘画布以显示错误状态
+          requestAnimationFrame(() => {
+            drawCanvas();
+          });
+          return;
+        }
+        
+        // 检查是否至少创建了1条连线
+        if (connections.length < 1) {
+          message.error('请至少创建1条连接线');
+          return;
+        }
+        
+        // 校验通过，重置校验状态
+        setSubmitValidated(false);
+      }
+      
+      // 构建完整的保存数据
+      const saveData = {
+        ...allValues,
+        mapCards: mapCards,
+        connections: connections,
+        canvasState: {
+          offsetX: canvasState.offsetX,
+          offsetY: canvasState.offsetY,
+          scale: canvasState.scale
+        },
+        createTime: new Date().toLocaleString('zh-CN'),
+        updateTime: new Date().toLocaleString('zh-CN'),
+        status: 'active'
+      };
+      
+      console.log('保存跨地图连接数据:', saveData);
+      
+      // 调用父组件的保存方法
+      onSave(saveData);
+      
+      message.success(editData ? '跨地图连接更新成功' : '跨地图连接创建成功');
+      
     } catch (error) {
+      console.error('表单验证失败:', error);
       message.error('请完善所有必填信息');
     }
   };
@@ -1827,7 +2005,17 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
                     name="connectionType"
                     rules={[{ required: true, message: '请选择连接类型' }]}
                   >
-                    <Select placeholder="请选择连接类型" size="large">
+                    <Select 
+                      placeholder="请选择连接类型" 
+                      size="large"
+                      onChange={(value: string) => {
+                        setConnectionType(value);
+                        // 重新绘制画布以更新显示内容
+                        setTimeout(() => {
+                          drawCanvas();
+                        }, 0);
+                      }}
+                    >
                       <Option value="cross_map">跨地图连接</Option>
                       <Option value="cross_region">跨区域连接</Option>
                     </Select>
@@ -1946,7 +2134,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
               </Button>
             ) : (
               <Button type="primary" onClick={() => form.submit()}>
-                {editData ? '保存' : '创建'}
+                提交
               </Button>
             )}
           </div>
@@ -1997,8 +2185,10 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
                        y: selectedMapPosition.y
                      };
                      
-                     // 创建新地图卡片
+                     // 保存历史记录
+                     saveToHistory();
                      
+                     // 创建新地图卡片
                      setMapCards(prev => {
                        const updated = [...prev, newMapCard];
                        // 更新后的地图卡片列表
