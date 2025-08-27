@@ -201,11 +201,7 @@ interface NetworkGroup {
   paths: NetworkPath[];
 }
 
-// 多路网区域配置接口
-interface MultiNetworkAreaConfig {
-  networkGroupId: string;
-  associatedRobots: string[]; // 关联的机器人ID列表
-}
+
 
 // 同步状态接口
 interface SyncStatus {
@@ -281,7 +277,7 @@ const MapManagement: React.FC = () => {
   const [submitAndNextLoading, setSubmitAndNextLoading] = useState(false);
   const [submitAndExitLoading, setSubmitAndExitLoading] = useState(false);
   const [currentEditFile, setCurrentEditFile] = useState<MapFile | null>(null); // 当前编辑的地图文件
-  const [isEditMode, setIsEditMode] = useState(false); // 是否为编辑模式
+
 
   
   // 地图信息相关状态
@@ -295,9 +291,7 @@ const MapManagement: React.FC = () => {
     resolution: 0.05 // 分辨率
   });
   
-  // 地图模式和阅览模式状态
-  const [mapMode, setMapMode] = useState<'topology' | 'navigation'>('topology');
-  const [isReadOnlyMode, setIsReadOnlyMode] = useState(false);
+
   
   // 计算机器人扫图范围
   const calculateScanArea = () => {
@@ -430,7 +424,7 @@ const MapManagement: React.FC = () => {
   // 鼠标位置状态
   const [mousePosition, setMousePosition] = useState<{x: number, y: number} | null>(null); // 鼠标在画布上的位置
   const mousePositionRef = useRef<{x: number, y: number} | null>(null); // 实时鼠标位置引用
-  const [forceRender, setForceRender] = useState(0); // 强制重新渲染计数器
+  // 强制重新渲染计数器已移除
   const [draggingPointId, setDraggingPointId] = useState<string | null>(null); // 正在拖拽的点ID
   const [pointDragStart, setPointDragStart] = useState<{x: number, y: number} | null>(null); // 点拖拽开始位置
   const [pointsInitialPositions, setPointsInitialPositions] = useState<Record<string, {x: number, y: number}>>({});  // 存储拖拽开始时所有选中点的初始位置
@@ -489,14 +483,14 @@ const MapManagement: React.FC = () => {
   };
   
   // 保持原有的分离数组用于兼容性（从统一数组中过滤）
-  const brushStrokes = allStrokes.filter(stroke => stroke.type === 'brush');
-  const eraserStrokes = allStrokes.filter(stroke => stroke.type === 'eraser');
-  const [brushSize, setBrushSize] = useState(6); // 画笔大小
-  const [eraserSize, setEraserSize] = useState(6); // 橡皮擦大小
+  // const brushStrokes = allStrokes.filter(stroke => stroke.type === 'brush');
+  // const eraserStrokes = allStrokes.filter(stroke => stroke.type === 'eraser');
+  // const [brushSize, setBrushSize] = useState(6); // 画笔大小
+  // const [eraserSize, setEraserSize] = useState(6); // 橡皮擦大小
   
   // PNG图片擦除相关状态
   const pngCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [erasedPixels, setErasedPixels] = useState<{x: number, y: number}[]>([]); // 存储被擦除的像素位置
+  // const [erasedPixels, setErasedPixels] = useState<{x: number, y: number}[]>([]); // 存储被擦除的像素位置
   
   // 控制手柄事件处理函数
   const handleControlHandleMouseDown = (e: React.MouseEvent, lineId: string, handleType: 'cp1' | 'cp2') => {
@@ -956,7 +950,7 @@ const MapManagement: React.FC = () => {
   // 监听mousePosition变化，强制重新渲染虚线
   useEffect(() => {
     if (mousePosition && (isConnecting || continuousConnecting) && (connectingStartPoint || lastConnectedPoint)) {
-      setForceRender(prev => prev + 1);
+      // 强制重新渲染虚线（已移除forceRender状态）
     }
   }, [mousePosition, isConnecting, continuousConnecting, connectingStartPoint, lastConnectedPoint]);
   
@@ -1008,17 +1002,17 @@ const MapManagement: React.FC = () => {
   const [defaultNetworkGroup, setDefaultNetworkGroup] = useState<string>('network-group1'); // 默认显示的路网组
 
   // 路网组数据结构
-  interface NetworkNode {
-    id: string;
-    name: string;
-    description: string;
-  }
+  // interface NetworkNode {
+  //   id: string;
+  //   name: string;
+  //   description: string;
+  // }
 
-  interface NetworkPath {
-    id: string;
-    name: string;
-    description: string;
-  }
+  // interface NetworkPath {
+  //   id: string;
+  //   name: string;
+  //   description: string;
+  // }
 
   // 路径组数据结构
   interface PathGroupPath {
@@ -1101,18 +1095,18 @@ const MapManagement: React.FC = () => {
   const [newNetworkGroupName, setNewNetworkGroupName] = useState('');
 
   // 移除节点函数
-  const removeNodeFromGroup = (groupId: string, nodeId: string) => {
-    setNetworkGroups(prev => prev.map(group => {
-      if (group.id === groupId) {
-        return {
-          ...group,
-          nodes: group.nodes.filter(node => node.id !== nodeId)
-        };
-      }
-      return group;
-    }));
-    message.success('节点已移除');
-  };
+  // const removeNodeFromGroup = (groupId: string, nodeId: string) => {
+  //   setNetworkGroups(prev => prev.map(group => {
+  //     if (group.id === groupId) {
+  //       return {
+  //         ...group,
+  //         nodes: group.nodes.filter(node => node.id !== nodeId)
+  //       };
+  //     }
+  //     return group;
+  //   }));
+  //   message.success('节点已移除');
+  // };
 
   // 移除路径函数
   const removePathFromGroup = (groupId: string, pathId: string) => {
@@ -1165,10 +1159,10 @@ const MapManagement: React.FC = () => {
   };
 
   // 设为默认显示
-  const handleSetDefaultNetworkGroup = (groupId: string) => {
-    setDefaultNetworkGroup(groupId);
-    message.success('已设为默认显示路网组');
-  };
+  // const handleSetDefaultNetworkGroup = (groupId: string) => {
+  //   setDefaultNetworkGroup(groupId);
+  //   message.success('已设为默认显示路网组');
+  // };
 
   // 保存路网组
   const handleSaveNetworkGroup = async () => {
@@ -1411,7 +1405,7 @@ const MapManagement: React.FC = () => {
   };
 
   // 处理画布双击事件
-  const handleCanvasDoubleClick = (e: React.MouseEvent) => {
+  const handleCanvasDoubleClick = (_e: React.MouseEvent) => {
     // 如果正在绘制区域且有足够的点，双击完成绘制
     if (selectedTool === 'area' && isDrawingArea && currentAreaPoints.length >= 3) {
       completeAreaDrawing();
@@ -1777,38 +1771,38 @@ const MapManagement: React.FC = () => {
   // 调试坐标转换函数已移除
 
   // 画布坐标转屏幕坐标函数
-  const canvasToScreenCoordinates = (canvasX: number, canvasY: number) => {
-    if (!canvasRef.current) return { x: 0, y: 0 };
-    
-    const rect = canvasRef.current.getBoundingClientRect();
-    
-    console.log('🔄 [坐标转换] canvasToScreenCoordinates 输入参数:', {
-      '1_画布坐标': { canvasX, canvasY },
-      '2_画布元素rect': { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-      '3_画布状态': { canvasScale, canvasOffset }
-    });
-    
-    // 正向变换：screenCoord = (canvasCoord * canvasScale) + (canvasOffset * canvasScale)
-    // 然后加上画布在页面中的偏移
-    const screenX = (canvasX * canvasScale) + (canvasOffset.x * canvasScale) + rect.left;
-    const screenY = (canvasY * canvasScale) + (canvasOffset.y * canvasScale) + rect.top;
-    
-    console.log('🎯 [坐标转换] canvasToScreenCoordinates 转换结果:', {
-      '1_计算过程': {
-        'canvasX * canvasScale': canvasX * canvasScale,
-        'canvasOffset.x * canvasScale': canvasOffset.x * canvasScale,
-        'rect.left': rect.left,
-        '最终 screenX': screenX,
-        'canvasY * canvasScale': canvasY * canvasScale,
-        'canvasOffset.y * canvasScale': canvasOffset.y * canvasScale,
-        'rect.top': rect.top,
-        '最终 screenY': screenY
-      },
-      '2_输出屏幕坐标': { x: screenX, y: screenY }
-    });
-    
-    return { x: screenX, y: screenY };
-  };
+  // const canvasToScreenCoordinates = (canvasX: number, canvasY: number) => {
+  //   if (!canvasRef.current) return { x: 0, y: 0 };
+  //   
+  //   const rect = canvasRef.current.getBoundingClientRect();
+  //   
+  //   console.log('🔄 [坐标转换] canvasToScreenCoordinates 输入参数:', {
+  //     '1_画布坐标': { canvasX, canvasY },
+  //     '2_画布元素rect': { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+  //     '3_画布状态': { canvasScale, canvasOffset }
+  //   });
+  //   
+  //   // 正向变换：screenCoord = (canvasCoord * canvasScale) + (canvasOffset * canvasScale)
+  //   // 然后加上画布在页面中的偏移
+  //   const screenX = (canvasX * canvasScale) + (canvasOffset.x * canvasScale) + rect.left;
+  //   const screenY = (canvasY * canvasScale) + (canvasOffset.y * canvasScale) + rect.top;
+  //   
+  //   console.log('🎯 [坐标转换] canvasToScreenCoordinates 转换结果:', {
+  //     '1_计算过程': {
+  //       'canvasX * canvasScale': canvasX * canvasScale,
+  //       'canvasOffset.x * canvasScale': canvasOffset.x * canvasScale,
+  //       'rect.left': rect.left,
+  //       '最终 screenX': screenX,
+  //       'canvasY * canvasScale': canvasY * canvasScale,
+  //       'canvasOffset.y * canvasScale': canvasOffset.y * canvasScale,
+  //       'rect.top': rect.top,
+  //       '最终 screenY': screenY
+  //     },
+  //     '2_输出屏幕坐标': { x: screenX, y: screenY }
+  //   });
+  //   
+  //   return { x: screenX, y: screenY };
+  // };
 
   // 根据ID获取点数据
   const getPointById = (pointId: string) => {
@@ -3262,7 +3256,7 @@ const MapManagement: React.FC = () => {
     
     // 设置为阅览模式
     setCurrentMode('view');
-    setIsReadOnlyMode(true);
+    // setIsReadOnlyMode(true); // 已移除isReadOnlyMode状态
     
     // 进入地图编辑步骤并显示侧滑抽屉
     setAddMapFileStep(2);
@@ -3505,11 +3499,11 @@ const MapManagement: React.FC = () => {
       }));
       setHasUnsavedChanges(false);
       
-      // 设置地图编辑器默认状态：编辑模式、拓扑地图类型、绘图工具
+      // 设置地图编辑器默认状态：编辑模式、拓扑地图类型、选择工具
       setCurrentMode('edit'); // 默认编辑模式
       setMapType('topology'); // 默认拓扑地图类型
-      setSelectedTool('draw'); // 默认选中绘图工具
-      setIsReadOnlyMode(false); // 确保不是只读模式
+      setSelectedTool('select'); // 默认选中选择工具
+      // 设置为编辑模式
       
       // 根据模式显示不同的成功消息
       if (currentEditFile) {
@@ -3779,8 +3773,8 @@ const MapManagement: React.FC = () => {
       mapLines, 
       mapAreas,  // 添加区域数据到日志
       pngImageData: pngImageData ? '已获取PNG数据' : '无PNG数据',
-      allStrokes: allStrokes.length + '个笔画',
-      erasedPixels: erasedPixels.length + '个擦除点'
+      allStrokes: allStrokes.length + '个笔画'
+      // erasedPixels: erasedPixels.length + '个擦除点' // 已移除
     });
   };
 
@@ -3972,7 +3966,7 @@ const MapManagement: React.FC = () => {
         '地图文件名': mapFileName,
         'PNG数据': pngImageData ? '已获取' : '未获取',
         '笔画数据': allStrokes.length + ' 条笔画',
-        '擦除点数据': erasedPixels.length + ' 个擦除点',
+        // '擦除点数据': erasedPixels.length + ' 个擦除点', // 已移除
         '拓扑数据': `${mapPoints.length}个点, ${mapLines.length}条线, ${mapAreas.length}个区域`
       });
       
@@ -5685,7 +5679,7 @@ const MapManagement: React.FC = () => {
         points: [...currentStroke],
         type: 'brush' as const,
         timestamp: Date.now(),
-        size: brushSize
+        size: 6 // brushSize
       };
       const newStrokes = [...allStrokes, newStroke];
       setAllStrokes(newStrokes);
@@ -5713,7 +5707,7 @@ const MapManagement: React.FC = () => {
       points: [{ x, y }],
       type: 'brush' as const,
       timestamp: Date.now(),
-      size: brushSize
+      size: 6 // 固定画笔大小
     };
     const newStrokes = [...allStrokes, newStroke];
     setAllStrokes(newStrokes);
@@ -5756,7 +5750,7 @@ const MapManagement: React.FC = () => {
         points: [...currentEraserStroke],
         type: 'eraser' as const,
         timestamp: Date.now(),
-        size: eraserSize
+        size: 6 // eraserSize
       };
       const newStrokes = [...allStrokes, newStroke];
       setAllStrokes(newStrokes);
@@ -5784,7 +5778,7 @@ const MapManagement: React.FC = () => {
       points: [{ x, y }],
       type: 'eraser' as const,
       timestamp: Date.now(),
-      size: eraserSize
+      size: 6 // 固定橡皮擦大小
     };
     const newStrokes = [...allStrokes, newStroke];
     setAllStrokes(newStrokes);
@@ -6216,15 +6210,15 @@ const MapManagement: React.FC = () => {
         
         // 应用已擦除的像素（绘制白色圆形）
         ctx.fillStyle = '#FFFFFF';
-        erasedPixels.forEach(pixel => {
-          ctx.beginPath();
-          ctx.arc(pixel.x, pixel.y, 10, 0, 2 * Math.PI);
-          ctx.fill();
-        });
+        // erasedPixels.forEach(pixel => {
+        //   ctx.beginPath();
+        //   ctx.arc(pixel.x, pixel.y, 10, 0, 2 * Math.PI);
+        //   ctx.fill();
+        // });
       };
       img.src = mapFileUploadedImage.url;
     }
-  }, [mapFileUploadedImage, erasedPixels]);
+  }, [mapFileUploadedImage]);
   
   // 测试代码已删除 - 不再自动添加测试点
   
@@ -9979,7 +9973,7 @@ const MapManagement: React.FC = () => {
                           setMousePosition(newMousePosition);
                           mousePositionRef.current = newMousePosition; // 立即更新ref
                           // 立即触发强制重新渲染，确保虚线能及时显示
-                          setForceRender(prev => prev + 1);
+                          // setForceRender(prev => prev + 1); // 已移除forceRender状态
                         }
                         // else 分支暂时无需处理
                         
@@ -10087,7 +10081,7 @@ const MapManagement: React.FC = () => {
                                   <circle
                                     cx={point.x}
                                     cy={point.y}
-                                    r={brushSize}
+                                    r={6 /* brushSize */}
                                     fill="#000000"
                                     stroke="none"
                                     opacity="0.7"
@@ -10107,7 +10101,7 @@ const MapManagement: React.FC = () => {
                                   <path
                                     d={pathData}
                                     stroke="#000000"
-                                    strokeWidth={brushSize}
+                                    strokeWidth={6 /* brushSize */}
                                     fill="none"
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
@@ -10126,7 +10120,7 @@ const MapManagement: React.FC = () => {
                                   <circle
                                     cx={point.x}
                                     cy={point.y}
-                                    r={eraserSize}
+                                    r={6 /* eraserSize */}
                                     fill="#FFFFFF"
                                     stroke="#CCCCCC"
                                     strokeWidth="0.5"
@@ -10147,7 +10141,7 @@ const MapManagement: React.FC = () => {
                                   <path
                                     d={pathData}
                                     stroke="#FFFFFF"
-                                    strokeWidth={eraserSize}
+                                    strokeWidth={6 /* eraserSize */}
                                     fill="none"
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
@@ -11119,15 +11113,15 @@ const MapManagement: React.FC = () => {
                                         justifyContent: 'space-between'
                                       }}>
                                         <span>画笔大小</span>
-                                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>{brushSize}px</span>
+                                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>10px</span>
                                       </div>
                                       <Slider
                                         min={1}
                                         max={20}
-                                        value={brushSize}
-                                        onChange={(value) => setBrushSize(value)}
+                                        value={10}
+                                        onChange={(_value) => {/* setBrushSize(value) */}}
                                         style={{ width: '120px', margin: 0 }}
-                                        tooltip={{ formatter: (value) => `${value}px` }}
+                                        tooltip={{ formatter: (_value) => `${_value}px` }}
                                       />
                                     </div>
                                   )}
@@ -11184,13 +11178,13 @@ const MapManagement: React.FC = () => {
                                         justifyContent: 'space-between'
                                       }}>
                                         <span>橡皮擦大小</span>
-                                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>{eraserSize}px</span>
+                                        <span style={{ fontWeight: 'bold', color: '#1890ff' }}>10px</span>
                                       </div>
                                       <Slider
                                         min={1}
                                         max={20}
-                                        value={eraserSize}
-                                        onChange={(value) => setEraserSize(value)}
+                                        value={10}
+                                        onChange={(_value) => {/* setEraserSize(_value) */}}
                                         style={{ width: '120px', margin: 0 }}
                                         tooltip={{ formatter: (value) => `${value}px` }}
                                       />
@@ -11607,7 +11601,6 @@ const MapManagement: React.FC = () => {
                                       {mapAreas.map((area) => {
                                         // 获取关联的路网组信息
                                         const networkGroup = area.networkGroupId ? networkGroups.find(ng => ng.id === area.networkGroupId) : null;
-                                        const robotDevice = area.robotId ? robotDevices.find(rd => rd.id === area.robotId) : null;
                                         
                                         return (
                                           <div key={area.id}>

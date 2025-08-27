@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Card, Table, Button, Input, Select, Space, Modal, message, Row, Col, Tooltip } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, SearchOutlined, ReloadOutlined } from '@ant-design/icons';
 import AddSystemCrossMapConnection from './AddSystemCrossMapConnection';
 import type { ColumnsType } from 'antd/es/table';
 

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Drawer, Form, Input, Button, Space, Card, Row, Col, Select, Tag, message } from 'antd';
-import { PlusOutlined, DeleteOutlined, MinusCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 
 const { Option } = Select;
-const { TextArea } = Input;
 
 interface PathGroupItem {
   id: string;
