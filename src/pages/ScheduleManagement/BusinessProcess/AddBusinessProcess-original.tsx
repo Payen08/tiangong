@@ -13,6 +13,7 @@ import {
   Card,
   Space,
 } from 'antd';
+import StagePropertyPanel from './StagePropertyPanel';
 import { 
   ArrowLeftOutlined, 
   UndoOutlined, 
@@ -128,6 +129,13 @@ interface FlowNode {
   subProcess?: SubProcessData;
   // 关联的子画布ID（仅阶段节点使用）
   subCanvasId?: string;
+  // 设置图标边界信息（用于点击检测）
+  settingsIconBounds?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 }
 
 // 连接线接口
@@ -188,6 +196,9 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const [isDraggingNode, setIsDraggingNode] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   
+  // 点击和拖动状态跟踪
+
+  
   // 子画布拖拽状态
   const [isDraggingSubCanvas, setIsDraggingSubCanvas] = useState(false);
   const [draggedSubCanvas, setDraggedSubCanvas] = useState<SubCanvas | null>(null);
@@ -210,8 +221,14 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   
   // 子流程编辑状态
   const [editingSubProcess, setEditingSubProcess] = useState<string | null>(null); // 当前编辑的子流程节点ID
-  const [lastClickTime, setLastClickTime] = useState(0); // 用于双击检测
-  const [lastClickNode, setLastClickNode] = useState<string | null>(null); // 最后点击的节点
+  
+  // 右键菜单状态
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    nodeId: string;
+  } | null>(null);
   
   // 独立子画布窗口管理
   const [openSubCanvasWindows, setOpenSubCanvasWindows] = useState<Map<string, { nodeId: string; position: { x: number; y: number } }>>(new Map());
@@ -219,6 +236,38 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   // 添加节点面板状态
   const [showNodePanel, setShowNodePanel] = useState(false);
   const [nodeAddPosition, setNodeAddPosition] = useState({ x: 0, y: 0 });
+
+  // 阶段属性面板状态
+  const [stagePropertyPanelVisible, setStagePropertyPanelVisible] = useState(false);
+  const [selectedStageNode, setSelectedStageNode] = useState<FlowNode | null>(null);
+  
+  // 阶段节点悬停状态
+  const [hoveredStageNode, setHoveredStageNode] = useState<string | null>(null);
+  
+  
+
+  
+  // 处理阶段节点点击事件
+  const handleStageNodeClick = useCallback((node: FlowNode) => {
+    if (node.type === 'stage') {
+      setSelectedStageNode(node);
+      setStagePropertyPanelVisible(true);
+    }
+  }, []);
+
+  // 保存阶段节点属性
+  const handleSaveStageNode = useCallback((updatedNode: FlowNode) => {
+    setNodes(prev => prev.map(node => 
+      node.id === updatedNode.id ? updatedNode : node
+    ));
+    setSelectedStageNode(null);
+  }, []);
+
+  // 关闭阶段属性面板
+  const handleCloseStagePropertyPanel = useCallback(() => {
+    setStagePropertyPanelVisible(false);
+    setSelectedStageNode(null);
+  }, []);
   
   // 阶段节点已移除
   const checkSubCanvasDoubleClick = useCallback((x: number, y: number, node: FlowNode): boolean => {
@@ -1310,9 +1359,32 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     return null;
   }, [connections, nodes]);
   
-  // 检查点是否在节点内
+  // 检查点是否在节点内（包括设置图标区域和连接区域）
   const isPointInNode = useCallback((x: number, y: number, node: FlowNode) => {
-    return x >= node.x && x <= node.x + node.width && y >= node.y && y <= node.y + node.height;
+    // 基本节点区域检测
+    const inNodeArea = x >= node.x && x <= node.x + node.width && y >= node.y && y <= node.y + node.height;
+    
+    // 如果是阶段节点，创建一个包含卡片和设置图标的连续悬停区域
+    if (node.type === 'stage') {
+      const iconSize = 24;
+      const iconX = node.x + node.width - iconSize;
+      const iconY = node.y - iconSize - 8; // 在卡片上方外部
+      
+      // 创建一个连续的矩形区域，包含卡片和设置图标
+      const combinedArea = {
+        left: node.x,
+        right: node.x + node.width,
+        top: iconY, // 从设置图标顶部开始
+        bottom: node.y + node.height // 到卡片底部结束
+      };
+      
+      const inCombinedArea = x >= combinedArea.left && x <= combinedArea.right && 
+                            y >= combinedArea.top && y <= combinedArea.bottom;
+      
+      return inCombinedArea;
+    }
+    
+    return inNodeArea;
   }, []);
   
   // 查找鼠标位置的节点
@@ -1586,14 +1658,13 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       setSelectedNode(null);
       setSelectedConnection(null);
     } else if (clickedNode) {
-      // 阶段节点相关功能已移除
+      // 如果点击的是阶段节点，显示属性面板并启动拖拽
+      if (clickedNode.type === 'stage') {
+        setSelectedStageNode(clickedNode);
+        setStagePropertyPanelVisible(true);
+      }
       
-      // 更新双击检测状态
-      const currentTime = Date.now();
-      setLastClickTime(currentTime);
-      setLastClickNode(clickedNode.id);
-      
-      // 点击了节点，开始拖拽
+      // 选中节点并开始拖拽（包括阶段节点）
       setSelectedNode(clickedNode.id);
       setSelectedConnection(null);
       setDraggedNode(clickedNode);
@@ -1625,10 +1696,11 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         lastMouseY: e.clientY
       }));
     } else {
-      // 点击空白区域，取消选择
+      // 点击空白区域，取消选择并隐藏属性面板
       setSelectedNode(null);
       setSelectedConnection(null);
       setInsertingConnectionId(null);
+      setStagePropertyPanelVisible(false);
     }
   }, [canvasState.isSpacePressed, getCanvasCoordinates, findAddButtonAtPosition, findNodeAtPosition, findSubCanvasAtPosition, findConnectionAtPosition, checkOpenSubCanvasButtonClick, openIndependentSubCanvas]);
 
@@ -1767,9 +1839,17 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       const subCanvasLineId = findSubCanvasLineAtPosition(canvasPos.x, canvasPos.y);
       setHoveredSubCanvasLine(subCanvasLineId);
       
+      // 检测阶段节点悬停
+      const hoveredNode = findNodeAtPosition(canvasPos.x, canvasPos.y);
+      if (hoveredNode && hoveredNode.type === 'stage') {
+        setHoveredStageNode(hoveredNode.id);
+      } else {
+        setHoveredStageNode(null);
+      }
+      
       setMousePosition({ x: canvasPos.x, y: canvasPos.y });
     }
-  }, [isDraggingConnection, isDraggingNode, draggedNode, dragOffset, isDraggingSubCanvas, draggedSubCanvas, subCanvasDragOffset, canvasState.isDragging, canvasState.isSpacePressed, canvasState.lastMouseX, canvasState.lastMouseY, getCanvasCoordinates, findConnectionPointAtPosition, findConnectionAtPosition]);
+  }, [isDraggingConnection, isDraggingNode, draggedNode, dragOffset, isDraggingSubCanvas, draggedSubCanvas, subCanvasDragOffset, canvasState.isDragging, canvasState.isSpacePressed, canvasState.lastMouseX, canvasState.lastMouseY, getCanvasCoordinates, findConnectionPointAtPosition, findConnectionAtPosition, findNodeAtPosition]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDraggingConnection && dragConnectionStart && dragConnectionEnd) {
@@ -1887,6 +1967,9 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       setIsDraggingNode(false);
       setDraggedNode(null);
       setDragOffset({ x: 0, y: 0 });
+      
+      // 重置阶段节点悬停状态
+      setHoveredStageNode(null);
     } else if (isDraggingSubCanvas) {
       // 结束子画布拖拽
       setIsDraggingSubCanvas(false);
@@ -1898,6 +1981,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       setCanvasState(newState);
       saveToHistory(newState);
     } else {
+      // 点击空白区域，取消拖拽状态
       setCanvasState(prev => ({ ...prev, isDragging: false }));
     }
   }, [isDraggingConnection, dragConnectionStart, dragConnectionEnd, connections, isDraggingNode, isDraggingSubCanvas, canvasState, saveToHistory, getCanvasCoordinates, findConnectionPointAtPosition, nodes, subCanvases]);
@@ -1905,8 +1989,37 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const handleMouseLeave = useCallback(() => {
     setHoveredConnection(null);
     setHoveredConnectionPoint(null);
+    setHoveredStageNode(null);
     setMousePosition({ x: 0, y: 0 });
   }, []);
+
+  // 右键菜单事件处理
+  const handleContextMenu = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    
+    const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
+    const clickedNode = findNodeAtPosition(canvasPos.x, canvasPos.y);
+    
+    // 只有右键点击阶段节点时才显示菜单
+    if (clickedNode && clickedNode.type === 'stage') {
+      setContextMenu({
+        visible: true,
+        x: e.clientX,
+        y: e.clientY,
+        nodeId: clickedNode.id
+      });
+    } else {
+      // 点击其他地方隐藏菜单
+      setContextMenu(null);
+    }
+  }, [getCanvasCoordinates, findNodeAtPosition]);
+
+  // 点击其他地方隐藏右键菜单
+  const handleClickOutside = useCallback(() => {
+    if (contextMenu?.visible) {
+      setContextMenu(null);
+    }
+  }, [contextMenu]);
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
@@ -1955,10 +2068,8 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     const nodeConfig = nodeTools.find(tool => tool.type === type);
     const color = nodeConfig?.color || '#1890ff';
     
-    // 应用画布变换
+    // 不在这里应用画布变换，因为变换已经在主绘制循环中应用了
     ctx.save();
-    ctx.translate(canvasState.offsetX, canvasState.offsetY);
-    ctx.scale(canvasState.scale, canvasState.scale);
     
     if (type === 'start' || type === 'end') {
       // 绘制阴影
@@ -2187,16 +2298,31 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
 
     } else if (type === 'stage') {
       // 阶段节点绘制 - 卡片样式
-      // 绘制阴影 - 与开始节点保持一致
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetX = 2;
-      ctx.shadowOffsetY = 2;
+      // 检查是否悬停
+      const isHovered = hoveredStageNode === node.id;
+      
+      // 保存当前变换状态
+      ctx.save();
+      
+      // 如果悬停，应用缩放变换
+      if (isHovered) {
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+        ctx.translate(centerX, centerY);
+        ctx.scale(1.05, 1.05); // 放大5%
+        ctx.translate(-centerX, -centerY);
+      }
+      
+      // 绘制阴影 - 悬停时增强阴影效果
+      ctx.shadowColor = isHovered ? 'rgba(0, 0, 0, 0.15)' : 'rgba(0, 0, 0, 0.1)';
+      ctx.shadowBlur = isHovered ? 12 : 8;
+      ctx.shadowOffsetX = isHovered ? 3 : 2;
+      ctx.shadowOffsetY = isHovered ? 3 : 2;
       
       // 绘制白色背景圆角矩形
       ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = isSelected ? '#1890ff' : '#cccccc';
-      ctx.lineWidth = isSelected ? 1 : 0.5;
+      ctx.strokeStyle = isSelected ? '#1890ff' : (isHovered ? '#1890ff' : '#cccccc');
+      ctx.lineWidth = isSelected ? 1 : (isHovered ? 1 : 0.5);
       const radius = 8;
       ctx.beginPath();
       ctx.roundRect(x, y, width, height, radius);
@@ -2429,6 +2555,49 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         }
       }
       
+      // 如果悬停，在阶段卡片外上方显示设置图标
+      if (isHovered) {
+        const iconSize = 24;
+        const iconX = x + width - iconSize;
+        const iconY = y - iconSize - 8; // 在卡片上方外部
+        
+        // 绘制图标阴影
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+        ctx.shadowBlur = 8;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+        
+        // 绘制图标背景圆形 - 白色背景
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = '#d9d9d9';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(iconX + iconSize / 2, iconY + iconSize / 2, iconSize / 2, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+        
+        // 清除阴影设置
+        ctx.shadowColor = 'transparent';
+        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        
+        // 绘制设置图标（齿轮形状）- 深色图标
+        ctx.fillStyle = '#666666';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⚙', iconX + iconSize / 2, iconY + iconSize / 2);
+        
+        // 存储图标位置信息用于点击检测
+        node.settingsIconBounds = {
+          x: iconX,
+          y: iconY,
+          width: iconSize,
+          height: iconSize
+        };
+      }
+      
     } else {
       ctx.fillStyle = isSelected ? '#ffffff' : color;
       ctx.font = '14px Arial';
@@ -2444,9 +2613,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   
   // 绘制连接线
   const drawConnections = useCallback((ctx: CanvasRenderingContext2D) => {
-    ctx.save();
-    ctx.translate(canvasState.offsetX, canvasState.offsetY);
-    ctx.scale(canvasState.scale, canvasState.scale);
+    // 不在这里应用画布变换，因为变换已经在主绘制循环中应用了
     
     connections.forEach(connection => {
 
@@ -2458,11 +2625,12 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
 
         
         if (sourceNode && targetNode) {
-          // 使用连接对象中存储的连接点位置，确保与创建时一致
-          const startX = connection.sourcePoint.x;
-          const startY = connection.sourcePoint.y;
-          const endX = connection.targetPoint.x;
-          const endY = connection.targetPoint.y;
+          // 连线坐标需要根据当前节点的实际位置重新计算
+          // 因为画布拖动时节点坐标不变，但视觉位置改变了
+          const startX = sourceNode.x + sourceNode.width;
+          const startY = sourceNode.y + sourceNode.height / 2;
+          const endX = targetNode.x;
+          const endY = targetNode.y + targetNode.height / 2;
           
 
           
@@ -2716,15 +2884,12 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       ctx.stroke();
       ctx.setLineDash([]); // 重置为实线
     }
-    
-    ctx.restore();
   }, [canvasState, connections, nodes, subCanvases, hoveredConnection, selectedConnection, isDraggingConnection, dragConnectionStart, dragConnectionEnd]);
 
   // 绘制子画布
   const drawSubCanvas = useCallback((ctx: CanvasRenderingContext2D, subCanvas: SubCanvas) => {
+    // 不在这里应用画布变换，因为变换已经在主绘制循环中应用了
     ctx.save();
-    ctx.translate(canvasState.offsetX, canvasState.offsetY);
-    ctx.scale(canvasState.scale, canvasState.scale);
     
     const { x, y, width, height, title } = subCanvas;
     const isSelected = selectedSubCanvas === subCanvas.id;
@@ -3061,11 +3226,18 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       }
     } else {
       // 主流程编辑模式：显示主流程内容
+      // 应用画布变换
+      ctx.save();
+      ctx.translate(canvasState.offsetX, canvasState.offsetY);
+      ctx.scale(canvasState.scale, canvasState.scale);
+      
       drawConnections(ctx);
       nodes.forEach(node => drawNode(ctx, node));
       
       // 绘制子画布
       subCanvases.forEach(subCanvas => drawSubCanvas(ctx, subCanvas));
+      
+      ctx.restore();
       
 
     }
@@ -3133,6 +3305,23 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [selectedNode, selectedConnection, currentStep]);
+
+  // 添加全局点击事件监听器来隐藏右键菜单
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      if (contextMenu?.visible) {
+        setContextMenu(null);
+      }
+    };
+
+    if (contextMenu?.visible) {
+      document.addEventListener('click', handleGlobalClick);
+    }
+
+    return () => {
+      document.removeEventListener('click', handleGlobalClick);
+    };
+  }, [contextMenu]);
 
   return (
     <Drawer
@@ -3245,16 +3434,41 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseLeave}
+                    onContextMenu={handleContextMenu}
                     onWheel={handleWheel}
                     style={{ 
                       cursor: isDraggingConnection ? 'crosshair' : 
                              (hoveredConnectionPoint ? 'crosshair' : 
                              (isDraggingNode ? 'grabbing' : 
                              (isDraggingSubCanvas ? 'grabbing' :
-                             (canvasState.isSpacePressed ? 'grab' : 'default')))),
+                             (canvasState.isSpacePressed ? 'grab' : 
+                             (hoveredStageNode ? 'default' : 'default'))))),
                       backgroundColor: '#f5f7fa'
                     }}
                   />
+                  
+                  {/* 右键菜单 */}
+                  {contextMenu?.visible && (
+                    <div 
+                      className="fixed z-50 bg-white rounded-lg shadow-lg border py-2 min-w-32"
+                      style={{ left: contextMenu.x, top: contextMenu.y }}
+                      onClick={handleClickOutside}
+                    >
+                      <div 
+                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center space-x-2"
+                        onClick={() => {
+                          const node = nodes.find(n => n.id === contextMenu.nodeId);
+                          if (node) {
+                            handleStageNodeClick(node);
+                          }
+                          setContextMenu(null);
+                        }}
+                      >
+                        <SettingOutlined />
+                        <span>阶段属性</span>
+                      </div>
+                    </div>
+                  )}
                   
 
                 </div>
@@ -3512,6 +3726,14 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       )}
       
       {/* 子画布组件和独立子画布窗口已移除 - 阶段节点功能已移除 */}
+      
+      {/* 阶段属性面板 */}
+      <StagePropertyPanel
+        visible={stagePropertyPanelVisible}
+        stageNode={selectedStageNode}
+        onSave={handleSaveStageNode}
+        onClose={handleCloseStagePropertyPanel}
+      />
     </Drawer>
   );
 };
