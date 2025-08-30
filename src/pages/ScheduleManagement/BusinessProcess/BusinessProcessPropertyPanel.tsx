@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { businessProcessData, type BusinessProcessRecord } from '../../../data/businessProcessData';
+import { businessProcessData, type BusinessProcessRecord, updateBusinessProcess } from '../../../data/businessProcessData';
+import AddBusinessProcess from './AddBusinessProcess';
 import {
   Form,
   Input,
@@ -50,6 +51,8 @@ const BusinessProcessPropertyPanel: React.FC<BusinessProcessPropertyPanelProps> 
 }) => {
   const [form] = Form.useForm();
   const [selectedProcess, setSelectedProcess] = useState<BusinessProcessRecord | null>(null);
+  const [isEditDrawerVisible, setIsEditDrawerVisible] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<BusinessProcessRecord | null>(null);
 
   
   // 使用共享业务流程数据，每次渲染时获取最新数据
@@ -107,6 +110,13 @@ const BusinessProcessPropertyPanel: React.FC<BusinessProcessPropertyPanelProps> 
       form.setFieldsValue({
         selectedProcessId: processId
       });
+    }
+  };
+
+  const handleViewProcessDetail = () => {
+    if (selectedProcess) {
+      setEditingRecord(selectedProcess);
+      setIsEditDrawerVisible(true);
     }
   };
 
@@ -256,6 +266,7 @@ const BusinessProcessPropertyPanel: React.FC<BusinessProcessPropertyPanelProps> 
                 icon={<EyeOutlined />}
                 block
                 style={{ marginTop: 8 }}
+                onClick={handleViewProcessDetail}
               >
                 查看流程详情
               </Button>
@@ -264,8 +275,45 @@ const BusinessProcessPropertyPanel: React.FC<BusinessProcessPropertyPanelProps> 
         </Form>
       </div>
 
-
-
+      {/* 编辑业务流程抽屉 */}
+      <AddBusinessProcess
+        visible={isEditDrawerVisible}
+        onClose={() => {
+          setIsEditDrawerVisible(false);
+          setEditingRecord(null);
+        }}
+        onSave={(data) => {
+          if (editingRecord) {
+            const updatedRecord: BusinessProcessRecord = {
+              ...editingRecord,
+              businessName: data.businessName || editingRecord.businessName,
+              identifier: data.identifier || editingRecord.identifier,
+              status: data.status || editingRecord.status,
+              remark: data.remark || editingRecord.remark,
+              updateTime: new Date().toLocaleString('zh-CN'),
+              updatedBy: '当前用户',
+              canvasData: data.canvasData || editingRecord.canvasData
+            };
+            
+            updateBusinessProcess(editingRecord.id, updatedRecord);
+            
+            // 更新当前选中的流程数据
+            setSelectedProcess(updatedRecord);
+            form.setFieldsValue({
+              businessName: updatedRecord.businessName,
+              identifier: updatedRecord.identifier,
+              status: updatedRecord.status,
+              remark: updatedRecord.remark
+            });
+            
+            message.success('业务流程编辑成功！');
+          }
+          
+          setIsEditDrawerVisible(false);
+          setEditingRecord(null);
+        }}
+        editData={editingRecord}
+      />
     </div>
   );
 };
