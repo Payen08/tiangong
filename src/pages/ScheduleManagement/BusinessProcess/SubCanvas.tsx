@@ -59,7 +59,7 @@ interface SubProcessData {
 }
 
 // 节点类型
-type NodeType = 'start' | 'end' | 'process';
+type NodeType = 'start' | 'end' | 'process' | 'businessProcess';
 
 // 流程节点接口
 interface FlowNode {
@@ -72,8 +72,12 @@ interface FlowNode {
   label: string;
   customName?: string;
   triggerCondition?: string;
+  demandDevicesTriggerCondition?: string; // 需求方设备触发条件
+  supplyDevicesTriggerCondition?: string; // 供给方设备触发条件
   demandDevices?: string[];
   supplyDevices?: string[];
+  demandDevicesNames?: string; // 需求方设备中文名称
+  supplyDevicesNames?: string; // 供给方设备中文名称
   data?: any;
 }
 

@@ -1,6 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AddBusinessProcess from './AddBusinessProcess-original';
+import { 
+  businessProcessData, 
+  type BusinessProcessRecord,
+  addBusinessProcess,
+  updateBusinessProcess,
+  deleteBusinessProcess
+} from '../../../data/businessProcessData';
 import {
   Card,
   Table,
@@ -31,16 +38,6 @@ import type { MenuProps } from 'antd';
 
 const { Option } = Select;
 const { confirm } = Modal;
-
-interface BusinessProcessRecord {
-  id: string;
-  businessName: string;
-  identifier: string;
-  status: 'enabled' | 'disabled' | 'obsolete';
-  remark: string;
-  updateTime: string;
-  updatedBy: string;
-}
 
 const BusinessProcess: React.FC = () => {
   const navigate = useNavigate();
@@ -77,36 +74,8 @@ const BusinessProcess: React.FC = () => {
     return baseWidth;
   };
 
-  // 模拟数据
-  const [dataSource, setDataSource] = useState<BusinessProcessRecord[]>([
-    {
-      id: '1',
-      businessName: '订单处理流程',
-      identifier: 'order_process',
-      status: 'enabled',
-      remark: '处理客户订单的标准流程',
-      updateTime: '2024-01-15 10:30:00',
-      updatedBy: '张三',
-    },
-    {
-      id: '2',
-      businessName: '库存管理流程',
-      identifier: 'inventory_management',
-      status: 'disabled',
-      remark: '管理仓库库存的业务流程',
-      updateTime: '2024-01-14 14:20:00',
-      updatedBy: '李四',
-    },
-    {
-      id: '3',
-      businessName: '退货处理流程',
-      identifier: 'return_process',
-      status: 'obsolete',
-      remark: '处理客户退货的流程',
-      updateTime: '2024-01-13 09:15:00',
-      updatedBy: '王五',
-    },
-  ]);
+  // 使用共享数据源
+  const [dataSource, setDataSource] = useState<BusinessProcessRecord[]>(businessProcessData);
 
   const getStatusTag = (status: string) => {
     const statusMap = {
@@ -114,7 +83,7 @@ const BusinessProcess: React.FC = () => {
       disabled: { color: 'orange', text: '停用' },
       obsolete: { color: 'red', text: '作废' },
     };
-    const config = statusMap[status as keyof typeof statusMap];
+    const config = statusMap[status as keyof typeof statusMap] || { color: 'default', text: '未知' };
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
@@ -130,18 +99,24 @@ const BusinessProcess: React.FC = () => {
       icon: <ExclamationCircleOutlined />,
       content: `确定要${statusText}业务流程"${record.businessName}"吗？`,
       onOk() {
+        const updatedData = {
+          status: newStatus as 'enabled' | 'disabled' | 'obsolete',
+          updateTime: new Date().toLocaleString('zh-CN'),
+          updatedBy: '当前用户',
+        };
+        
+        // 更新本地状态
         setDataSource(prev =>
           prev.map(item =>
             item.id === record.id
-              ? {
-                  ...item,
-                  status: newStatus as 'enabled' | 'disabled' | 'obsolete',
-                  updateTime: new Date().toLocaleString('zh-CN'),
-                  updatedBy: '当前用户',
-                }
+              ? { ...item, ...updatedData }
               : item
           )
         );
+        
+        // 同步更新共享数据源
+        updateBusinessProcess(record.id, updatedData);
+        
         message.success(`${statusText}成功`);
       },
     });
@@ -154,7 +129,12 @@ const BusinessProcess: React.FC = () => {
       content: `确定要删除业务流程"${record.businessName}"吗？此操作不可恢复。`,
       okType: 'danger',
       onOk() {
+        // 更新本地状态
         setDataSource(prev => prev.filter(item => item.id !== record.id));
+        
+        // 同步更新共享数据源
+        deleteBusinessProcess(record.id);
+        
         message.success('删除成功');
       },
     });
@@ -239,18 +219,24 @@ const BusinessProcess: React.FC = () => {
           // 模拟API调用
           setTimeout(() => {
             if (editingProcessKeyRecord) {
+              const updatedData = {
+                identifier: newKey,
+                updateTime: new Date().toLocaleString('zh-CN'),
+                updatedBy: '当前用户',
+              };
+              
+              // 更新本地状态
               setDataSource(prev =>
                 prev.map(item =>
                   item.id === editingProcessKeyRecord.id
-                    ? {
-                        ...item,
-                        identifier: newKey,
-                        updateTime: new Date().toLocaleString('zh-CN'),
-                        updatedBy: '当前用户',
-                      }
+                    ? { ...item, ...updatedData }
                     : item
                 )
               );
+              
+              // 同步更新共享数据源
+              updateBusinessProcess(editingProcessKeyRecord.id, updatedData);
+              
               message.success('流程key修改成功');
             }
             setIsEditingProcessKey(false);
@@ -354,9 +340,8 @@ const BusinessProcess: React.FC = () => {
             size="small"
             icon={<EditOutlined />}
             onClick={() => {
-              setEditingRecord(record);
-              form.setFieldsValue(record);
-              setIsModalVisible(true);
+              setEditingDrawerRecord(record);
+              setIsAddDrawerVisible(true);
             }}
             style={{ padding: '0 4px', fontSize: '12px' }}
           >
@@ -385,9 +370,15 @@ const BusinessProcess: React.FC = () => {
       width: getColumnWidth(200),
       align: 'left',
       ellipsis: true,
-      render: (name: string) => (
+      render: (name: string, record: BusinessProcessRecord) => (
         <Tooltip title={name}>
-          <span style={{ color: '#1890ff', cursor: 'pointer' }}>
+          <span 
+            style={{ color: '#1890ff', cursor: 'pointer' }}
+            onClick={() => {
+              setEditingDrawerRecord(record);
+              setIsAddDrawerVisible(true);
+            }}
+          >
             {name}
           </span>
         </Tooltip>
@@ -501,9 +492,8 @@ const BusinessProcess: React.FC = () => {
               type="link"
               icon={<EditOutlined />}
               onClick={() => {
-                setEditingRecord(record);
-                form.setFieldsValue(record);
-                setIsModalVisible(true);
+                setEditingDrawerRecord(record);
+                setIsAddDrawerVisible(true);
               }}
               size="small"
               style={{ padding: '0 4px' }}
@@ -531,18 +521,24 @@ const BusinessProcess: React.FC = () => {
       
       if (editingRecord) {
         // 编辑
+        const updatedData = {
+          ...values,
+          updateTime: new Date().toLocaleString('zh-CN'),
+          updatedBy: '当前用户',
+        };
+        
+        // 更新本地状态
         setDataSource(prev =>
           prev.map(item =>
             item.id === editingRecord.id
-              ? {
-                  ...item,
-                  ...values,
-                  updateTime: new Date().toLocaleString('zh-CN'),
-                  updatedBy: '当前用户',
-                }
+              ? { ...item, ...updatedData }
               : item
           )
         );
+        
+        // 同步更新共享数据源
+        updateBusinessProcess(editingRecord.id, updatedData);
+        
         message.success('编辑成功');
       } else {
         // 新增
@@ -552,7 +548,15 @@ const BusinessProcess: React.FC = () => {
           updateTime: new Date().toLocaleString('zh-CN'),
           updatedBy: '当前用户',
         };
+        
+        // 更新本地状态
         setDataSource(prev => [newRecord, ...prev]);
+        
+        // 同步更新共享数据源
+        console.log('🔥 [DEBUG] 准备调用addBusinessProcess函数', newRecord);
+        addBusinessProcess(newRecord);
+        console.log('✅ [DEBUG] addBusinessProcess函数调用完成');
+        
         message.success('新增成功');
       }
       
@@ -811,28 +815,34 @@ const BusinessProcess: React.FC = () => {
           setEditingDrawerRecord(null);
         }}
         onSave={(data) => {
-          // 处理保存逻辑
+          console.log('=== onSave 回调函数被调用 ===', data);
+          
           const newRecord: BusinessProcessRecord = {
             id: editingDrawerRecord ? editingDrawerRecord.id : Date.now().toString(),
-            businessName: data.businessName,
-            identifier: data.identifier,
-            status: data.status,
+            businessName: data.businessName || '未命名流程',
+            identifier: data.identifier || '',
+            status: data.status || 'enabled',
             remark: data.remark || '',
             updateTime: new Date().toLocaleString('zh-CN'),
-            updatedBy: '当前用户'
+            updatedBy: '当前用户',
+            canvasData: data.canvasData || { nodes: [], connections: [], subCanvases: [] }
           };
+          
+          console.log('=== 准备调用业务流程数据函数 ===', newRecord);
 
           if (editingDrawerRecord) {
              // 编辑模式
-             setDataSource((prevData: BusinessProcessRecord[]) => 
-               prevData.map((item: BusinessProcessRecord) => 
-                 item.id === editingDrawerRecord.id ? newRecord : item
-               )
-             );
+             console.log('=== 编辑模式：调用 updateBusinessProcess ===');
+             updateBusinessProcess(editingDrawerRecord.id, newRecord);
+             // 直接从businessProcessData获取最新数据，确保数据同步
+             setDataSource([...businessProcessData]);
              message.success('业务流程编辑成功！');
            } else {
              // 新增模式
-             setDataSource((prevData: BusinessProcessRecord[]) => [newRecord, ...prevData]);
+             console.log('=== 新增模式：调用 addBusinessProcess ===');
+             addBusinessProcess(newRecord);
+             // 直接从businessProcessData获取最新数据，避免重复添加
+             setDataSource([...businessProcessData]);
              message.success('业务流程创建成功！');
            }
 

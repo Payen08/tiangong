@@ -12,8 +12,11 @@ import {
   Tooltip,
   Card,
   Space,
+  Radio,
+  Tabs,
 } from 'antd';
 import StagePropertyPanel from './StagePropertyPanel';
+import BusinessProcessPropertyPanel from './BusinessProcessPropertyPanel';
 import { 
   ArrowLeftOutlined, 
   UndoOutlined, 
@@ -31,19 +34,48 @@ import {
   CloseOutlined,
   SearchOutlined,
   SelectOutlined,
-  SortAscendingOutlined
+  SortAscendingOutlined,
+  DeleteOutlined
 } from '@ant-design/icons';
 // SubCanvas和IndependentSubCanvas导入已移除 - 阶段节点功能已移除
 
 const { TextArea } = Input;
 const { Option } = Select;
 
+// 触发条件接口
+interface TriggerCondition {
+  id: string;
+  dataSource: 'product' | 'global';
+  dataItem?: string;
+  productAttribute?: string;
+  compareType?: 'greater' | 'equal' | 'less' | 'notEqual';
+  value?: string;
+}
+
+// 触发条件组接口
+interface TriggerConditionGroup {
+  id: string;
+  conditions: TriggerCondition[];
+  logicOperator: 'and' | 'or';
+}
+
+// 执行设备接口
+interface ExecutionDevice {
+  id: string;
+  deviceType: string;
+  devices: string[];
+  deviceNames?: string;
+  triggerType: 'general' | 'custom';
+  conditionType: 'none' | 'conditional';
+  conditionGroups?: TriggerConditionGroup[];
+}
+
 // 业务流程接口
 interface BusinessProcessData {
   businessName: string;
   identifier: string;
   status: 'enabled' | 'disabled' | 'obsolete';
-  remark?: string;
+  executionDevices?: ExecutionDevice[];
 }
 
 interface AddBusinessProcessProps {
@@ -65,8 +97,20 @@ interface CanvasState {
   historyIndex?: number;
 }
 
+// 历史状态接口
+interface HistoryState {
+  nodes: FlowNode[];
+  connections: Connection[];
+  subCanvases: SubCanvas[];
+  canvasState: {
+    offsetX: number;
+    offsetY: number;
+    scale: number;
+  };
+}
+
 // 流程节点类型
-type NodeType = 'start' | 'end' | 'stage';
+type NodeType = 'start' | 'end' | 'stage' | 'businessProcess';
 
 // 子画布视图配置
 interface SubCanvasViewConfig {
@@ -122,20 +166,17 @@ interface FlowNode {
   label: string;
   customName?: string;
   triggerCondition?: string;
+  demandDevicesTriggerCondition?: string; // 需求方设备触发条件
+  supplyDevicesTriggerCondition?: string; // 供给方设备触发条件
   demandDevices?: string[];
   supplyDevices?: string[];
+  demandDevicesNames?: string; // 需求方设备中文名称
+  supplyDevicesNames?: string; // 供给方设备中文名称
   data?: any;
   // 阶段节点的子流程数据 - 使用新的数据结构
   subProcess?: SubProcessData;
   // 关联的子画布ID（仅阶段节点使用）
   subCanvasId?: string;
-  // 设置图标边界信息（用于点击检测）
-  settingsIconBounds?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
 }
 
 // 连接线接口
@@ -145,8 +186,8 @@ interface Connection {
   targetId: string;
   sourcePoint: { x: number; y: number };
   targetPoint: { x: number; y: number };
-  sourceType?: 'node' | 'stage' | 'subcanvas';
-  targetType?: 'node' | 'stage' | 'subcanvas';
+  sourceType?: 'node' | 'stage' | 'subcanvas' | 'businessProcess';
+  targetType?: 'node' | 'stage' | 'subcanvas' | 'businessProcess';
 }
 
 // 节点工具栏配置
@@ -167,6 +208,15 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const [loading, setLoading] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
+  // 监听visible变化，重置属性面板状态
+  useEffect(() => {
+    if (visible) {
+      // 组件打开时重置业务流程属性面板状态
+      setBusinessProcessPropertyPanelVisible(false);
+      setSelectedBusinessProcessNode(null);
+    }
+  }, [visible]);
+  
   // 主步骤状态
   const [currentStep, setCurrentStep] = useState(0);
   
@@ -183,8 +233,11 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     historyIndex: -1
   });
   
+  // 无效节点状态（用于红色描边显示）
+  const [invalidNodes, setInvalidNodes] = useState<string[]>([]);
+  
   // 历史记录管理
-  const [history, setHistory] = useState<CanvasState[]>([]);
+  const [history, setHistory] = useState<HistoryState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   
   // 流程编排状态
@@ -222,13 +275,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   // 子流程编辑状态
   const [editingSubProcess, setEditingSubProcess] = useState<string | null>(null); // 当前编辑的子流程节点ID
   
-  // 右键菜单状态
-  const [contextMenu, setContextMenu] = useState<{
-    visible: boolean;
-    x: number;
-    y: number;
-    nodeId: string;
-  } | null>(null);
+  // 右键菜单状态已移除
   
   // 独立子画布窗口管理
   const [openSubCanvasWindows, setOpenSubCanvasWindows] = useState<Map<string, { nodeId: string; position: { x: number; y: number } }>>(new Map());
@@ -241,12 +288,210 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const [stagePropertyPanelVisible, setStagePropertyPanelVisible] = useState(false);
   const [selectedStageNode, setSelectedStageNode] = useState<FlowNode | null>(null);
   
+  // 业务流程属性面板状态
+  const [businessProcessPropertyPanelVisible, setBusinessProcessPropertyPanelVisible] = useState(false);
+  const [selectedBusinessProcessNode, setSelectedBusinessProcessNode] = useState<FlowNode | null>(null);
+  
   // 阶段节点悬停状态
-  const [hoveredStageNode, setHoveredStageNode] = useState<string | null>(null);
+  const [hoveredDemandDevice, setHoveredDemandDevice] = useState<{nodeId: string, deviceText: string, x: number, y: number} | null>(null);
+  const [hoveredTriggerCondition, setHoveredTriggerCondition] = useState<{nodeId: string, conditionText: string, x: number, y: number} | null>(null);
   
+  // 执行设备状态管理 - 默认包含一个执行设备
+  const [executionDevices, setExecutionDevices] = useState<ExecutionDevice[]>([
+    {
+      id: `device_${Date.now()}`,
+      deviceType: 'sensor',
+      devices: [],
+      triggerType: 'general',
+      conditionType: 'none'
+    }
+  ]);
   
+  // 设备类型选项
+  const deviceTypeOptions = [
+    { label: '传感器', value: 'sensor' },
+    { label: '执行器', value: 'actuator' },
+    { label: '控制器', value: 'controller' },
+    { label: '监控设备', value: 'monitor' }
+  ];
 
+  // 设备选项（根据设备类型动态变化）
+  const getDeviceOptions = (deviceType: string) => {
+    const deviceMap: Record<string, Array<{ label: string; value: string }>> = {
+      sensor: [
+        { label: '温度传感器', value: 'temp_sensor' },
+        { label: '湿度传感器', value: 'humidity_sensor' },
+        { label: '压力传感器', value: 'pressure_sensor' }
+      ],
+      actuator: [
+        { label: '电机', value: 'motor' },
+        { label: '阀门', value: 'valve' },
+        { label: '泵', value: 'pump' }
+      ],
+      controller: [
+        { label: 'PLC控制器', value: 'plc' },
+        { label: '单片机', value: 'mcu' },
+        { label: '工控机', value: 'ipc' }
+      ],
+      monitor: [
+        { label: '摄像头', value: 'camera' },
+        { label: '显示屏', value: 'display' },
+        { label: '报警器', value: 'alarm' }
+      ]
+    };
+    return deviceMap[deviceType] || [];
+  };
   
+  // 根据设备ID获取设备中文名称
+  const getDeviceNameById = (deviceId: string): string => {
+    const allDeviceTypes = ['sensor', 'actuator', 'controller', 'monitor'];
+    for (const deviceType of allDeviceTypes) {
+      const options = getDeviceOptions(deviceType);
+      const device = options.find(option => option.value === deviceId);
+      if (device) {
+        return device.label;
+      }
+    }
+    return deviceId; // 如果找不到，返回原始ID
+  };
+  
+  // 添加执行设备
+  const addExecutionDevice = () => {
+    const newDevice: ExecutionDevice = {
+      id: `device_${Date.now()}`,
+      deviceType: 'sensor',
+      devices: [],
+      triggerType: 'general',
+      conditionType: 'none'
+    };
+    setExecutionDevices(prev => [...prev, newDevice]);
+  };
+  
+  // 更新执行设备
+  const updateExecutionDevice = (deviceId: string, updates: Partial<ExecutionDevice>) => {
+    setExecutionDevices(prev => prev.map(device => 
+      device.id === deviceId ? { ...device, ...updates } : device
+    ));
+  };
+  
+  // 删除执行设备
+  const removeExecutionDevice = (deviceId: string) => {
+    setExecutionDevices(prev => prev.filter(device => device.id !== deviceId));
+  };
+  
+  // 数据源选项
+  const dataSourceOptions = [
+    { label: '产品管理', value: 'product' },
+    { label: '全局变量', value: 'global' }
+  ];
+
+  // 对比方式选项
+  const compareTypeOptions = [
+    { label: '大于', value: 'greater' },
+    { label: '等于', value: 'equal' },
+    { label: '小于', value: 'less' },
+    { label: '不等于', value: 'notEqual' }
+  ];
+
+  // 添加触发条件组
+  const addTriggerConditionGroup = (deviceId: string): void => {
+    const newGroup: TriggerConditionGroup = {
+      id: `group_${Date.now()}`,
+      conditions: [{
+        id: `cond_${Date.now()}`,
+        dataSource: 'product'
+      }],
+      logicOperator: 'and'
+    };
+    
+    const device = executionDevices.find(dev => dev.id === deviceId);
+    updateExecutionDevice(deviceId, {
+      conditionGroups: [...(device?.conditionGroups || []), newGroup]
+    });
+  };
+
+  // 添加触发条件到组
+  const addTriggerCondition = (deviceId: string, groupId: string): void => {
+    const newCondition: TriggerCondition = {
+      id: `cond_${Date.now()}`,
+      dataSource: 'product'
+    };
+    
+    const device = executionDevices.find(dev => dev.id === deviceId);
+    if (device) {
+      const updatedGroups = device.conditionGroups?.map(group => 
+        group.id === groupId 
+          ? { ...group, conditions: [...group.conditions, newCondition] }
+          : group
+      ) || [];
+      
+      updateExecutionDevice(deviceId, {
+        conditionGroups: updatedGroups
+      });
+    }
+  };
+
+  // 删除触发条件组
+  const removeTriggerConditionGroup = (deviceId: string, groupId: string): void => {
+    const device = executionDevices.find(dev => dev.id === deviceId);
+    if (device) {
+      updateExecutionDevice(deviceId, {
+        conditionGroups: device.conditionGroups?.filter(group => group.id !== groupId) || []
+      });
+    }
+  };
+
+  // 删除触发条件
+  const removeTriggerCondition = (deviceId: string, groupId: string, conditionId: string): void => {
+    const device = executionDevices.find(dev => dev.id === deviceId);
+    if (device) {
+      const updatedGroups = device.conditionGroups?.map(group => 
+        group.id === groupId 
+          ? { ...group, conditions: group.conditions.filter(cond => cond.id !== conditionId) }
+          : group
+      ) || [];
+      
+      updateExecutionDevice(deviceId, {
+        conditionGroups: updatedGroups
+      });
+    }
+  };
+
+  // 更新触发条件组
+  const updateTriggerConditionGroup = (deviceId: string, groupId: string, updates: Partial<TriggerConditionGroup>): void => {
+    const device = executionDevices.find(dev => dev.id === deviceId);
+    if (device) {
+      const updatedGroups = device.conditionGroups?.map(group => 
+        group.id === groupId ? { ...group, ...updates } : group
+      ) || [];
+      
+      updateExecutionDevice(deviceId, {
+        conditionGroups: updatedGroups
+      });
+    }
+  };
+
+  // 更新触发条件
+  const updateTriggerCondition = (deviceId: string, groupId: string, conditionId: string, updates: Partial<TriggerCondition>): void => {
+    const device = executionDevices.find(dev => dev.id === deviceId);
+    if (device) {
+      const updatedGroups = device.conditionGroups?.map(group => 
+        group.id === groupId 
+          ? {
+              ...group, 
+              conditions: group.conditions.map(cond => 
+                cond.id === conditionId ? { ...cond, ...updates } : cond
+              )
+            }
+          : group
+      ) || [];
+      
+      updateExecutionDevice(deviceId, {
+        conditionGroups: updatedGroups
+      });
+    }
+  };
+
   // 处理阶段节点点击事件
   const handleStageNodeClick = useCallback((node: FlowNode) => {
     if (node.type === 'stage') {
@@ -267,6 +512,20 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const handleCloseStagePropertyPanel = useCallback(() => {
     setStagePropertyPanelVisible(false);
     setSelectedStageNode(null);
+  }, []);
+  
+  // 保存业务流程节点
+  const handleSaveBusinessProcessNode = useCallback((updatedNode: FlowNode) => {
+    setNodes(prev => prev.map(node => 
+      node.id === updatedNode.id ? updatedNode : node
+    ));
+    setSelectedBusinessProcessNode(null);
+  }, []);
+
+  // 关闭业务流程属性面板
+  const handleCloseBusinessProcessPropertyPanel = useCallback(() => {
+    setBusinessProcessPropertyPanelVisible(false);
+    setSelectedBusinessProcessNode(null);
   }, []);
   
   // 阶段节点已移除
@@ -559,12 +818,29 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           x: nodeAddPosition.x - 100,
           y: nodeAddPosition.y - 60,
           width: 200,
-          height: 150,
+          height: 110,
           label: '新阶段',
           customName: 'AGV取料阶段',
           triggerCondition: '物料到位',
           demandDevices: ['AGV小车'],
           supplyDevices: ['料架']
+        };
+        break;
+      case 'businessProcess':
+        newNode = {
+          id: newNodeId,
+          type: 'businessProcess',
+          x: nodeAddPosition.x - 100,
+          y: nodeAddPosition.y - 60,
+          width: 200,
+          height: 110,
+          label: '业务流程',
+          customName: '',
+          data: {
+            processKey: '',
+            updateTime: '',
+            selectedProcessId: null
+          }
         };
         break;
       default:
@@ -689,7 +965,10 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         let nodeWidth, nodeHeight;
         if (nodeType === 'stage') {
           nodeWidth = 200;
-        nodeHeight = 150;
+        nodeHeight = 110;
+        } else if (nodeType === 'businessProcess') {
+          nodeWidth = 200;
+          nodeHeight = 110;
         } else {
           nodeWidth = 120;
           nodeHeight = 60;
@@ -705,10 +984,19 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           label: nodeTools.find(tool => tool.type === nodeType)?.label || nodeType,
           // 为阶段节点添加默认字段
           ...(nodeType === 'stage' && {
-            customName: 'AGV取料阶段',
-            triggerCondition: '物料到位',
-            demandDevices: ['AGV小车'],
-            supplyDevices: ['料架']
+            customName: '阶段',
+            triggerCondition: '',
+            demandDevices: [],
+            supplyDevices: []
+          }),
+          // 为业务流程节点添加默认字段
+          ...(nodeType === 'businessProcess' && {
+            customName: '',
+            data: {
+              processKey: '',
+              updateTime: '',
+              selectedProcessId: null
+            }
           })
         };
 
@@ -797,7 +1085,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         } else if (nodeType === 'stage') {
           // 阶段节点使用卡片样式，需要更大的尺寸
           nodeWidth = 200;
-        nodeHeight = 150;
+        nodeHeight = 110;
         } else {
           nodeWidth = 200;
           nodeHeight = 60;
@@ -817,6 +1105,15 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
             triggerCondition: '物料到位',
             demandDevices: ['AGV小车'],
             supplyDevices: ['料架']
+          }),
+          // 为业务流程节点添加默认字段
+          ...(nodeType === 'businessProcess' && {
+            customName: '',
+            data: {
+              processKey: '',
+              updateTime: '',
+              selectedProcessId: null
+            }
           })
         };
       }
@@ -843,6 +1140,12 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       color: '#1890ff'
     },
     {
+      type: 'businessProcess',
+      icon: <SettingOutlined />,
+      label: '业务流程',
+      color: '#722ed1'
+    },
+    {
       type: 'end',
       icon: <StopOutlined />,
       label: '结束',
@@ -850,32 +1153,74 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     }
   ];
   
+  // 监听组件显示状态，确保每次打开都从第一步开始
+  useEffect(() => {
+    if (visible) {
+      // 每次打开组件时，如果不是编辑模式，都从第一步开始
+      if (!editData) {
+        setCurrentStep(0);
+        form.resetFields();
+        setNodes([]);
+        setConnections([]);
+        setSubCanvases([]);
+        // 清除选中状态
+        setSelectedNode(null);
+        setSelectedStageNode(null);
+        setStagePropertyPanelVisible(false);
+      }
+    }
+  }, [visible, editData, form]);
+
   // 处理编辑模式初始化
   useEffect(() => {
     if (editData) {
+      // 加载基本信息
       form.setFieldsValue({
         businessName: editData.businessName,
         identifier: editData.identifier,
         status: editData.status,
         remark: editData.remark,
       });
+      
+      // 加载画布数据
+      if (editData.canvasData) {
+        setNodes(editData.canvasData.nodes || []);
+        setConnections(editData.canvasData.connections || []);
+        setSubCanvases(editData.canvasData.subCanvases || []);
+      }
+      
+      // 编辑模式始终从第一步开始，让用户选择要编辑的内容
+      setCurrentStep(0);
+      // 清除选中状态
+      setSelectedNode(null);
+      setSelectedStageNode(null);
+      setStagePropertyPanelVisible(false);
     } else {
       form.resetFields();
       setCurrentStep(0);
+      // 重置画布数据
+      setNodes([]);
+      setConnections([]);
+      setSubCanvases([]);
+      // 清除选中状态
+      setSelectedNode(null);
+      setSelectedStageNode(null);
+      setStagePropertyPanelVisible(false);
     }
   }, [editData, form]);
 
   // 初始化历史记录
   useEffect(() => {
     if (visible && history.length === 0) {
-      const initialState = {
-        offsetX: 0,
-        offsetY: 0,
-        scale: 1,
-        isDragging: false,
-        isSpacePressed: false,
-        lastMouseX: 0,
-        lastMouseY: 0
+      const initialState: HistoryState = {
+        nodes: [],
+        connections: [],
+        subCanvases: [],
+        canvasState: {
+          offsetX: 0,
+          offsetY: 0,
+          scale: 1
+        }
       };
       setHistory([initialState]);
       setHistoryIndex(0);
@@ -925,9 +1270,27 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const handleNext = async () => {
     try {
       if (currentStep === 0) {
+        // 在新增模式下，只有当identifier为空时才自动生成流程key
+        if (!editData) {
+          const currentValues = form.getFieldsValue();
+          const currentIdentifier = currentValues.identifier;
+          
+          // 只有当identifier为空或只包含空格时才自动生成
+          if (!currentIdentifier || currentIdentifier.trim() === '') {
+            const timestamp = Date.now();
+            const randomSuffix = Math.random().toString(36).substring(2, 8);
+            const generatedKey = `process_${timestamp}_${randomSuffix}`;
+            form.setFieldsValue({ identifier: generatedKey });
+          }
+        }
+        
         // 验证基本信息表单
         await form.validateFields(['businessName', 'identifier', 'status']);
         setCurrentStep(1);
+        // 清除选中状态，隐藏阶段属性面板
+        setSelectedNode(null);
+        setSelectedStageNode(null);
+        setStagePropertyPanelVisible(false);
       }
     } catch (error) {
       message.error('请完善必填信息');
@@ -937,6 +1300,12 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   // 主流程上一步
   const handlePrev = () => {
     setCurrentStep(currentStep - 1);
+    // 清除选中状态，隐藏属性面板
+    setSelectedNode(null);
+    setSelectedStageNode(null);
+    setStagePropertyPanelVisible(false);
+    setSelectedBusinessProcessNode(null);
+    setBusinessProcessPropertyPanelVisible(false);
   };
 
   // 回退2步
@@ -946,26 +1315,148 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     } else {
       setCurrentStep(0);
     }
+    // 清除选中状态，隐藏属性面板
+    setSelectedNode(null);
+    setSelectedStageNode(null);
+    setStagePropertyPanelVisible(false);
+    setSelectedBusinessProcessNode(null);
+    setBusinessProcessPropertyPanelVisible(false);
+  };
+
+  // 验证节点必填字段
+  const validateNodes = (): { isValid: boolean; invalidNodes: Array<{ node: FlowNode; missingFields: string[] }> } => {
+    const invalidNodes: Array<{ node: FlowNode; missingFields: string[] }> = [];
+    
+    nodes.forEach(node => {
+      if (node.type === 'stage') {
+        const missingFields: string[] = [];
+        
+        // 检查阶段名称
+        if (!node.customName || node.customName.trim() === '') {
+          missingFields.push('阶段名称');
+        }
+        
+        // 检查需求方设备
+        if (!node.demandDevices || node.demandDevices.length === 0) {
+          missingFields.push('需求方设备');
+        }
+        
+        // 供给方设备校验已移除，因为相关功能已被移除
+        
+        if (missingFields.length > 0) {
+          invalidNodes.push({ node, missingFields });
+        }
+      }
+    });
+    
+    return {
+      isValid: invalidNodes.length === 0,
+      invalidNodes
+    };
   };
 
   const handleFinish = async (values: any) => {
     try {
-      const allValues = await form.validateFields();
-      onSave(allValues);
-    } catch (error) {
-      message.error('请完善所有必填信息');
+      setLoading(true);
+      
+      // 获取表单所有字段的值（包括不在当前步骤显示的字段）
+      const allValues = form.getFieldsValue(true);
+      
+      // 验证节点必填字段
+      const nodeValidation = validateNodes();
+      if (!nodeValidation.isValid) {
+        // 设置无效节点状态用于红色描边显示
+        setInvalidNodes(nodeValidation.invalidNodes.map(item => item.node.id));
+        
+        // 生成错误提示信息
+        const errorMessages = nodeValidation.invalidNodes.map(item => {
+          const nodeName = item.node.customName || `阶段节点${item.node.id}`;
+          return `${nodeName}: ${item.missingFields.join('、')}`;
+        });
+        
+        message.error({
+          content: (
+            <div>
+              <div style={{ marginBottom: '8px' }}>以下节点存在未填写的必填字段：</div>
+              {errorMessages.map((msg, index) => (
+                <div key={index} style={{ marginLeft: '16px', color: '#ff4d4f' }}>
+                  • {msg}
+                </div>
+              ))}
+            </div>
+          ),
+          duration: 6
+        });
+        
+        return;
+      }
+      
+      // 清除无效节点状态
+      setInvalidNodes([]);
+      
+      // 自动生成流程key（如果用户没有输入）
+      if (!allValues.identifier || allValues.identifier.trim() === '') {
+        const timestamp = Date.now();
+        const randomSuffix = Math.random().toString(36).substring(2, 8);
+        allValues.identifier = `process_${timestamp}_${randomSuffix}`;
+      }
+      
+      // 收集画布数据
+      const canvasData = {
+        nodes,
+        connections,
+        subCanvases
+      };
+      
+      
+      // 合并表单数据和画布数据
+      const completeData = {
+        ...allValues,
+        executionDevices,
+        canvasData,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      
+
+      
+      // 调用父组件的保存方法
+      await onSave(completeData);
+      
+      // 成功提示已在父组件中处理，这里不需要重复
+      
+    } catch (error: any) {
+      console.error('保存业务流程失败:', error);
+      if (error?.errorFields && error.errorFields.length > 0) {
+        message.error('请完善所有必填信息');
+      } else {
+        message.error('保存失败，请重试');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   // 保存历史记录
-  const saveToHistory = useCallback((state: CanvasState) => {
+  const saveToHistory = useCallback(() => {
+    const historyState: HistoryState = {
+      nodes: [...nodes],
+      connections: [...connections],
+      subCanvases: [...subCanvases],
+      canvasState: {
+        offsetX: canvasState.offsetX,
+        offsetY: canvasState.offsetY,
+        scale: canvasState.scale
+      }
+    };
+    
     setHistory(prev => {
       const newHistory = prev.slice(0, historyIndex + 1);
-      newHistory.push({ ...state });
+      newHistory.push(historyState);
       return newHistory.slice(-50); // 限制历史记录数量
     });
     setHistoryIndex(prev => Math.min(prev + 1, 49));
-  }, [historyIndex]);
+  }, [historyIndex, nodes, connections, subCanvases, canvasState]);
 
   // 智能自动排序函数
   const autoSortNodes = useCallback(() => {
@@ -1109,7 +1600,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       setNodes(updatedMainNodes);
       
       // 保存到历史记录
-      saveToHistory(canvasState);
+      saveToHistory();
 
     } else {
       // 主流程编辑模式：对主流程节点进行排序
@@ -1232,7 +1723,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       setConnections(updatedConnections);
       
       // 保存到历史记录
-      saveToHistory(canvasState);
+      saveToHistory();
     }
 
     message.success('节点自动排序完成');
@@ -1242,12 +1733,20 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const handleUndo = useCallback(() => {
     if (historyIndex > 0) {
       const prevState = history[historyIndex - 1];
+      
+      // 恢复节点和连接线状态
+      setNodes(prevState.nodes);
+      setConnections(prevState.connections);
+      setSubCanvases(prevState.subCanvases);
+      
+      // 恢复画布状态
       setCanvasState(prev => ({
         ...prev,
-        offsetX: prevState.offsetX,
-        offsetY: prevState.offsetY,
-        scale: prevState.scale
+        offsetX: prevState.canvasState.offsetX,
+        offsetY: prevState.canvasState.offsetY,
+        scale: prevState.canvasState.scale
       }));
+      
       setHistoryIndex(prev => prev - 1);
     }
   }, [history, historyIndex]);
@@ -1256,12 +1755,20 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const handleRedo = useCallback(() => {
     if (historyIndex < history.length - 1) {
       const nextState = history[historyIndex + 1];
+      
+      // 恢复节点和连接线状态
+      setNodes(nextState.nodes);
+      setConnections(nextState.connections);
+      setSubCanvases(nextState.subCanvases);
+      
+      // 恢复画布状态
       setCanvasState(prev => ({
         ...prev,
-        offsetX: nextState.offsetX,
-        offsetY: nextState.offsetY,
-        scale: nextState.scale
+        offsetX: nextState.canvasState.offsetX,
+        offsetY: nextState.canvasState.offsetY,
+        scale: nextState.canvasState.scale
       }));
+      
       setHistoryIndex(prev => prev + 1);
     }
   }, [history, historyIndex]);
@@ -1274,7 +1781,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       scale: newScale
     };
     setCanvasState(newState);
-    saveToHistory(newState);
+    saveToHistory();
   }, [canvasState, saveToHistory]);
 
   // 缩小功能
@@ -1285,7 +1792,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       scale: newScale
     };
     setCanvasState(newState);
-    saveToHistory(newState);
+    saveToHistory();
   }, [canvasState, saveToHistory]);
 
   // 回到初始位置
@@ -1297,7 +1804,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       scale: 1
     };
     setCanvasState(newState);
-    saveToHistory(newState);
+    saveToHistory();
   }, [canvasState, saveToHistory]);
 
   const steps = [
@@ -1523,6 +2030,37 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           });
           return { nodeId: node.id, type: 'output' as const, x: outputX, y: outputY };
         }
+      } else if (node.type === 'businessProcess') {
+        // 业务流程节点支持左侧输入和右侧输出
+        // 左侧输入口
+        const inputX = node.x;
+        const inputY = node.y + node.height / 2; // 使用节点实际高度的一半
+        const inputDistance = Math.sqrt((x - inputX) ** 2 + (y - inputY) ** 2);
+        if (inputDistance <= 12) {
+          console.log('🔗 [连接点检测] 检测到业务流程节点输入连接点', { 
+            nodeId: node.id, 
+            type: 'input', 
+            position: { x: inputX, y: inputY },
+            mousePos: { x, y },
+            distance: inputDistance 
+          });
+          return { nodeId: node.id, type: 'input' as const, x: inputX, y: inputY };
+        }
+        
+        // 右侧输出口
+        const outputX = node.x + node.width;
+        const outputY = node.y + node.height / 2; // 使用节点实际高度的一半
+        const outputDistance = Math.sqrt((x - outputX) ** 2 + (y - outputY) ** 2);
+        if (outputDistance <= 12) {
+          console.log('🔗 [连接点检测] 检测到业务流程节点输出连接点', { 
+            nodeId: node.id, 
+            type: 'output', 
+            position: { x: outputX, y: outputY },
+            mousePos: { x, y },
+            distance: outputDistance 
+          });
+          return { nodeId: node.id, type: 'output' as const, x: outputX, y: outputY };
+        }
       }
     }
     
@@ -1609,6 +2147,58 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     return null;
   }, [hoveredConnection, hoveredSubCanvasLine, connections, nodes, subCanvases]);
   
+  // 检测鼠标是否在需方设备区域
+  const findDemandDeviceAtPosition = useCallback((x: number, y: number) => {
+    const node = findNodeAtPosition(x, y);
+    if (node && node.type === 'stage' && node.demandDevicesNames) {
+      // 计算需方设备文本区域
+      const contentX = node.x + 16;
+      const iconSize = 18;
+      const currentY = node.y + 16 + iconSize + 22 + 20; // 需方设备行的Y位置
+      const labelWidth = 60; // "需方设备: "的大致宽度
+      const valueX = contentX + labelWidth;
+      const valueY = currentY;
+      
+      // 检测是否在需方设备值区域内
+      if (x >= valueX - 4 && x <= valueX + 200 && y >= valueY - 10 && y <= valueY + 10) {
+        return {
+          nodeId: node.id,
+          deviceText: node.demandDevicesNames,
+          x: valueX,
+          y: valueY
+        };
+      }
+    }
+    return null;
+  }, [findNodeAtPosition]);
+
+  // 检测鼠标是否在触发条件区域
+  const findTriggerConditionAtPosition = useCallback((x: number, y: number) => {
+    const node = findNodeAtPosition(x, y);
+    if (node && node.type === 'stage' && node.demandDevicesTriggerCondition) {
+      // 计算触发条件文本区域
+      const contentX = node.x + 16;
+      const iconSize = 18;
+      const currentY = node.y + 16 + iconSize + 22 + 20 + 24 + 4; // 触发条件行的Y位置
+      const labelWidth = 60; // "触发条件: "的大致宽度
+      const valueX = contentX + labelWidth;
+      const valueY = currentY;
+      
+      // 检测是否在触发条件值区域内
+      if (x >= valueX - 4 && x <= valueX + 200 && y >= valueY - 10 && y <= valueY + 10) {
+        return {
+          nodeId: node.id,
+          conditionText: node.demandDevicesTriggerCondition,
+          x: valueX,
+          y: valueY
+        };
+      }
+    }
+    return null;
+  }, [findNodeAtPosition]);
+  
+  // 设置按钮点击检测功能已移除
+  
   // 画布鼠标事件处理
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
@@ -1658,13 +2248,24 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       setSelectedNode(null);
       setSelectedConnection(null);
     } else if (clickedNode) {
-      // 如果点击的是阶段节点，显示属性面板并启动拖拽
+      // 如果点击的是阶段节点，显示阶段属性面板并关闭业务流程属性面板
       if (clickedNode.type === 'stage') {
         setSelectedStageNode(clickedNode);
         setStagePropertyPanelVisible(true);
+        setBusinessProcessPropertyPanelVisible(false);
+        setSelectedBusinessProcessNode(null);
       }
       
-      // 选中节点并开始拖拽（包括阶段节点）
+      // 如果点击的是业务流程节点，显示业务流程属性面板并关闭阶段属性面板
+      if (clickedNode.type === 'businessProcess') {
+
+        setSelectedBusinessProcessNode(clickedNode);
+        setBusinessProcessPropertyPanelVisible(true);
+        setStagePropertyPanelVisible(false);
+        setSelectedStageNode(null);
+      }
+      
+      // 选中节点并开始拖拽（包括阶段节点和业务流程节点）
       setSelectedNode(clickedNode.id);
       setSelectedConnection(null);
       setDraggedNode(clickedNode);
@@ -1701,6 +2302,8 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       setSelectedConnection(null);
       setInsertingConnectionId(null);
       setStagePropertyPanelVisible(false);
+      setBusinessProcessPropertyPanelVisible(false);
+      setSelectedBusinessProcessNode(null);
     }
   }, [canvasState.isSpacePressed, getCanvasCoordinates, findAddButtonAtPosition, findNodeAtPosition, findSubCanvasAtPosition, findConnectionAtPosition, checkOpenSubCanvasButtonClick, openIndependentSubCanvas]);
 
@@ -1839,17 +2442,16 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       const subCanvasLineId = findSubCanvasLineAtPosition(canvasPos.x, canvasPos.y);
       setHoveredSubCanvasLine(subCanvasLineId);
       
-      // 检测阶段节点悬停
-      const hoveredNode = findNodeAtPosition(canvasPos.x, canvasPos.y);
-      if (hoveredNode && hoveredNode.type === 'stage') {
-        setHoveredStageNode(hoveredNode.id);
-      } else {
-        setHoveredStageNode(null);
-      }
+      // 检测需方设备和触发条件悬停
+      const deviceHover = findDemandDeviceAtPosition(canvasPos.x, canvasPos.y);
+      setHoveredDemandDevice(deviceHover);
+      
+      const triggerHover = findTriggerConditionAtPosition(canvasPos.x, canvasPos.y);
+      setHoveredTriggerCondition(triggerHover);
       
       setMousePosition({ x: canvasPos.x, y: canvasPos.y });
     }
-  }, [isDraggingConnection, isDraggingNode, draggedNode, dragOffset, isDraggingSubCanvas, draggedSubCanvas, subCanvasDragOffset, canvasState.isDragging, canvasState.isSpacePressed, canvasState.lastMouseX, canvasState.lastMouseY, getCanvasCoordinates, findConnectionPointAtPosition, findConnectionAtPosition, findNodeAtPosition]);
+  }, [isDraggingConnection, isDraggingNode, draggedNode, dragOffset, isDraggingSubCanvas, draggedSubCanvas, subCanvasDragOffset, canvasState.isDragging, canvasState.isSpacePressed, canvasState.lastMouseX, canvasState.lastMouseY, getCanvasCoordinates, findConnectionPointAtPosition, findConnectionAtPosition, findNodeAtPosition, findSubCanvasLineAtPosition, findDemandDeviceAtPosition, findTriggerConditionAtPosition]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDraggingConnection && dragConnectionStart && dragConnectionEnd) {
@@ -1905,19 +2507,23 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           
           // 阶段节点相关连接验证已移除
           
-          let sourceType: 'node' | 'stage' | 'subcanvas' = 'node';
-          let targetType: 'node' | 'stage' | 'subcanvas' = 'node';
+          let sourceType: 'node' | 'stage' | 'subcanvas' | 'businessProcess' = 'node';
+          let targetType: 'node' | 'stage' | 'subcanvas' | 'businessProcess' = 'node';
           
           if (sourceSubCanvas) {
             sourceType = 'subcanvas';
           } else if (sourceNode && sourceNode.type === 'stage') {
             sourceType = 'stage';
+          } else if (sourceNode && sourceNode.type === 'businessProcess') {
+            sourceType = 'businessProcess';
           }
           
           if (targetSubCanvas) {
             targetType = 'subcanvas';
           } else if (targetNode && targetNode.type === 'stage') {
             targetType = 'stage';
+          } else if (targetNode && targetNode.type === 'businessProcess') {
+            targetType = 'businessProcess';
           }
           
           // 创建新连接
@@ -1969,7 +2575,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       setDragOffset({ x: 0, y: 0 });
       
       // 重置阶段节点悬停状态
-      setHoveredStageNode(null);
+  
     } else if (isDraggingSubCanvas) {
       // 结束子画布拖拽
       setIsDraggingSubCanvas(false);
@@ -1979,7 +2585,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       // 结束画布拖拽
       const newState = { ...canvasState, isDragging: false };
       setCanvasState(newState);
-      saveToHistory(newState);
+      saveToHistory();
     } else {
       // 点击空白区域，取消拖拽状态
       setCanvasState(prev => ({ ...prev, isDragging: false }));
@@ -1989,47 +2595,44 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const handleMouseLeave = useCallback(() => {
     setHoveredConnection(null);
     setHoveredConnectionPoint(null);
-    setHoveredStageNode(null);
+    
     setMousePosition({ x: 0, y: 0 });
   }, []);
 
-  // 右键菜单事件处理
-  const handleContextMenu = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    
-    const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
-    const clickedNode = findNodeAtPosition(canvasPos.x, canvasPos.y);
-    
-    // 只有右键点击阶段节点时才显示菜单
-    if (clickedNode && clickedNode.type === 'stage') {
-      setContextMenu({
-        visible: true,
-        x: e.clientX,
-        y: e.clientY,
-        nodeId: clickedNode.id
-      });
-    } else {
-      // 点击其他地方隐藏菜单
-      setContextMenu(null);
-    }
-  }, [getCanvasCoordinates, findNodeAtPosition]);
-
-  // 点击其他地方隐藏右键菜单
-  const handleClickOutside = useCallback(() => {
-    if (contextMenu?.visible) {
-      setContextMenu(null);
-    }
-  }, [contextMenu]);
+  // 右键菜单事件处理已移除
 
   const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
+    
+    // 获取鼠标在画布上的位置
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // 计算鼠标在画布坐标系中的位置（考虑当前的偏移和缩放）
+    const worldX = (mouseX - canvasState.offsetX) / canvasState.scale;
+    const worldY = (mouseY - canvasState.offsetY) / canvasState.scale;
+    
+    // 计算缩放因子
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.max(0.1, Math.min(3, canvasState.scale * delta));
+    
+    // 计算新的偏移量，使缩放以鼠标位置为中心
+    const newOffsetX = mouseX - worldX * newScale;
+    const newOffsetY = mouseY - worldY * newScale;
+    
     const newState = {
       ...canvasState,
-      scale: Math.max(0.1, Math.min(3, canvasState.scale * delta))
+      scale: newScale,
+      offsetX: newOffsetX,
+      offsetY: newOffsetY
     };
+    
     setCanvasState(newState);
-    saveToHistory(newState);
+    saveToHistory();
   }, [canvasState, saveToHistory]);
 
   // 绘制网格
@@ -2063,6 +2666,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const drawNode = useCallback((ctx: CanvasRenderingContext2D, node: FlowNode) => {
     const { x, y, width, height, type, label } = node;
     const isSelected = selectedNode === node.id;
+    const isInvalid = invalidNodes.includes(node.id);
     
     // 获取节点配置
     const nodeConfig = nodeTools.find(tool => tool.type === type);
@@ -2080,8 +2684,8 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       
       // 开始和结束节点绘制为圆角矩形 - 白色背景
       ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = isSelected ? '#1890ff' : '#cccccc';
-      ctx.lineWidth = isSelected ? 1 : 0.5;
+      ctx.strokeStyle = isInvalid ? '#ff4d4f' : (isSelected ? '#1890ff' : '#cccccc');
+      ctx.lineWidth = isInvalid ? 2 : (isSelected ? 1 : 0.5);
       
       const radius = 25; // 调整倒角半径适应新尺寸
       ctx.beginPath();
@@ -2145,8 +2749,8 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         
         // 绘制白色背景圆角矩形
         ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = isSelected ? '#722ed1' : '#cccccc';
-        ctx.lineWidth = isSelected ? 1 : 0.5;
+        ctx.strokeStyle = isInvalid ? '#ff4d4f' : (isSelected ? '#722ed1' : '#cccccc');
+        ctx.lineWidth = isInvalid ? 2 : (isSelected ? 1 : 0.5);
         const radius = 8;
         ctx.beginPath();
         ctx.roundRect(x, y, width, height, radius);
@@ -2194,8 +2798,8 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       } else {
         // 其他节点绘制为圆角矩形
         ctx.fillStyle = isSelected ? color : '#ffffff';
-        ctx.strokeStyle = isSelected ? color : '#cccccc';
-        ctx.lineWidth = isSelected ? 1 : 0.5;
+        ctx.strokeStyle = isInvalid ? '#ff4d4f' : (isSelected ? color : '#cccccc');
+        ctx.lineWidth = isInvalid ? 2 : (isSelected ? 1 : 0.5);
         const radius = 8;
         ctx.beginPath();
         ctx.roundRect(x, y, width, height, radius);
@@ -2298,31 +2902,16 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
 
     } else if (type === 'stage') {
       // 阶段节点绘制 - 卡片样式
-      // 检查是否悬停
-      const isHovered = hoveredStageNode === node.id;
-      
-      // 保存当前变换状态
-      ctx.save();
-      
-      // 如果悬停，应用缩放变换
-      if (isHovered) {
-        const centerX = x + width / 2;
-        const centerY = y + height / 2;
-        ctx.translate(centerX, centerY);
-        ctx.scale(1.05, 1.05); // 放大5%
-        ctx.translate(-centerX, -centerY);
-      }
-      
-      // 绘制阴影 - 悬停时增强阴影效果
-      ctx.shadowColor = isHovered ? 'rgba(0, 0, 0, 0.15)' : 'rgba(0, 0, 0, 0.1)';
-      ctx.shadowBlur = isHovered ? 12 : 8;
-      ctx.shadowOffsetX = isHovered ? 3 : 2;
-      ctx.shadowOffsetY = isHovered ? 3 : 2;
+      // 绘制阴影
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
       
       // 绘制白色背景圆角矩形
       ctx.fillStyle = '#ffffff';
-      ctx.strokeStyle = isSelected ? '#1890ff' : (isHovered ? '#1890ff' : '#cccccc');
-      ctx.lineWidth = isSelected ? 1 : (isHovered ? 1 : 0.5);
+      ctx.strokeStyle = isSelected ? '#1890ff' : '#cccccc';
+      ctx.lineWidth = isSelected ? 1 : 0.5;
       const radius = 8;
       ctx.beginPath();
       ctx.roundRect(x, y, width, height, radius);
@@ -2337,6 +2926,127 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       // 绘制边框
       ctx.stroke();
       
+    } else if (type === 'businessProcess') {
+      // 业务流程节点绘制 - 卡片样式
+      // 绘制阴影
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+      
+      // 绘制白色背景圆角矩形
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = isSelected ? '#52c41a' : '#cccccc';
+      ctx.lineWidth = isSelected ? 1 : 0.5;
+      const radius = 8;
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, radius);
+      ctx.fill();
+      
+      // 清除阴影设置
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      
+      // 绘制边框
+       ctx.stroke();
+       
+       // 绘制连接口小圆圈 - 绿色统一风格
+       ctx.fillStyle = '#52c41a';
+       ctx.strokeStyle = '#52c41a';
+       ctx.lineWidth = 2;
+       
+       // 左侧输入口
+       const inputX = x;
+       const inputY = y + height / 2;
+       const isInputHovered = hoveredConnectionPoint && 
+                            hoveredConnectionPoint.nodeId === node.id && 
+                            hoveredConnectionPoint.type === 'input';
+       const inputRadius = isInputHovered ? 6 : 4;
+       ctx.beginPath();
+       ctx.arc(inputX, inputY, inputRadius, 0, 2 * Math.PI);
+       ctx.fill();
+       ctx.stroke();
+       
+       // 右侧输出口
+       const outputX = x + width;
+       const outputY = y + height / 2;
+       const isOutputHovered = hoveredConnectionPoint && 
+                             hoveredConnectionPoint.nodeId === node.id && 
+                             hoveredConnectionPoint.type === 'output';
+       const outputRadius = isOutputHovered ? 6 : 4;
+       ctx.beginPath();
+       ctx.arc(outputX, outputY, outputRadius, 0, 2 * Math.PI);
+       ctx.fill();
+       ctx.stroke();
+    }
+    
+    // 绘制图标和文字
+    if (type === 'start' || type === 'end') {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // 绘制图标 - 蓝色
+      ctx.fillStyle = '#1890ff';
+      ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      
+      if (type === 'start') {
+        // 绘制开始图标 - 简洁线条播放按钮
+        const iconCenterX = x + width / 2 - 18;
+        const iconCenterY = y + height / 2;
+        
+        // 绘制图标背景圆角矩形
+        ctx.fillStyle = '#e6f7ff';
+        ctx.beginPath();
+        ctx.roundRect(iconCenterX - 16, iconCenterY - 16, 32, 32, 8);
+        ctx.fill();
+        
+        // 绘制圆形边框
+        ctx.strokeStyle = '#1890ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(iconCenterX, iconCenterY, 10, 0, 2 * Math.PI);
+        ctx.stroke();
+        
+        // 绘制播放三角形 - 线条样式
+        ctx.fillStyle = '#1890ff';
+        ctx.beginPath();
+        ctx.moveTo(iconCenterX - 3, iconCenterY - 5);
+        ctx.lineTo(iconCenterX - 3, iconCenterY + 5);
+        ctx.lineTo(iconCenterX + 5, iconCenterY);
+        ctx.closePath();
+        ctx.fill();
+      } else if (type === 'end') {
+        // 绘制结束图标 - 简洁线条停止按钮
+        const iconCenterX = x + width / 2 - 18;
+        const iconCenterY = y + height / 2;
+        
+        // 绘制图标背景圆角矩形
+        ctx.fillStyle = '#f6ffed';
+        ctx.beginPath();
+        ctx.roundRect(iconCenterX - 16, iconCenterY - 16, 32, 32, 8);
+        ctx.fill();
+        
+        // 绘制圆形边框
+        ctx.strokeStyle = '#95de64';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(iconCenterX, iconCenterY, 10, 0, 2 * Math.PI);
+        ctx.stroke();
+        
+        // 绘制停止方块 - 线条样式
+        ctx.fillStyle = '#95de64';
+        ctx.fillRect(iconCenterX - 4, iconCenterY - 4, 8, 8);
+      }
+      
+      // 绘制文字 - 与调试运行按钮一致的颜色
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      ctx.fillText(label, x + width / 2 + 18, y + height / 2);
+
+    } else if (type === 'stage') {
+      // 阶段节点绘制 - 卡片样式
       // 绘制连接口小圆圈 - 蓝色统一风格
       ctx.fillStyle = '#1890ff';
       ctx.strokeStyle = '#1890ff';
@@ -2408,15 +3118,15 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
       ctx.fillStyle = '#666666';
       
-      // 需方设备
-      if (node.demandDevices && node.demandDevices.length > 0) {
-        // 绘制字段标签
-        ctx.fillStyle = '#666666';
-        ctx.fillText('需方设备: ', contentX, currentY);
-        
+      // 需方设备 - 始终显示标签
+      ctx.fillStyle = '#666666';
+      ctx.fillText('需方设备: ', contentX, currentY);
+      
+      // 只有当有值时才显示值 - 显示中文设备名称
+      if (node.demandDevicesNames) {
         // 计算字段值的位置和尺寸
         const labelWidth = ctx.measureText('需方设备: ').width;
-        const valueText = node.demandDevices.join(', ');
+        const valueText = node.demandDevicesNames;
         const maxValueWidth = contentWidth - labelWidth - 16; // 预留右边距
         
         // 处理文本溢出
@@ -2442,161 +3152,168 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         // 绘制字段值文字（加深颜色）
         ctx.fillStyle = '#333333';
         ctx.fillText(displayText, valueX, valueY);
-        
-        currentY += lineHeight + 4; // 增加字段间距
-        
-        // 需方设备下的触发条件
-        if (node.triggerCondition) {
-          // 绘制字段标签
-          ctx.fillStyle = '#666666';
-          ctx.fillText('触发条件: ', contentX, currentY);
-          
-          // 计算字段值的位置和尺寸
-          const triggerLabelWidth = ctx.measureText('触发条件: ').width;
-          const triggerValueText = node.triggerCondition;
-          const maxTriggerWidth = contentWidth - triggerLabelWidth - 16;
-          
-          // 处理文本溢出
-          let triggerDisplayText = triggerValueText;
-          let triggerValueWidth = ctx.measureText(triggerValueText).width;
-          if (triggerValueWidth > maxTriggerWidth) {
-            while (triggerValueWidth > maxTriggerWidth - ctx.measureText('...').width && triggerDisplayText.length > 0) {
-              triggerDisplayText = triggerDisplayText.slice(0, -1);
-              triggerValueWidth = ctx.measureText(triggerDisplayText + '...').width;
-            }
-            triggerDisplayText += '...';
-            triggerValueWidth = ctx.measureText(triggerDisplayText).width;
-          }
-          
-          const triggerValueX = contentX + triggerLabelWidth;
-          const triggerValueY = currentY;
-          
-          // 绘制字段值的灰色背景矩形（增加间距）
-          ctx.fillStyle = '#f5f5f5';
-          ctx.fillRect(triggerValueX - 4, triggerValueY - 10, triggerValueWidth + 8, 20);
-          
-          // 绘制字段值文字（加深颜色）
-          ctx.fillStyle = '#333333';
-          ctx.fillText(triggerDisplayText, triggerValueX, triggerValueY);
-          
-          currentY += lineHeight + 4; // 增加字段间距
-        }
       }
       
-      // 供方设备
-      if (node.supplyDevices && node.supplyDevices.length > 0) {
-        // 绘制字段标签
-        ctx.fillStyle = '#666666';
-        ctx.fillText('供方设备: ', contentX, currentY);
-        
+      currentY += lineHeight + 4; // 增加字段间距
+      
+      // 需方设备下的触发条件 - 始终显示标签
+      ctx.fillStyle = '#666666';
+      ctx.fillText('触发条件: ', contentX, currentY);
+      
+      // 只有当有值时才显示值 - 使用需求方设备的触发条件
+      if (node.demandDevicesTriggerCondition) {
         // 计算字段值的位置和尺寸
-        const supplyLabelWidth = ctx.measureText('供方设备: ').width;
-        const supplyValueText = node.supplyDevices.join(', ');
-        const maxSupplyWidth = contentWidth - supplyLabelWidth - 16;
+        const triggerLabelWidth = ctx.measureText('触发条件: ').width;
+        const triggerValueText = node.demandDevicesTriggerCondition;
+        const maxTriggerWidth = contentWidth - triggerLabelWidth - 16;
         
         // 处理文本溢出
-        let supplyDisplayText = supplyValueText;
-        let supplyValueWidth = ctx.measureText(supplyValueText).width;
-        if (supplyValueWidth > maxSupplyWidth) {
-          while (supplyValueWidth > maxSupplyWidth - ctx.measureText('...').width && supplyDisplayText.length > 0) {
-            supplyDisplayText = supplyDisplayText.slice(0, -1);
-            supplyValueWidth = ctx.measureText(supplyDisplayText + '...').width;
+        let triggerDisplayText = triggerValueText;
+        let triggerValueWidth = ctx.measureText(triggerValueText).width;
+        if (triggerValueWidth > maxTriggerWidth) {
+          while (triggerValueWidth > maxTriggerWidth - ctx.measureText('...').width && triggerDisplayText.length > 0) {
+            triggerDisplayText = triggerDisplayText.slice(0, -1);
+            triggerValueWidth = ctx.measureText(triggerDisplayText + '...').width;
           }
-          supplyDisplayText += '...';
-          supplyValueWidth = ctx.measureText(supplyDisplayText).width;
+          triggerDisplayText += '...';
+          triggerValueWidth = ctx.measureText(triggerDisplayText).width;
         }
         
-        const supplyValueX = contentX + supplyLabelWidth;
-        const supplyValueY = currentY;
+        const triggerValueX = contentX + triggerLabelWidth;
+        const triggerValueY = currentY;
         
         // 绘制字段值的灰色背景矩形（增加间距）
         ctx.fillStyle = '#f5f5f5';
-        ctx.fillRect(supplyValueX - 4, supplyValueY - 10, supplyValueWidth + 8, 20);
+        ctx.fillRect(triggerValueX - 4, triggerValueY - 10, triggerValueWidth + 8, 20);
         
         // 绘制字段值文字（加深颜色）
         ctx.fillStyle = '#333333';
-        ctx.fillText(supplyDisplayText, supplyValueX, supplyValueY);
-        
-        currentY += lineHeight + 4; // 增加字段间距
-        
-        // 供方设备下的触发条件
-        if (node.triggerCondition) {
-          // 绘制字段标签
-          ctx.fillStyle = '#666666';
-          ctx.fillText('触发条件: ', contentX, currentY);
-          
-          // 计算字段值的位置和尺寸
-          const triggerLabelWidth = ctx.measureText('触发条件: ').width;
-          const triggerValueText = node.triggerCondition;
-          const maxTriggerWidth = contentWidth - triggerLabelWidth - 16;
-          
-          // 处理文本溢出
-          let triggerDisplayText = triggerValueText;
-          let triggerValueWidth = ctx.measureText(triggerValueText).width;
-          if (triggerValueWidth > maxTriggerWidth) {
-            while (triggerValueWidth > maxTriggerWidth - ctx.measureText('...').width && triggerDisplayText.length > 0) {
-              triggerDisplayText = triggerDisplayText.slice(0, -1);
-              triggerValueWidth = ctx.measureText(triggerDisplayText + '...').width;
-            }
-            triggerDisplayText += '...';
-            triggerValueWidth = ctx.measureText(triggerDisplayText).width;
-          }
-          
-          const triggerValueX = contentX + triggerLabelWidth;
-          const triggerValueY = currentY;
-          
-          // 绘制字段值的灰色背景矩形（增加间距）
-          ctx.fillStyle = '#f5f5f5';
-          ctx.fillRect(triggerValueX - 4, triggerValueY - 10, triggerValueWidth + 8, 20);
-          
-          // 绘制字段值文字（加深颜色）
-          ctx.fillStyle = '#333333';
-          ctx.fillText(triggerDisplayText, triggerValueX, triggerValueY);
-        }
+        ctx.fillText(triggerDisplayText, triggerValueX, triggerValueY);
       }
       
-      // 如果悬停，在阶段卡片外上方显示设置图标
-      if (isHovered) {
-        const iconSize = 24;
-        const iconX = x + width - iconSize;
-        const iconY = y - iconSize - 8; // 在卡片上方外部
+      currentY += lineHeight + 4; // 增加字段间距
+      
+      // 设置按钮功能已移除
+      
+    } else if (type === 'businessProcess') {
+      // 业务流程节点卡片内容绘制
+      const padding = 12;
+      const contentX = x + padding;
+      const contentY = y + padding;
+      const contentWidth = width - 2 * padding;
+      
+      // 第一行：图标和名称水平排列
+      const iconSize = 18;
+      const iconY = contentY + 8;
+      
+      // 绘制业务流程图标（绿色主题）
+      ctx.fillStyle = '#f6ffed';
+      ctx.beginPath();
+      ctx.roundRect(contentX, iconY, iconSize, iconSize, 4);
+      ctx.fill();
+      
+      // 绘制图标边框
+      ctx.strokeStyle = '#52c41a';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      
+      // 绘制图标内部流程符号
+      ctx.fillStyle = '#52c41a';
+      ctx.fillRect(contentX + 3, iconY + 6, 4, 6);
+      ctx.fillRect(contentX + 8, iconY + 6, 4, 6);
+      ctx.fillRect(contentX + 13, iconY + 6, 2, 6);
+      
+      // 绘制节点名称 - 增大字体
+      ctx.fillStyle = '#262626';
+      ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      
+      const nodeText = node.customName || label;
+      ctx.fillText(nodeText, contentX + iconSize + 8, iconY + iconSize / 2);
+      
+      // 第二行开始：纵向排列的字段
+      let currentY = iconY + iconSize + 22; // 进一步增加标题与内容的间距
+      const lineHeight = 20; // 增加行间距
+      
+      // 设置字段文本样式 - 增大字体
+      ctx.font = '13px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      ctx.fillStyle = '#666666';
+      
+      // 流程Key - 始终显示标签
+      ctx.fillStyle = '#666666';
+      ctx.fillText('流程Key: ', contentX, currentY);
+      
+      // 只有当有值时才显示值
+      if (node.data && node.data.processKey) {
+        // 计算字段值的位置和尺寸
+        const labelWidth = ctx.measureText('流程Key: ').width;
+        const valueText = node.data.processKey;
+        const maxValueWidth = contentWidth - labelWidth - 16; // 预留右边距
         
-        // 绘制图标阴影
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetX = 2;
-        ctx.shadowOffsetY = 2;
+        // 处理文本溢出
+        let displayText = valueText;
+        let valueWidth = ctx.measureText(valueText).width;
+        if (valueWidth > maxValueWidth) {
+          // 逐字符截取直到适合宽度
+          while (valueWidth > maxValueWidth - ctx.measureText('...').width && displayText.length > 0) {
+            displayText = displayText.slice(0, -1);
+            valueWidth = ctx.measureText(displayText + '...').width;
+          }
+          displayText += '...';
+          valueWidth = ctx.measureText(displayText).width;
+        }
         
-        // 绘制图标背景圆形 - 白色背景
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#d9d9d9';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.arc(iconX + iconSize / 2, iconY + iconSize / 2, iconSize / 2, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.stroke();
+        const valueX = contentX + labelWidth;
+        const valueY = currentY;
         
-        // 清除阴影设置
-        ctx.shadowColor = 'transparent';
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
+        // 绘制字段值的灰色背景矩形（增加间距）
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(valueX - 4, valueY - 10, valueWidth + 8, 20);
         
-        // 绘制设置图标（齿轮形状）- 深色图标
-        ctx.fillStyle = '#666666';
-        ctx.font = '14px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('⚙', iconX + iconSize / 2, iconY + iconSize / 2);
-        
-        // 存储图标位置信息用于点击检测
-        node.settingsIconBounds = {
-          x: iconX,
-          y: iconY,
-          width: iconSize,
-          height: iconSize
-        };
+        // 绘制字段值文字（加深颜色）
+        ctx.fillStyle = '#333333';
+        ctx.fillText(displayText, valueX, valueY);
       }
+      
+      currentY += lineHeight + 4; // 增加字段间距
+      
+      // 更新时间 - 始终显示标签
+      ctx.fillStyle = '#666666';
+      ctx.fillText('更新时间: ', contentX, currentY);
+      
+      // 只有当有值时才显示值
+      if (node.data && node.data.updateTime) {
+        // 计算字段值的位置和尺寸
+        const timeLabelWidth = ctx.measureText('更新时间: ').width;
+        const timeValueText = node.data.updateTime;
+        const maxTimeWidth = contentWidth - timeLabelWidth - 16;
+        
+        // 处理文本溢出
+        let timeDisplayText = timeValueText;
+        let timeValueWidth = ctx.measureText(timeValueText).width;
+        if (timeValueWidth > maxTimeWidth) {
+          while (timeValueWidth > maxTimeWidth - ctx.measureText('...').width && timeDisplayText.length > 0) {
+            timeDisplayText = timeDisplayText.slice(0, -1);
+            timeValueWidth = ctx.measureText(timeDisplayText + '...').width;
+          }
+          timeDisplayText += '...';
+          timeValueWidth = ctx.measureText(timeDisplayText).width;
+        }
+        
+        const timeValueX = contentX + timeLabelWidth;
+        const timeValueY = currentY;
+        
+        // 绘制字段值的灰色背景矩形（增加间距）
+        ctx.fillStyle = '#f5f5f5';
+        ctx.fillRect(timeValueX - 4, timeValueY - 10, timeValueWidth + 8, 20);
+        
+        // 绘制字段值文字（加深颜色）
+        ctx.fillStyle = '#333333';
+        ctx.fillText(timeDisplayText, timeValueX, timeValueY);
+      }
+      
+      currentY += lineHeight + 4; // 增加字段间距
       
     } else {
       ctx.fillStyle = isSelected ? '#ffffff' : color;
@@ -2609,7 +3326,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     }
     
     ctx.restore();
-  }, [canvasState, selectedNode, nodeTools]);
+  }, [canvasState, selectedNode, nodeTools, invalidNodes]);
   
   // 绘制连接线
   const drawConnections = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -2617,8 +3334,8 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     
     connections.forEach(connection => {
 
-      // 处理节点到节点的连接（包括普通节点和阶段节点）
-      if (connection.sourceType === 'node' || connection.sourceType === 'stage' || !connection.sourceType) {
+      // 处理节点到节点的连接（包括普通节点、阶段节点和业务流程节点）
+      if (connection.sourceType === 'node' || connection.sourceType === 'stage' || connection.sourceType === 'businessProcess' || !connection.sourceType) {
         const sourceNode = nodes.find(n => n.id === connection.sourceId);
         const targetNode = nodes.find(n => n.id === connection.targetId);
         
@@ -3146,6 +3863,39 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     ctx.restore();
   }, [canvasState, selectedSubCanvas, hoveredConnectionPoint, hoveredSubCanvasLine]);
 
+  // 绘制悬停提示的函数
+  const drawTooltip = useCallback((ctx: CanvasRenderingContext2D, text: string, x: number, y: number) => {
+    if (!text) return;
+    
+    // 设置字体
+    ctx.font = '12px Arial';
+    const textMetrics = ctx.measureText(text);
+    const textWidth = textMetrics.width;
+    const textHeight = 16;
+    
+    // 计算提示框位置和尺寸
+    const padding = 8;
+    const tooltipWidth = textWidth + padding * 2;
+    const tooltipHeight = textHeight + padding * 2;
+    
+    // 调整位置避免超出画布
+    let tooltipX = x + 10;
+    let tooltipY = y - tooltipHeight - 10;
+    
+    // 绘制提示框背景
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
+    
+    // 绘制提示框边框
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight);
+    
+    // 绘制文本
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, tooltipX + padding, tooltipY + padding + 12);
+  }, []);
+
   // Canvas绘制逻辑
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -3154,10 +3904,24 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 设置canvas尺寸
+    // 设置canvas尺寸 - 支持高DPI显示
     const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width;
-    canvas.height = rect.height;
+    const dpr = window.devicePixelRatio || 1;
+    
+    // 设置实际像素尺寸
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    
+    // 设置CSS显示尺寸
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    
+    // 缩放绘图上下文以匹配设备像素比
+    ctx.scale(dpr, dpr);
+    
+    // 优化文字渲染
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     // 清空画布
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -3239,9 +4003,17 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       
       ctx.restore();
       
+      // 绘制悬停提示
+      if (hoveredDemandDevice) {
+        drawTooltip(ctx, hoveredDemandDevice.deviceText, hoveredDemandDevice.x, hoveredDemandDevice.y);
+      }
+      
+      if (hoveredTriggerCondition) {
+        drawTooltip(ctx, hoveredTriggerCondition.conditionText, hoveredTriggerCondition.x, hoveredTriggerCondition.y);
+      }
 
     }
-  }, [canvasState, drawGrid, currentStep, nodes, connections, drawNode, drawConnections, editingSubProcess, subCanvases, drawSubCanvas]);
+  }, [canvasState, drawGrid, currentStep, nodes, connections, drawNode, drawConnections, editingSubProcess, subCanvases, drawSubCanvas, hoveredDemandDevice, hoveredTriggerCondition, drawTooltip]);
 
   // 键盘事件处理
   useEffect(() => {
@@ -3306,22 +4078,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     };
   }, [selectedNode, selectedConnection, currentStep]);
 
-  // 添加全局点击事件监听器来隐藏右键菜单
-  useEffect(() => {
-    const handleGlobalClick = (e: MouseEvent) => {
-      if (contextMenu?.visible) {
-        setContextMenu(null);
-      }
-    };
-
-    if (contextMenu?.visible) {
-      document.addEventListener('click', handleGlobalClick);
-    }
-
-    return () => {
-      document.removeEventListener('click', handleGlobalClick);
-    };
-  }, [contextMenu]);
+  // 全局点击事件监听器已移除
 
   return (
     <Drawer
@@ -3339,12 +4096,15 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     >
       <div className="h-full flex flex-col p-6">
         {/* 表单内容 */}
-        <div className="flex-1 overflow-hidden" style={{ marginTop: '40px' }}>
+        <div className="flex-1 overflow-y-auto" style={{ marginTop: '40px' }}>
           <Form
             form={form}
             layout="vertical"
             onFinish={handleFinish}
-            className="h-full"
+            initialValues={{
+              status: 'enabled'
+            }}
+
           >
             {currentStep === 0 && (
               <Row justify="center">
@@ -3374,15 +4134,14 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
                     </Form.Item>
 
                     <Form.Item
-                      label="标识符"
+                      label="流程key"
                       name="identifier"
                       rules={[
-                        { required: true, message: '请输入标识符' },
-                        { pattern: /^[a-zA-Z][a-zA-Z0-9_]*$/, message: '标识符必须以字母开头，只能包含字母、数字和下划线' }
+                        { pattern: /^[a-zA-Z][a-zA-Z0-9_]*$/, message: '流程key必须以字母开头，只能包含字母、数字和下划线' }
                       ]}
                     >
                       <Input 
-                        placeholder="请输入标识符" 
+                        placeholder="请输入流程key（可选，留空将自动生成）" 
                         size="large"
                       />
                     </Form.Item>
@@ -3400,21 +4159,269 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
                       </Select>
                     </Form.Item>
 
-                    <Form.Item
-                      label="备注"
-                      name="remark"
-                      rules={[
-                        { max: 200, message: '备注不能超过200个字符' }
+                    <Tabs
+                      defaultActiveKey="config"
+                      items={[
+                        {
+                          key: 'config',
+                          label: '执行设备配置',
+                          children: (
+                            <div>
+                              {executionDevices.map((device, index) => (
+                                <Card
+                                  key={device.id}
+                                  size="small"
+                                  style={{ marginBottom: 16 }}
+                                  >
+                                  {/* 设备类型 - 第一行 */}
+                                  <Row gutter={16}>
+                                    <Col span={24}>
+                                      <div style={{ marginBottom: 8 }}>
+                                        <span style={{ fontSize: '14px', color: '#262626' }}>设备类型 <span style={{ color: '#ff4d4f' }}>*</span></span>
+                                      </div>
+                                      <Select
+                                        placeholder="请选择设备类型"
+                                        value={device.deviceType}
+                                        onChange={(value: string) => updateExecutionDevice(device.id, { deviceType: value, devices: [] })}
+                                        style={{ width: '100%' }}
+                                      >
+                                        {deviceTypeOptions.map(option => (
+                                          <Option key={option.value} value={option.value}>{option.label}</Option>
+                                        ))}
+                                      </Select>
+                                    </Col>
+                                  </Row>
+
+                                  {/* 设备 - 第二行 */}
+                                  <Row gutter={16} style={{ marginTop: 16 }}>
+                                    <Col span={24}>
+                                      <div style={{ marginBottom: 8 }}>
+                                        <span style={{ fontSize: '14px', color: '#262626' }}>设备 <span style={{ color: '#ff4d4f' }}>*</span></span>
+                                      </div>
+                                      <Select
+                                        mode="multiple"
+                                        placeholder="请选择设备（支持多选）"
+                                        value={device.devices}
+                                        onChange={(value: string[]) => updateExecutionDevice(device.id, { devices: value })}
+                                        disabled={!device.deviceType}
+                                        style={{ width: '100%' }}
+                                      >
+                                        {getDeviceOptions(device.deviceType).map(option => (
+                                          <Option key={option.value} value={option.value}>{option.label}</Option>
+                                        ))}
+                                      </Select>
+                                    </Col>
+                                  </Row>
+
+                                  {/* 触发条件 - 独占一行 */}
+                                  <Row gutter={16} style={{ marginTop: 16 }}>
+                                    <Col span={24}>
+                                      <div style={{ marginBottom: 8 }}>
+                                        <span style={{ fontSize: '14px', color: '#262626' }}>触发条件</span>
+                                      </div>
+                                      <Radio.Group
+                                        value={device.conditionType}
+                                        onChange={(e: any) => updateExecutionDevice(device.id, { conditionType: e.target.value })}
+                                      >
+                                        <Radio value="none">无条件触发</Radio>
+                                        <Radio value="conditional">有条件触发</Radio>
+                                      </Radio.Group>
+                                    </Col>
+                                  </Row>
+
+                                  {device.conditionType === 'conditional' && (
+                                    <div style={{ marginTop: 16, padding: 16, backgroundColor: '#fafafa', borderRadius: 6 }}>
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                                        <span style={{ fontWeight: 500 }}>触发条件设置</span>
+                                        <Button
+                                          type="dashed"
+                                          size="small"
+                                          icon={<PlusOutlined />}
+                                          onClick={() => addTriggerConditionGroup(device.id)}
+                                        >
+                                          添加条件组
+                                        </Button>
+                                      </div>
+
+                                {device.conditionGroups?.map((group, groupIndex) => (
+                                  <div key={group.id} style={{ marginBottom: 16 }}>
+                                    {groupIndex > 0 && (
+                                      <div style={{ textAlign: 'center', margin: '8px 0' }}>
+                                        <span style={{ 
+                                          background: '#f0f0f0', 
+                                          padding: '4px 8px', 
+                                          borderRadius: '4px',
+                                          fontSize: '12px',
+                                          color: '#666'
+                                        }}>
+                                          或
+                                        </span>
+                                      </div>
+                                    )}
+                                    
+                                    <Card 
+                                      size="small" 
+                                      style={{ 
+                                        marginBottom: 8,
+                                        border: '1px solid #d9d9d9',
+                                        borderRadius: '6px'
+                                      }}
+                                      title={
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                          <span style={{ fontSize: '12px' }}>条件组 {groupIndex + 1}</span>
+                                          <div>
+                                            <Button
+                                              type="text"
+                                              size="small"
+                                              icon={<PlusOutlined />}
+                                              onClick={() => addTriggerCondition(device.id, group.id)}
+                                              style={{ marginRight: 4 }}
+                                            >
+                                              添加条件
+                                            </Button>
+                                            <Button
+                                              type="text"
+                                              danger
+                                              size="small"
+                                              icon={<DeleteOutlined />}
+                                              onClick={() => removeTriggerConditionGroup(device.id, group.id)}
+                                            />
+                                          </div>
+                                        </div>
+                                      }
+                                    >
+                                      {group.conditions.map((condition, condIndex) => (
+                                        <div key={condition.id}>
+                                          {condIndex > 0 && (
+                                            <div style={{ textAlign: 'center', margin: '8px 0' }}>
+                                              <Radio.Group
+                                                 value={group.logicOperator}
+                                                 onChange={(e: any) => updateTriggerConditionGroup(device.id, group.id, { logicOperator: e.target.value })}
+                                                 size="small"
+                                               >
+                                                <Radio.Button value="and">且</Radio.Button>
+                                                <Radio.Button value="or">或</Radio.Button>
+                                              </Radio.Group>
+                                            </div>
+                                          )}
+                                          
+                                          <Card 
+                                            size="small" 
+                                            style={{ marginBottom: 8, background: '#fafafa' }}
+                                            title={
+                                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span style={{ fontSize: '12px' }}>条件 {condIndex + 1}</span>
+                                                <Button
+                                                  type="text"
+                                                  danger
+                                                  size="small"
+                                                  icon={<DeleteOutlined />}
+                                                  onClick={() => removeTriggerCondition(device.id, group.id, condition.id)}
+                                                />
+                                              </div>
+                                            }
+                                          >
+                                            {/* 数据源 - 独占一行 */}
+                                            <Row gutter={8} style={{ marginBottom: 12 }}>
+                                              <Col span={24}>
+                                                <div style={{ marginBottom: 4 }}>
+                                                  <span style={{ fontSize: '12px', color: '#666' }}>数据源</span>
+                                                </div>
+                                                <Select
+                                                  placeholder="请选择数据源"
+                                                  value={condition.dataSource}
+                                                  onChange={(value: 'product' | 'global') => updateTriggerCondition(device.id, group.id, condition.id, { 
+                                                    dataSource: value,
+                                                    dataItem: undefined,
+                                                    productAttribute: undefined
+                                                  })}
+                                                  size="small"
+                                                  style={{ width: '100%' }}
+                                                >
+                                                  {dataSourceOptions.map(option => (
+                                                    <Option key={option.value} value={option.value}>{option.label}</Option>
+                                                  ))}
+                                                </Select>
+                                              </Col>
+                                            </Row>
+                                            
+                                            {/* 数据项 - 独占一行 */}
+                                            <Row gutter={8} style={{ marginBottom: 12 }}>
+                                              <Col span={24}>
+                                                <div style={{ marginBottom: 4 }}>
+                                                  <span style={{ fontSize: '12px', color: '#666' }}>数据项</span>
+                                                </div>
+                                                <Select
+                                                  placeholder="请选择数据项"
+                                                  value={condition.dataItem}
+                                                  onChange={(value: string) => updateTriggerCondition(device.id, group.id, condition.id, { dataItem: value })}
+                                                  size="small"
+                                                  style={{ width: '100%' }}
+                                                >
+                                                  <Option value="temperature">温度</Option>
+                                                  <Option value="humidity">湿度</Option>
+                                                  <Option value="pressure">压力</Option>
+                                                </Select>
+                                              </Col>
+                                            </Row>
+                                            
+                                            {/* 操作符和条件值 - 同一行 */}
+                                            <Row gutter={8}>
+                                              <Col span={12}>
+                                                <div style={{ marginBottom: 4 }}>
+                                                  <span style={{ fontSize: '12px', color: '#666' }}>操作符</span>
+                                                </div>
+                                                <Select
+                                                  placeholder="操作符"
+                                                  value={condition.compareType}
+                                                  onChange={(value: 'greater' | 'equal' | 'less' | 'notEqual') => updateTriggerCondition(device.id, group.id, condition.id, { compareType: value })}
+                                                  size="small"
+                                                  style={{ width: '100%' }}
+                                                >
+                                                  {compareTypeOptions.map(option => (
+                                                    <Option key={option.value} value={option.value}>{option.label}</Option>
+                                                  ))}
+                                                </Select>
+                                              </Col>
+                                              <Col span={12}>
+                                                <div style={{ marginBottom: 4 }}>
+                                                  <span style={{ fontSize: '12px', color: '#666' }}>条件值</span>
+                                                </div>
+                                                <Input
+                                                  placeholder="请输入条件值"
+                                                  value={condition.value}
+                                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateTriggerCondition(device.id, group.id, condition.id, { value: e.target.value })}
+                                                  size="small"
+                                                />
+                                              </Col>
+                                            </Row>
+                                          </Card>
+                                        </div>
+                                      ))}
+                                    </Card>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+
+                                </Card>
+                              ))}
+                            </div>
+                          ),
+                        },
+                        {
+                          key: 'strategy',
+                          label: '执行策略',
+                          children: (
+                            <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
+                              执行策略功能开发中...
+                            </div>
+                          ),
+                        },
                       ]}
-                    >
-                      <TextArea 
-                        rows={4} 
-                        placeholder="请输入备注信息（可选）" 
-                        showCount 
-                        maxLength={200}
-                        size="large"
-                      />
-                    </Form.Item>
+                    />
+ 
                   </div>
                 </Col>
               </Row>
@@ -3434,7 +4441,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
                     onMouseLeave={handleMouseLeave}
-                    onContextMenu={handleContextMenu}
+
                     onWheel={handleWheel}
                     style={{ 
                       cursor: isDraggingConnection ? 'crosshair' : 
@@ -3442,33 +4449,12 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
                              (isDraggingNode ? 'grabbing' : 
                              (isDraggingSubCanvas ? 'grabbing' :
                              (canvasState.isSpacePressed ? 'grab' : 
-                             (hoveredStageNode ? 'default' : 'default'))))),
+                             'default')))),
                       backgroundColor: '#f5f7fa'
                     }}
                   />
                   
-                  {/* 右键菜单 */}
-                  {contextMenu?.visible && (
-                    <div 
-                      className="fixed z-50 bg-white rounded-lg shadow-lg border py-2 min-w-32"
-                      style={{ left: contextMenu.x, top: contextMenu.y }}
-                      onClick={handleClickOutside}
-                    >
-                      <div 
-                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer flex items-center space-x-2"
-                        onClick={() => {
-                          const node = nodes.find(n => n.id === contextMenu.nodeId);
-                          if (node) {
-                            handleStageNodeClick(node);
-                          }
-                          setContextMenu(null);
-                        }}
-                      >
-                        <SettingOutlined />
-                        <span>阶段属性</span>
-                      </div>
-                    </div>
-                  )}
+                  {/* 右键菜单已移除 */}
                   
 
                 </div>
@@ -3643,8 +4629,11 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           ) : (
             <Button 
               type="primary" 
-              onClick={handleFinish}
               loading={loading}
+              onClick={() => {
+                // 获取表单实例并提交表单，这会触发onFinish事件
+                form.submit();
+              }}
               style={{
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
               }}
@@ -3678,27 +4667,19 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <Button 
               type="default" 
-              icon={<PlayCircleOutlined />}
-              onClick={() => handleAddNodeFromPanel('start')}
-              style={{ textAlign: 'left', height: '40px' }}
-            >
-              开始节点
-            </Button>
-            <Button 
-              type="default" 
-              icon={<StopOutlined />}
-              onClick={() => handleAddNodeFromPanel('end')}
-              style={{ textAlign: 'left', height: '40px' }}
-            >
-              结束节点
-            </Button>
-            <Button 
-              type="default" 
               icon={<ClockCircleOutlined />}
               onClick={() => handleAddNodeFromPanel('stage')}
               style={{ textAlign: 'left', height: '40px' }}
             >
               阶段节点
+            </Button>
+            <Button 
+              type="default" 
+              icon={<SettingOutlined />}
+              onClick={() => handleAddNodeFromPanel('businessProcess')}
+              style={{ textAlign: 'left', height: '40px' }}
+            >
+              业务流程节点
             </Button>
           </div>
           <div style={{ marginTop: '16px', textAlign: 'right' }}>
@@ -3727,12 +4708,20 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       
       {/* 子画布组件和独立子画布窗口已移除 - 阶段节点功能已移除 */}
       
-      {/* 阶段属性面板 */}
+      {/* 阶段属性面板 - 只在画布编辑步骤显示 */}
       <StagePropertyPanel
-        visible={stagePropertyPanelVisible}
+        visible={stagePropertyPanelVisible && currentStep === 1}
         stageNode={selectedStageNode}
         onSave={handleSaveStageNode}
         onClose={handleCloseStagePropertyPanel}
+      />
+      
+      {/* 业务流程属性面板 - 只在画布编辑步骤显示 */}
+      <BusinessProcessPropertyPanel
+        visible={businessProcessPropertyPanelVisible && currentStep === 1}
+        businessProcessNode={selectedBusinessProcessNode}
+        onSave={handleSaveBusinessProcessNode}
+        onClose={handleCloseBusinessProcessPropertyPanel}
       />
     </Drawer>
   );

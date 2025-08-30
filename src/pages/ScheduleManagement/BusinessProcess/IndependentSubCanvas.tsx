@@ -34,7 +34,7 @@ interface SubProcessData {
 }
 
 // 节点类型
-type NodeType = 'start' | 'end' | 'process';
+type NodeType = 'start' | 'end' | 'process' | 'businessProcess';
 
 // 流程节点接口
 interface FlowNode {
@@ -49,7 +49,17 @@ interface FlowNode {
   triggerCondition?: string;
   demandDevices?: string[];
   supplyDevices?: string[];
-  data?: any;
+  demandDevicesNames?: string;
+  supplyDevicesNames?: string;
+  demandDevicesTriggerCondition?: string; // 需求方设备触发条件
+  supplyDevicesTriggerCondition?: string; // 供给方设备触发条件
+  data?: {
+    deviceRequirements?: any[];
+    supplyDeviceRequirements?: any[];
+    stageStrategies?: any[];
+  };
+  subProcess?: boolean;
+  subCanvasId?: string;
 }
 
 // 连接线接口

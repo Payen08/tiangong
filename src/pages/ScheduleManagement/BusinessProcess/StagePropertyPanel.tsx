@@ -26,7 +26,7 @@ const { TabPane } = Tabs;
 
 interface FlowNode {
   id: string;
-  type: 'start' | 'end' | 'stage';
+  type: 'start' | 'end' | 'stage' | 'businessProcess';
   label: string;
   customName?: string;
   x: number;
@@ -34,11 +34,11 @@ interface FlowNode {
   width: number;
   height: number;
   triggerCondition?: string;
+  demandDevicesTriggerCondition?: string; // 需求方设备触发条件
   demandDevices?: string[];
-  supplyDevices?: string[];
+  demandDevicesNames?: string;
   data?: {
     deviceRequirements?: DeviceRequirement[];
-    supplyDeviceRequirements?: SupplyDeviceRequirement[];
     stageStrategies?: StageStrategy[];
   };
 }
@@ -52,14 +52,7 @@ interface DeviceRequirement {
   conditionGroups?: TriggerConditionGroup[];
 }
 
-interface SupplyDeviceRequirement {
-  id: string;
-  deviceType: string;
-  devices: string[]; // 改为数组支持多选
-  triggerType: 'general' | 'custom';
-  conditionType: 'none' | 'conditional';
-  conditionGroups?: TriggerConditionGroup[];
-}
+
 
 interface TriggerConditionGroup {
   id: string;
@@ -98,7 +91,6 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
   const [form] = Form.useForm();
   const [activeTab, setActiveTab] = useState('devices');
   const [deviceRequirements, setDeviceRequirements] = useState<DeviceRequirement[]>([]);
-  const [supplyDeviceRequirements, setSupplyDeviceRequirements] = useState<SupplyDeviceRequirement[]>([]);
   const [stageStrategies, setStageStrategies] = useState<StageStrategy[]>([]);
 
   // 设备类型选项
@@ -134,6 +126,40 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
       ]
     };
     return deviceMap[deviceType] || [];
+  };
+
+  // 根据设备ID获取设备中文名称
+  const getDeviceNameById = (deviceId: string): string => {
+    for (const deviceType in getDeviceOptions('')) {
+      const options = getDeviceOptions(deviceType);
+      const device = options.find(option => option.value === deviceId);
+      if (device) {
+        return device.label;
+      }
+    }
+    // 如果没找到，遍历所有设备类型
+    const allDeviceTypes = ['sensor', 'actuator', 'controller', 'monitor'];
+    for (const deviceType of allDeviceTypes) {
+      const options = getDeviceOptions(deviceType);
+      const device = options.find(option => option.value === deviceId);
+      if (device) {
+        return device.label;
+      }
+    }
+    return deviceId; // 如果找不到，返回原始ID
+  };
+
+  // 格式化触发条件为中文
+  const formatTriggerCondition = (condition: any): string => {
+    const compareTypeMap: Record<string, string> = {
+      'greater': '>',
+      'equal': '==',
+      'less': '<',
+      'notEqual': '!='
+    };
+    
+    const compareSymbol = compareTypeMap[condition.compareType] || condition.compareType;
+    return `${condition.dataItem}${compareSymbol}${condition.value}`;
   };
 
   // 数据源选项
@@ -173,21 +199,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
       } else {
         setDeviceRequirements(existingDeviceRequirements);
       }
-      // 初始化供给方设备，如果没有则创建默认的供给方设备1
-      const existingSupplyDevices = stageNode.data?.supplyDeviceRequirements || [];
-      if (existingSupplyDevices.length === 0) {
-        const defaultSupplyDevice: SupplyDeviceRequirement = {
-          id: `supply_req_${Date.now()}`,
-          deviceType: '',
-          devices: [], // 改为空数组
-          triggerType: 'general',
-          conditionType: 'none',
-          conditionGroups: []
-        };
-        setSupplyDeviceRequirements([defaultSupplyDevice]);
-      } else {
-        setSupplyDeviceRequirements(existingSupplyDevices);
-      }
+
       setStageStrategies(stageNode.data?.stageStrategies || []);
     }
   }, [visible, stageNode, form]);
@@ -203,12 +215,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
     ));
   };
 
-  // 更新供给方设备需求
-  const updateSupplyDeviceRequirement = (id: string, updates: Partial<SupplyDeviceRequirement>): void => {
-    setSupplyDeviceRequirements(prev => prev.map(req => 
-      req.id === id ? { ...req, ...updates } : req
-    ));
-  };
+
 
   // 添加触发条件组
   const addTriggerConditionGroup = (requirementId: string): void => {
@@ -227,22 +234,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
     });
   };
 
-  // 添加供给方设备触发条件组
-  const addSupplyTriggerConditionGroup = (requirementId: string): void => {
-    const newGroup: TriggerConditionGroup = {
-      id: `group_${Date.now()}`,
-      conditions: [{
-        id: `cond_${Date.now()}`,
-        dataSource: 'product'
-      }],
-      logicOperator: 'and'
-    };
-    
-    const requirement = supplyDeviceRequirements.find(req => req.id === requirementId);
-    updateSupplyDeviceRequirement(requirementId, {
-      conditionGroups: [...(requirement?.conditionGroups || []), newGroup]
-    });
-  };
+
 
   // 添加触发条件到组
   const addTriggerCondition = (requirementId: string, groupId: string): void => {
@@ -265,26 +257,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
     }
   };
 
-  // 添加供给方设备触发条件到组
-  const addSupplyTriggerCondition = (requirementId: string, groupId: string): void => {
-    const newCondition: TriggerCondition = {
-      id: `cond_${Date.now()}`,
-      dataSource: 'product'
-    };
-    
-    const requirement = supplyDeviceRequirements.find(req => req.id === requirementId);
-    if (requirement) {
-      const updatedGroups = requirement.conditionGroups?.map(group => 
-        group.id === groupId 
-          ? { ...group, conditions: [...group.conditions, newCondition] }
-          : group
-      ) || [];
-      
-      updateSupplyDeviceRequirement(requirementId, {
-        conditionGroups: updatedGroups
-      });
-    }
-  };
+
 
   // 删除触发条件组
   const removeTriggerConditionGroup = (requirementId: string, groupId: string): void => {
@@ -296,15 +269,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
     }
   };
 
-  // 删除供给方设备触发条件组
-  const removeSupplyTriggerConditionGroup = (requirementId: string, groupId: string): void => {
-    const requirement = supplyDeviceRequirements.find(req => req.id === requirementId);
-    if (requirement) {
-      updateSupplyDeviceRequirement(requirementId, {
-        conditionGroups: requirement.conditionGroups?.filter(group => group.id !== groupId) || []
-      });
-    }
-  };
+
 
   // 删除触发条件
   const removeTriggerCondition = (requirementId: string, groupId: string, conditionId: string): void => {
@@ -322,21 +287,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
     }
   };
 
-  // 删除供给方设备触发条件
-  const removeSupplyTriggerCondition = (requirementId: string, groupId: string, conditionId: string): void => {
-    const requirement = supplyDeviceRequirements.find(req => req.id === requirementId);
-    if (requirement) {
-      const updatedGroups = requirement.conditionGroups?.map(group => 
-        group.id === groupId 
-          ? { ...group, conditions: group.conditions.filter(cond => cond.id !== conditionId) }
-          : group
-      ) || [];
-      
-      updateSupplyDeviceRequirement(requirementId, {
-        conditionGroups: updatedGroups
-      });
-    }
-  };
+
 
   // 更新触发条件组
   const updateTriggerConditionGroup = (requirementId: string, groupId: string, updates: Partial<TriggerConditionGroup>): void => {
@@ -352,19 +303,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
     }
   };
 
-  // 更新供给方设备触发条件组
-  const updateSupplyTriggerConditionGroup = (requirementId: string, groupId: string, updates: Partial<TriggerConditionGroup>): void => {
-    const requirement = supplyDeviceRequirements.find(req => req.id === requirementId);
-    if (requirement) {
-      const updatedGroups = requirement.conditionGroups?.map(group => 
-        group.id === groupId ? { ...group, ...updates } : group
-      ) || [];
-      
-      updateSupplyDeviceRequirement(requirementId, {
-        conditionGroups: updatedGroups
-      });
-    }
-  };
+
 
   // 更新触发条件
   const updateTriggerCondition = (requirementId: string, groupId: string, conditionId: string, updates: Partial<TriggerCondition>): void => {
@@ -387,26 +326,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
     }
   };
 
-  // 更新供给方设备触发条件
-  const updateSupplyTriggerCondition = (requirementId: string, groupId: string, conditionId: string, updates: Partial<TriggerCondition>): void => {
-    const requirement = supplyDeviceRequirements.find(req => req.id === requirementId);
-    if (requirement) {
-      const updatedGroups = requirement.conditionGroups?.map(group => 
-        group.id === groupId 
-          ? {
-              ...group, 
-              conditions: group.conditions.map(cond => 
-                cond.id === conditionId ? { ...cond, ...updates } : cond
-              )
-            }
-          : group
-      ) || [];
-      
-      updateSupplyDeviceRequirement(requirementId, {
-        conditionGroups: updatedGroups
-      });
-    }
-  };
+
 
   // 保存阶段属性
   const handleSave = async (): Promise<void> => {
@@ -424,7 +344,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
         return;
       }
 
-      // 收集所有选中的需求方设备
+      // 收集所有选中的需求方设备（原始ID）
       const allDemandDevices: string[] = [];
       deviceRequirements.forEach(req => {
         if (req.devices && req.devices.length > 0) {
@@ -432,23 +352,50 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
         }
       });
 
-      // 收集所有选中的供给方设备
-      const allSupplyDevices: string[] = [];
-      supplyDeviceRequirements.forEach(req => {
+
+
+      // 收集需求方设备的中文名称
+      const demandDeviceNames: string[] = [];
+      deviceRequirements.forEach(req => {
         if (req.devices && req.devices.length > 0) {
-          allSupplyDevices.push(...req.devices);
+          req.devices.forEach(deviceId => {
+            const deviceName = getDeviceNameById(deviceId);
+            demandDeviceNames.push(deviceName);
+          });
         }
       });
+
+
+
+      // 分别收集需求方和供给方设备的触发条件
+      const demandTriggerConditions: string[] = [];
+      deviceRequirements.forEach(req => {
+        req.conditionGroups?.forEach(group => {
+          group.conditions.forEach(condition => {
+            if (condition.dataItem && condition.compareType && condition.value) {
+              const conditionText = formatTriggerCondition(condition);
+              demandTriggerConditions.push(conditionText);
+            }
+          });
+        });
+      });
+      const demandTriggerConditionText = demandTriggerConditions.length > 0 ? demandTriggerConditions.join(' && ') : '';
+
+
+
+      // 保持原有的triggerCondition字段为兼容性
+      const triggerConditionText = demandTriggerConditions.join(' && ');
 
       const updatedNode: FlowNode = {
         ...stageNode!,
         customName: values.name,
         label: values.name || stageNode!.label,
-        demandDevices: allDemandDevices, // 同步需求方设备到节点
-        supplyDevices: allSupplyDevices, // 同步供给方设备到节点
-        data: {
+        demandDevices: allDemandDevices, // 同步需求方设备到节点（原始ID）
+        demandDevicesNames: demandDeviceNames.join(', '), // 需求方设备中文名称
+        triggerCondition: triggerConditionText, // 同步触发条件到节点
+        demandDevicesTriggerCondition: demandTriggerConditionText, // 需求方设备触发条件
+         data: {
           deviceRequirements,
-          supplyDeviceRequirements,
           stageStrategies
         }
       };
@@ -725,267 +672,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
   );
 
   // 渲染供给方设备需求表单
-  const renderSupplyDeviceRequirement = (requirement: SupplyDeviceRequirement, index: number): JSX.Element => (
-    <Card
-      key={requirement.id}
-      size="small"
-      title="供给方设备"
-      style={{ marginBottom: 16 }}
-    >
-      {/* 设备类型 - 第一行 */}
-      <Row gutter={16}>
-        <Col span={24}>
-          <div style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: '14px', color: '#262626' }}>设备类型 <span style={{ color: '#ff4d4f' }}>*</span></span>
-          </div>
-          <Select
-            placeholder="请选择设备类型"
-            value={requirement.deviceType}
-            onChange={(value: string) => updateSupplyDeviceRequirement(requirement.id, { deviceType: value, devices: [] })}
-            style={{ width: '100%' }}
-          >
-            {deviceTypeOptions.map(option => (
-              <Option key={option.value} value={option.value}>{option.label}</Option>
-            ))}
-          </Select>
-        </Col>
-      </Row>
 
-      {/* 设备 - 第二行 */}
-      <Row gutter={16} style={{ marginTop: 16 }}>
-        <Col span={24}>
-          <div style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: '14px', color: '#262626' }}>设备 <span style={{ color: '#ff4d4f' }}>*</span></span>
-          </div>
-          <Select
-            mode="multiple"
-            placeholder="请选择设备（支持多选）"
-            value={requirement.devices}
-            onChange={(value: string[]) => updateSupplyDeviceRequirement(requirement.id, { devices: value })}
-            disabled={!requirement.deviceType}
-            style={{ width: '100%' }}
-          >
-            {getDeviceOptions(requirement.deviceType).map(option => (
-              <Option key={option.value} value={option.value}>{option.label}</Option>
-            ))}
-          </Select>
-        </Col>
-      </Row>
-
-      {/* 触发条件 - 独占一行 */}
-      <Row gutter={16} style={{ marginTop: 16 }}>
-        <Col span={24}>
-          <div style={{ marginBottom: 8 }}>
-            <span style={{ fontSize: '14px', color: '#262626' }}>触发条件</span>
-          </div>
-          <Radio.Group
-            value={requirement.conditionType}
-            onChange={(e) => updateSupplyDeviceRequirement(requirement.id, { conditionType: e.target.value })}
-          >
-            <Radio value="none">无条件触发</Radio>
-            <Radio value="conditional">有条件触发</Radio>
-          </Radio.Group>
-        </Col>
-      </Row>
-
-      {requirement.conditionType === 'conditional' && (
-        <div style={{ marginTop: 16, padding: 16, backgroundColor: '#fafafa', borderRadius: 6 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontWeight: 500 }}>触发条件设置</span>
-            <Button
-              type="dashed"
-              size="small"
-              icon={<PlusOutlined />}
-              onClick={() => addSupplyTriggerConditionGroup(requirement.id)}
-            >
-              添加条件组
-            </Button>
-          </div>
-
-          {requirement.conditionGroups?.map((group, groupIndex) => (
-            <div key={group.id} style={{ marginBottom: 16 }}>
-              {groupIndex > 0 && (
-                <div style={{ textAlign: 'center', margin: '8px 0' }}>
-                  <span style={{ 
-                    background: '#f0f0f0', 
-                    padding: '4px 8px', 
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    color: '#666'
-                  }}>
-                    或
-                  </span>
-                </div>
-              )}
-              
-              <Card 
-                size="small" 
-                style={{ 
-                  marginBottom: 8,
-                  border: '1px solid #d9d9d9',
-                  borderRadius: '6px'
-                }}
-                title={
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '12px' }}>条件组 {groupIndex + 1}</span>
-                    <div>
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<PlusOutlined />}
-                        onClick={() => addSupplyTriggerCondition(requirement.id, group.id)}
-                        style={{ marginRight: 4 }}
-                      >
-                        添加条件
-                      </Button>
-                      <Button
-                        type="text"
-                        danger
-                        size="small"
-                        icon={<DeleteOutlined />}
-                        onClick={() => removeSupplyTriggerConditionGroup(requirement.id, group.id)}
-                      />
-                    </div>
-                  </div>
-                }
-              >
-                {group.conditions.map((condition, condIndex) => (
-                  <div key={condition.id}>
-                    {condIndex > 0 && (
-                      <div style={{ textAlign: 'center', margin: '8px 0' }}>
-                        <Radio.Group
-                          value={group.logicOperator}
-                          onChange={(e) => updateSupplyTriggerConditionGroup(requirement.id, group.id, { logicOperator: e.target.value })}
-                          size="small"
-                        >
-                          <Radio.Button value="and">且</Radio.Button>
-                          <Radio.Button value="or">或</Radio.Button>
-                        </Radio.Group>
-                      </div>
-                    )}
-                    
-                    <Card 
-                      size="small" 
-                      style={{ marginBottom: 8, background: '#fafafa' }}
-                      title={
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '12px' }}>条件 {condIndex + 1}</span>
-                          <Button
-                            type="text"
-                            danger
-                            size="small"
-                            icon={<DeleteOutlined />}
-                            onClick={() => removeSupplyTriggerCondition(requirement.id, group.id, condition.id)}
-                          />
-                        </div>
-                      }
-                    >
-                      {/* 数据源 - 独占一行 */}
-                      <Row gutter={8} style={{ marginBottom: 12 }}>
-                        <Col span={24}>
-                          <div style={{ marginBottom: 4 }}>
-                            <span style={{ fontSize: '12px', color: '#666' }}>数据源</span>
-                          </div>
-                          <Select
-                            placeholder="请选择数据源"
-                            value={condition.dataSource}
-                            onChange={(value: 'product' | 'global') => updateSupplyTriggerCondition(requirement.id, group.id, condition.id, { 
-                              dataSource: value,
-                              dataItem: undefined,
-                              productAttribute: undefined
-                            })}
-                            size="small"
-                            style={{ width: '100%' }}
-                          >
-                            {dataSourceOptions.map(option => (
-                              <Option key={option.value} value={option.value}>{option.label}</Option>
-                            ))}
-                          </Select>
-                        </Col>
-                      </Row>
-                      
-                      {/* 数据项 - 独占一行 */}
-                      <Row gutter={8} style={{ marginBottom: 12 }}>
-                        <Col span={24}>
-                          <div style={{ marginBottom: 4 }}>
-                            <span style={{ fontSize: '12px', color: '#666' }}>数据项</span>
-                          </div>
-                          <Select
-                            placeholder="请选择数据项"
-                            value={condition.dataItem}
-                            onChange={(value: string) => updateSupplyTriggerCondition(requirement.id, group.id, condition.id, { dataItem: value })}
-                            size="small"
-                            style={{ width: '100%' }}
-                          >
-                            <Option value="item1">数据项1</Option>
-                            <Option value="item2">数据项2</Option>
-                          </Select>
-                        </Col>
-                      </Row>
-                      
-                      {/* 属性 - 独占一行 */}
-                      <Row gutter={8} style={{ marginBottom: 12 }}>
-                        <Col span={24}>
-                          <div style={{ marginBottom: 4 }}>
-                            <span style={{ fontSize: '12px', color: '#666' }}>属性</span>
-                          </div>
-                          <Select
-                            placeholder="请选择属性"
-                            value={condition.productAttribute}
-                            onChange={(value: string) => updateSupplyTriggerCondition(requirement.id, group.id, condition.id, { productAttribute: value })}
-                            size="small"
-                            style={{ width: '100%' }}
-                          >
-                            <Option value="attr1">属性1</Option>
-                            <Option value="attr2">属性2</Option>
-                          </Select>
-                        </Col>
-                      </Row>
-                      
-                      {/* 对比方式 - 独占一行 */}
-                      <Row gutter={8} style={{ marginBottom: 12 }}>
-                        <Col span={24}>
-                          <div style={{ marginBottom: 4 }}>
-                            <span style={{ fontSize: '12px', color: '#666' }}>对比方式</span>
-                          </div>
-                          <Select
-                            placeholder="请选择对比方式"
-                            value={condition.compareType}
-                            onChange={(value: 'greater' | 'equal' | 'less' | 'notEqual') => updateSupplyTriggerCondition(requirement.id, group.id, condition.id, { compareType: value })}
-                            size="small"
-                            style={{ width: '100%' }}
-                          >
-                            {compareTypeOptions.map(option => (
-                              <Option key={option.value} value={option.value}>{option.label}</Option>
-                            ))}
-                          </Select>
-                        </Col>
-                      </Row>
-                      
-                      {/* 值 - 独占一行 */}
-                      <Row gutter={8}>
-                        <Col span={24}>
-                          <div style={{ marginBottom: 4 }}>
-                            <span style={{ fontSize: '12px', color: '#666' }}>值</span>
-                          </div>
-                          <Input
-                            placeholder="请输入值"
-                            value={condition.value}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSupplyTriggerCondition(requirement.id, group.id, condition.id, { value: e.target.value })}
-                            size="small"
-                          />
-                        </Col>
-                      </Row>
-                    </Card>
-                  </div>
-                ))}
-              </Card>
-            </div>
-          ))}
-        </div>
-      )}
-    </Card>
-  );
 
   if (!visible) {
     return null;
@@ -1068,10 +755,12 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
             )}
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            {supplyDeviceRequirements.map((requirement, index) => 
-              renderSupplyDeviceRequirement(requirement, index)
-            )}
+
+        </TabPane>
+
+        <TabPane tab="行为树" key="behavior-tree">
+          <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
+            行为树功能开发中...
           </div>
         </TabPane>
 
