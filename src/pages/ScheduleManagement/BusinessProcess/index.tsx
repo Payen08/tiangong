@@ -734,7 +734,7 @@ const BusinessProcess: React.FC = () => {
             rules={[{ required: true, message: '请选择状态' }]}
             initialValue="enabled"
           >
-            <Select>
+            <Select placeholder="请选择状态">
               <Option value="enabled">启用</Option>
               <Option value="disabled">停用</Option>
               <Option value="obsolete">作废</Option>

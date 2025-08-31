@@ -820,10 +820,10 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           width: 200,
           height: 110,
           label: '新阶段',
-          customName: 'AGV取料阶段',
-          triggerCondition: '物料到位',
-          demandDevices: ['AGV小车'],
-          supplyDevices: ['料架']
+          customName: '阶段',
+          triggerCondition: '',
+          demandDevices: [],
+          supplyDevices: []
         };
         break;
       case 'businessProcess':
@@ -1101,10 +1101,10 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           label: nodeTools.find(tool => tool.type === nodeType)?.label || nodeType,
           // 为阶段节点添加默认字段
           ...(nodeType === 'stage' && {
-            customName: 'AGV取料阶段',
-            triggerCondition: '物料到位',
-            demandDevices: ['AGV小车'],
-            supplyDevices: ['料架']
+            customName: '阶段',
+            triggerCondition: '',
+            demandDevices: [],
+            supplyDevices: []
           }),
           // 为业务流程节点添加默认字段
           ...(nodeType === 'businessProcess' && {
@@ -4046,6 +4046,12 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
             conn.sourceId !== selectedNode && conn.targetId !== selectedNode
           ));
           setSelectedNode(null);
+          
+          // 清除业务流程节点和阶段节点的选中状态，关闭属性面板
+          setSelectedBusinessProcessNode(null);
+          setSelectedStageNode(null);
+          setBusinessProcessPropertyPanelVisible(false);
+          setStagePropertyPanelVisible(false);
         } else if (selectedConnection) {
           // 删除连线
           setConnections(prev => prev.filter(conn => conn.id !== selectedConnection));

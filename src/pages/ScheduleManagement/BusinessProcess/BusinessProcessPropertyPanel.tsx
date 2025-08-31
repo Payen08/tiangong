@@ -89,7 +89,7 @@ const BusinessProcessPropertyPanel: React.FC<BusinessProcessPropertyPanelProps> 
       form.setFieldsValue({
         id: businessProcessNode.id,
         name: businessProcessNode.customName || businessProcessNode.label,
-        selectedProcessId: businessProcessNode.data?.selectedProcessId || ''
+        selectedProcessId: businessProcessNode.data?.selectedProcessId || undefined
       });
       
       // 如果已经选择了业务流程，设置选中状态
@@ -237,7 +237,6 @@ const BusinessProcessPropertyPanel: React.FC<BusinessProcessPropertyPanelProps> 
           {/* 业务流程选择 */}
           <Card title="业务流程选择" size="small" style={{ marginBottom: 16 }}>
             <Form.Item
-              label="选择业务流程"
               name="selectedProcessId"
               rules={[{ required: true, message: '请选择业务流程' }]}
             >

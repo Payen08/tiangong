@@ -45,7 +45,7 @@ interface FlowNode {
 
 interface DeviceRequirement {
   id: string;
-  deviceType: string;
+  deviceType?: string;
   devices: string[]; // 改为数组支持多选
   triggerType: 'general' | 'custom';
   conditionType: 'none' | 'conditional';
@@ -189,7 +189,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
       if (existingDeviceRequirements.length === 0) {
         const defaultDeviceRequirement: DeviceRequirement = {
           id: `req_${Date.now()}`,
-          deviceType: '',
+          deviceType: undefined,
           devices: [], // 改为空数组
           triggerType: 'general',
           conditionType: 'none',
@@ -449,7 +449,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
             disabled={!requirement.deviceType}
             style={{ width: '100%' }}
           >
-            {getDeviceOptions(requirement.deviceType).map(option => (
+            {getDeviceOptions(requirement.deviceType || '').map(option => (
               <Option key={option.value} value={option.value}>{option.label}</Option>
             ))}
           </Select>
