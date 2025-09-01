@@ -12,6 +12,7 @@ import MapManagement from '@/pages/SceneManagement/MapManagement';
 import CrossMapConnectionManagement from '@/pages/SystemManagement/CrossMapConnection';
 import CrossMapPathGroupManagement from '@/pages/SceneManagement/CrossMapPathGroup/index';
 import BusinessProcess from '@/pages/ScheduleManagement/BusinessProcess';
+import FieldControlView from '@/pages/FieldControlView';
 
 
 
@@ -28,6 +29,10 @@ export const router = createBrowserRouter([
       {
         index: true,
         element: <Home />,
+      },
+      {
+        path: 'field-control',
+        element: <div />, // 占位符，实际由Layout组件处理
       },
       {
         path: 'scene',

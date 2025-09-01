@@ -1,10 +1,11 @@
 import React from 'react';
 import { Breadcrumb as AntBreadcrumb } from 'antd';
-import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined, ClusterOutlined } from '@ant-design/icons';
+import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined, ClusterOutlined, MonitorOutlined } from '@ant-design/icons';
 import { useLocation, Link } from 'react-router-dom';
 
 const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
   '/': { title: '首页', icon: <HomeOutlined /> },
+  '/field-control': { title: '场控视图', icon: <MonitorOutlined /> },
   '/scene': { title: '场景管理', icon: <EnvironmentOutlined /> },
   '/scene/maps': { title: '地图管理', icon: <NodeIndexOutlined /> },
   '/scene/cross-map-connections': { title: '跨地图连接', icon: <ShareAltOutlined /> },
