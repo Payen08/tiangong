@@ -32,7 +32,7 @@ interface WaybillTask {
   taskName: string;
   taskType: string;
   executionDevice: string;
-  status: '待执行' | '执行中' | '已完成' | '已取消' | '异常' | '已挂起' | '已关闭';
+  status: '待执行' | '执行中' | '已完成' | '已取消' | '异常' | '已挂起' | '已关闭' | '已暂停';
   priority: '高' | '中' | '低';
   createTime: string;
   startTime?: string;

@@ -29,7 +29,7 @@ interface TaskDetailRecord {
   taskName: string;
   executionDevice: string;
   targetDevice: string;
-  status: '执行中' | '已暂停' | '已挂起' | '已取消' | '已完成' | '已关闭';
+  status: '待执行' | '执行中' | '已暂停' | '已挂起' | '已取消' | '已完成' | '已关闭';
   endTime?: string;
   createTime: string;
   relatedBusinessOrder?: string; // 关联业务订单

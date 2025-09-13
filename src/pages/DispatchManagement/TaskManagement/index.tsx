@@ -41,7 +41,7 @@ interface TaskRecord {
   taskType: '工作任务' | '停靠任务' | '充电任务';
   executionDevice: string;
   targetDevice: string;
-  status: '执行中' | '已暂停' | '已挂起' | '已取消' | '已完成' | '已关闭';
+  status: '待执行' | '执行中' | '已暂停' | '已挂起' | '已取消' | '已完成' | '已关闭';
   endTime?: string;
   createTime: string;
   relatedBusinessOrder?: string; // 关联业务订单
@@ -74,6 +74,16 @@ const TaskManagement: React.FC = () => {
   
   // 模拟任务数据
   const [tasks, setTasks] = useState<TaskRecord[]>([
+    {
+      id: '0',
+      taskName: '待执行运输任务000',
+      taskType: '工作任务',
+      executionDevice: 'AGV-000',
+      targetDevice: '工作站Z',
+      status: '待执行',
+      createTime: '2024-01-15 08:00:00',
+      relatedBusinessOrder: 'AOV-000',
+    },
     {
       id: '1',
       taskName: '货物运输任务001',
@@ -117,11 +127,11 @@ const TaskManagement: React.FC = () => {
     },
     {
       id: '5',
-      taskName: '紧急运输任务005',
+      taskName: '紧急充电任务005',
       taskType: '充电任务',
       executionDevice: 'AGV-005',
-      targetDevice: '应急区',
-      status: '已取消',
+      targetDevice: '充电桩A',
+      status: '已完成',
       endTime: '2024-01-15 15:00:00',
       createTime: '2024-01-15 14:45:00',
       relatedBusinessOrder: 'AOV-005',
@@ -143,7 +153,7 @@ const TaskManagement: React.FC = () => {
       taskType: '停靠任务',
       executionDevice: 'AGV-007',
       targetDevice: '校准区',
-      status: '已关闭',
+      status: '已完成',
       endTime: '2024-01-14 17:45:00',
       createTime: '2024-01-14 15:30:00',
       relatedBusinessOrder: 'AOV-007',
@@ -154,7 +164,7 @@ const TaskManagement: React.FC = () => {
       taskType: '充电任务',
       executionDevice: 'AGV-008',
       targetDevice: '充电桩C',
-      status: '已关闭',
+      status: '已完成',
       endTime: '2024-01-14 16:20:00',
       createTime: '2024-01-14 14:00:00',
       relatedBusinessOrder: 'AOV-008',
@@ -176,7 +186,7 @@ const TaskManagement: React.FC = () => {
       taskType: '停靠任务',
       executionDevice: 'AGV-010',
       targetDevice: '维护区',
-      status: '已关闭',
+      status: '已完成',
       endTime: '2024-01-14 20:00:00',
       createTime: '2024-01-14 18:30:00',
       relatedBusinessOrder: 'AOV-010',
@@ -198,7 +208,7 @@ const TaskManagement: React.FC = () => {
       taskType: '停靠任务',
       executionDevice: 'AGV-012',
       targetDevice: '停靠区B',
-      status: '已关闭',
+      status: '已完成',
       endTime: '2024-01-13 21:45:00',
       createTime: '2024-01-13 19:30:00',
       relatedBusinessOrder: 'AOV-012',
@@ -209,16 +219,37 @@ const TaskManagement: React.FC = () => {
       taskType: '充电任务',
       executionDevice: 'AGV-013',
       targetDevice: '充电桩D',
-      status: '已关闭',
+      status: '已完成',
       endTime: '2024-01-13 23:00:00',
       createTime: '2024-01-13 21:00:00',
       relatedBusinessOrder: 'AOV-013',
+    },
+    {
+      id: '14',
+      taskName: '待执行配送任务014',
+      taskType: '工作任务',
+      executionDevice: 'AGV-014',
+      targetDevice: '生产线D',
+      status: '待执行',
+      createTime: '2024-01-15 08:30:00',
+      relatedBusinessOrder: 'AOV-014',
+    },
+    {
+      id: '15',
+      taskName: '待执行停靠任务015',
+      taskType: '停靠任务',
+      executionDevice: 'AGV-015',
+      targetDevice: '停靠区C',
+      status: '待执行',
+      createTime: '2024-01-15 09:00:00',
+      relatedBusinessOrder: 'AOV-015',
     },
   ]);
 
   // 状态颜色映射
   const getStatusColor = (status: string) => {
     const colorMap: Record<string, string> = {
+      '待执行': 'default',
       '执行中': 'processing',
       '已暂停': 'warning',
       '已挂起': 'error',
@@ -317,8 +348,10 @@ const TaskManagement: React.FC = () => {
     // 根据状态确定可用的操作
     const getAvailableActions = (status: string) => {
       switch (status) {
+        case '待执行':
+          return ['cancel'];
         case '执行中':
-          return ['pause', 'cancel'];
+          return ['pause'];
         case '已暂停':
           return ['resume', 'cancel'];
         case '已挂起':
@@ -724,12 +757,25 @@ const TaskManagement: React.FC = () => {
     return matchesSearch && matchesStatus && matchesTaskType && matchesTab;
   });
 
-  // 计算各类型任务数量
+  // 获取今日日期字符串
+  const getTodayDateString = () => {
+    const today = new Date();
+    return today.toLocaleDateString('zh-CN');
+  };
+
+  // 判断任务是否为今日创建
+  const isTaskCreatedToday = (createTime: string) => {
+    const taskDate = new Date(createTime);
+    const taskDateString = taskDate.toLocaleDateString('zh-CN');
+    return taskDateString === getTodayDateString();
+  };
+
+  // 计算各类型任务数量（只统计今日创建的任务）
   const taskCounts = {
-    all: tasks.length,
-    work: tasks.filter(task => task.taskType === '工作任务').length,
-    dock: tasks.filter(task => task.taskType === '停靠任务').length,
-    charge: tasks.filter(task => task.taskType === '充电任务').length,
+    all: tasks.filter(task => isTaskCreatedToday(task.createTime)).length,
+    work: tasks.filter(task => task.taskType === '工作任务' && isTaskCreatedToday(task.createTime)).length,
+    dock: tasks.filter(task => task.taskType === '停靠任务' && isTaskCreatedToday(task.createTime)).length,
+    charge: tasks.filter(task => task.taskType === '充电任务' && isTaskCreatedToday(task.createTime)).length,
   };
 
   // 刷新数据
@@ -779,19 +825,19 @@ const TaskManagement: React.FC = () => {
           items={[
             {
               key: 'all',
-              label: `全部任务（${taskCounts.all}）`,
+              label: `今日全部任务（${taskCounts.all}）`,
             },
             {
               key: 'work',
-              label: `工作任务（${taskCounts.work}）`,
+              label: `今日工作任务（${taskCounts.work}）`,
             },
             {
               key: 'dock',
-              label: `停靠任务（${taskCounts.dock}）`,
+              label: `今日停靠任务（${taskCounts.dock}）`,
             },
             {
               key: 'charge',
-              label: `充电任务（${taskCounts.charge}）`,
+              label: `今日充电任务（${taskCounts.charge}）`,
             },
           ]}
         />
@@ -817,6 +863,7 @@ const TaskManagement: React.FC = () => {
               style={{ width: '100%' }}
               size={isMobile ? 'large' : 'middle'}
             >
+              <Option value="待执行">待执行</Option>
               <Option value="执行中">执行中</Option>
               <Option value="已暂停">已暂停</Option>
               <Option value="已挂起">已挂起</Option>

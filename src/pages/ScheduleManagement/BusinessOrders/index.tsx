@@ -38,7 +38,7 @@ interface WaybillTask {
   taskName: string;
   taskType: string;
   executionDevice: string;
-  status: '待执行' | '执行中' | '已完成' | '已取消' | '异常' | '已挂起' | '已关闭';
+  status: '待执行' | '执行中' | '已完成' | '已取消' | '异常' | '已挂起' | '已关闭' | '已暂停';
   executionStatus: '移动' | 'n1' | '呼梯' | '乘梯' | '关梯' | '上下料';
   priority: '高' | '中' | '低';
   createTime: string;
@@ -109,7 +109,7 @@ const BusinessOrders: React.FC = () => {
       orderName: '配送订单002',
       currentWaybill: 'WB-002',
       executionStatus: '上下料',
-      orderStatus: '执行中',
+      orderStatus: '待执行',
       createTime: '2024-01-15 10:15:00',
       endTime: undefined,
       updatedBy: '李四',
@@ -291,6 +291,7 @@ const BusinessOrders: React.FC = () => {
     
     // 根据activeTab筛选
     const matchesTab = activeTab === 'all' || 
+                      (activeTab === 'unassigned' && order.orderStatus === '待分配') ||
                       (activeTab === 'pending' && order.orderStatus === '待执行') ||
                       (activeTab === 'executing' && order.orderStatus === '执行中') ||
                       (activeTab === 'abnormal' && order.orderStatus === '异常关闭') ||
@@ -300,14 +301,28 @@ const BusinessOrders: React.FC = () => {
     return matchesSearch && matchesStatus && matchesExecutionStatus && matchesTab;
   });
 
-  // 获取订单统计
+  // 获取今日日期字符串
+  const getTodayDateString = () => {
+    const today = new Date();
+    return today.toLocaleDateString('zh-CN');
+  };
+
+  // 判断订单是否为今日创建
+  const isOrderCreatedToday = (createTime: string) => {
+    const orderDate = new Date(createTime);
+    const orderDateString = orderDate.toLocaleDateString('zh-CN');
+    return orderDateString === getTodayDateString();
+  };
+
+  // 获取订单统计（只统计今日创建的订单）
   const orderCounts = {
-    all: orders.length,
-    pending: orders.filter(order => order.orderStatus === '待执行').length,
-    executing: orders.filter(order => order.orderStatus === '执行中').length,
-    abnormal: orders.filter(order => order.orderStatus === '异常关闭').length,
-    completed: orders.filter(order => order.orderStatus === '已完成').length,
-    cancelled: orders.filter(order => order.orderStatus === '已取消').length,
+    all: orders.filter(order => isOrderCreatedToday(order.createTime)).length,
+    unassigned: orders.filter(order => order.orderStatus === '待分配' && isOrderCreatedToday(order.createTime)).length,
+    pending: orders.filter(order => order.orderStatus === '待执行' && isOrderCreatedToday(order.createTime)).length,
+    executing: orders.filter(order => order.orderStatus === '执行中' && isOrderCreatedToday(order.createTime)).length,
+    abnormal: orders.filter(order => order.orderStatus === '异常关闭' && isOrderCreatedToday(order.createTime)).length,
+    completed: orders.filter(order => order.orderStatus === '已完成' && isOrderCreatedToday(order.createTime)).length,
+    cancelled: orders.filter(order => order.orderStatus === '已取消' && isOrderCreatedToday(order.createTime)).length,
   };
 
   // 刷新数据
@@ -319,17 +334,73 @@ const BusinessOrders: React.FC = () => {
     }, 1000);
   };
 
-  // 取消订单
+  // 取消订单（批量取消执行运单）
   const handleCancel = (record: BusinessOrderRecord) => {
+    const waybillTasksCount = record.waybillTasks?.length || 0;
+    const activeTasksCount = record.waybillTasks?.filter(task => 
+      ['待执行', '执行中', '已暂停', '已挂起'].includes(task.status)
+    ).length || 0;
+    
     confirm({
-      title: '确认取消',
+      title: '确认取消业务订单',
       icon: <ExclamationCircleOutlined />,
-      content: `确定要取消业务订单"${record.orderName}"吗？`,
+      content: (
+        <div>
+          <p>确定要取消业务订单"{record.orderName}"吗？</p>
+          {waybillTasksCount > 0 && (
+            <p style={{ color: '#faad14', marginTop: 8 }}>
+              此操作将同时取消 {activeTasksCount} 个关联的执行运单任务
+            </p>
+          )}
+          <p style={{ color: '#ff4d4f', marginTop: 8 }}>此操作不可撤销</p>
+        </div>
+      ),
+      okType: 'danger',
       onOk() {
-        setOrders(prev => prev.map(order => 
-          order.id === record.id ? { ...order, orderStatus: '已取消' } : order
-        ));
-        message.success('订单已取消');
+        setOrders(prev => prev.map(order => {
+          if (order.id === record.id) {
+            // 取消业务订单并批量取消所有关联的执行运单
+            const updatedWaybillTasks = order.waybillTasks?.map(task => {
+              // 只取消未完成的任务
+              if (['待执行', '执行中', '已暂停', '已挂起'].includes(task.status)) {
+                return {
+                  ...task,
+                  status: '已取消' as const,
+                  endTime: new Date().toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  }).replace(/\//g, '-')
+                };
+              }
+              return task;
+            });
+            
+            return {
+              ...order,
+              orderStatus: '已取消' as const,
+              endTime: new Date().toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+              }).replace(/\//g, '-'),
+              waybillTasks: updatedWaybillTasks
+            };
+          }
+          return order;
+        }));
+        
+        if (activeTasksCount > 0) {
+          message.success(`业务订单已取消，同时取消了 ${activeTasksCount} 个执行运单任务`);
+        } else {
+          message.success('业务订单已取消');
+        }
       },
     });
   };
@@ -384,9 +455,18 @@ const BusinessOrders: React.FC = () => {
       content: `确定要暂停运单任务 "${task.taskName}" 吗？`,
       icon: <ExclamationCircleOutlined />,
       onOk() {
-        message.success(`运单任务 "${task.taskName}" 暂停成功`);
-        // 这里可以添加实际的暂停逻辑
-        console.log('暂停运单任务:', task, businessOrder);
+        setOrders(prev => prev.map(order => {
+          if (order.id === businessOrder.id) {
+            const updatedWaybillTasks = order.waybillTasks?.map(t => 
+              t.id === task.id ? { ...t, status: '已暂停' as WaybillTask['status'] } : t
+            );
+            const updatedOrder = { ...order, waybillTasks: updatedWaybillTasks } as BusinessOrderRecord;
+            // 检查并更新业务订单状态
+            return checkAndUpdateBusinessOrderStatus(updatedOrder);
+          }
+          return order;
+        }));
+        message.success(`运单任务 "${task.taskName}" 已暂停`);
       },
     });
   };
@@ -398,9 +478,18 @@ const BusinessOrders: React.FC = () => {
       content: `确定要恢复运单任务 "${task.taskName}" 吗？`,
       icon: <ExclamationCircleOutlined />,
       onOk() {
-        message.success(`运单任务 "${task.taskName}" 恢复成功`);
-        // 这里可以添加实际的恢复逻辑
-        console.log('恢复运单任务:', task, businessOrder);
+        setOrders(prev => prev.map(order => {
+          if (order.id === businessOrder.id) {
+            const updatedWaybillTasks = order.waybillTasks?.map(t => 
+              t.id === task.id ? { ...t, status: '执行中' as WaybillTask['status'] } : t
+            );
+            const updatedOrder = { ...order, waybillTasks: updatedWaybillTasks } as BusinessOrderRecord;
+            // 检查并更新业务订单状态
+            return checkAndUpdateBusinessOrderStatus(updatedOrder);
+          }
+          return order;
+        }));
+        message.success(`运单任务 "${task.taskName}" 已恢复执行`);
       },
     });
   };
@@ -420,6 +509,118 @@ const BusinessOrders: React.FC = () => {
     });
   };
 
+  // 关闭运单任务
+  const handleCloseWaybillTask = (task: WaybillTask, businessOrder: BusinessOrderRecord) => {
+    confirm({
+      title: '确认关闭运单任务',
+      content: `确定要关闭运单任务 "${task.taskName}" 吗？关闭后任务将无法执行。`,
+      icon: <ExclamationCircleOutlined />,
+      okType: 'danger',
+      onOk() {
+        setOrders(prev => prev.map(order => {
+          if (order.id === businessOrder.id) {
+            const updatedWaybillTasks = order.waybillTasks?.map(t => 
+              t.id === task.id ? { 
+                ...t, 
+                status: '已关闭' as WaybillTask['status'],
+                endTime: new Date().toLocaleString('zh-CN', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit'
+                }).replace(/\//g, '-')
+              } : t
+            );
+            const updatedOrder = { ...order, waybillTasks: updatedWaybillTasks } as BusinessOrderRecord;
+            // 检查并更新业务订单状态
+            return checkAndUpdateBusinessOrderStatus(updatedOrder);
+          }
+          return order;
+        }));
+        message.success(`运单任务 "${task.taskName}" 已关闭`);
+      },
+    });
+  };
+
+  // 检查并更新业务订单状态
+  const checkAndUpdateBusinessOrderStatus = (order: BusinessOrderRecord): BusinessOrderRecord => {
+    const waybillTasks = order.waybillTasks || [];
+    
+    // 如果没有运单任务，保持原状态
+    if (waybillTasks.length === 0) {
+      return order;
+    }
+    
+    // 统计各种状态的任务数量
+    const cancelledTasks = waybillTasks.filter(task => task.status === '已取消');
+    const closedTasks = waybillTasks.filter(task => task.status === '已关闭');
+    const pendingTasks = waybillTasks.filter(task => task.status === '待执行');
+    const executingTasks = waybillTasks.filter(task => task.status === '执行中');
+    const completedTasks = waybillTasks.filter(task => task.status === '已完成');
+    const pausedTasks = waybillTasks.filter(task => task.status === '已暂停');
+    const suspendedTasks = waybillTasks.filter(task => task.status === '已挂起');
+    const abnormalTasks = waybillTasks.filter(task => task.status === '异常');
+    
+    const currentTime = new Date().toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    }).replace(/\//g, '-');
+    
+    // 规则2和4：如果执行运单中有已关闭的运单任务，业务订单状态就是异常关闭
+    if (closedTasks.length > 0) {
+      return {
+        ...order,
+        orderStatus: '异常关闭' as const,
+        endTime: order.endTime || currentTime
+      };
+    }
+    
+    // 规则1：如果执行运单中所有运单任务状态是已取消，业务订单状态就是已取消
+    if (cancelledTasks.length === waybillTasks.length) {
+      return {
+        ...order,
+        orderStatus: '已取消' as const,
+        endTime: order.endTime || currentTime
+      };
+    }
+    
+    // 规则3：如果执行运单中所有运单任务状态是待执行，业务订单状态就是待执行
+    if (pendingTasks.length === waybillTasks.length) {
+      return {
+        ...order,
+        orderStatus: '待执行' as const,
+        endTime: undefined // 清除结束时间
+      };
+    }
+    
+    // 规则5：如果执行运单中有执行中的运单任务，且没有已取消和已关闭状态的运单任务，业务订单状态就是执行中
+    if (executingTasks.length > 0 && cancelledTasks.length === 0 && closedTasks.length === 0) {
+      return {
+        ...order,
+        orderStatus: '执行中' as const,
+        endTime: undefined // 清除结束时间
+      };
+    }
+    
+    // 如果所有任务都已完成，业务订单状态为已完成
+    if (completedTasks.length === waybillTasks.length) {
+      return {
+        ...order,
+        orderStatus: '已完成' as const,
+        endTime: order.endTime || currentTime
+      };
+    }
+    
+    // 其他情况保持原状态
+    return order;
+  };
+
   // 取消运单任务
   const handleCancelWaybillTask = (task: WaybillTask, businessOrder: BusinessOrderRecord) => {
     confirm({
@@ -428,9 +629,29 @@ const BusinessOrders: React.FC = () => {
       icon: <ExclamationCircleOutlined />,
       okType: 'danger',
       onOk() {
-        message.success(`运单任务 "${task.taskName}" 取消成功`);
-        // 这里可以添加实际的取消逻辑
-        console.log('取消运单任务:', task, businessOrder);
+        setOrders(prev => prev.map(order => {
+          if (order.id === businessOrder.id) {
+            const updatedWaybillTasks = order.waybillTasks?.map(t => 
+              t.id === task.id ? { 
+                ...t, 
+                status: '已取消' as WaybillTask['status'],
+                endTime: new Date().toLocaleString('zh-CN', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit'
+                }).replace(/\//g, '-')
+              } : t
+            );
+            const updatedOrder = { ...order, waybillTasks: updatedWaybillTasks } as BusinessOrderRecord;
+            // 检查并更新业务订单状态
+            return checkAndUpdateBusinessOrderStatus(updatedOrder);
+          }
+          return order;
+        }));
+        message.success(`运单任务 "${task.taskName}" 已取消`);
       },
     });
   };
@@ -646,13 +867,15 @@ const BusinessOrders: React.FC = () => {
         const getWaybillTaskAvailableActions = (status: string) => {
           switch (status) {
             case '待执行':
-              return ['cancel'];
+              return ['cancel']; // 待执行状态只显示取消按钮，不显示关闭按钮
             case '执行中':
-              return ['pause', 'cancel'];
+              return ['pause', 'cancel', 'close'];
             case '已暂停':
-              return ['resume', 'cancel'];
+              return ['resume', 'cancel', 'close'];
             case '已挂起':
-              return ['continue', 'diagnose', 'cancel'];
+              return ['continue', 'diagnose', 'cancel', 'close'];
+            case '异常':
+              return ['diagnose', 'close'];
             case '已取消':
             case '已完成':
               return [];
@@ -734,6 +957,20 @@ const BusinessOrders: React.FC = () => {
                 onClick={() => handleCancelWaybillTask(task, record)}
               >
                 取消
+              </Button>
+            );
+          }
+          
+          if (availableActions.includes('close')) {
+            actions.push(
+              <Button
+                key="close"
+                type="link"
+                size="small"
+                style={{ padding: '0 4px', color: '#ff4d4f' }}
+                onClick={() => handleCloseWaybillTask(task, record)}
+              >
+                关闭
               </Button>
             );
           }
@@ -930,27 +1167,31 @@ const BusinessOrders: React.FC = () => {
           items={[
             {
               key: 'all',
-              label: `全部订单（${orderCounts.all}）`,
+              label: `今日全部订单（${orderCounts.all}）`,
+            },
+            {
+              key: 'unassigned',
+              label: `今日待分配（${orderCounts.unassigned}）`,
             },
             {
               key: 'pending',
-              label: `待执行（${orderCounts.pending}）`,
+              label: `今日待执行（${orderCounts.pending}）`,
             },
             {
               key: 'executing',
-              label: `执行中（${orderCounts.executing}）`,
+              label: `今日执行中（${orderCounts.executing}）`,
             },
             {
               key: 'abnormal',
-              label: `异常关闭（${orderCounts.abnormal}）`,
+              label: `今日异常关闭（${orderCounts.abnormal}）`,
             },
             {
               key: 'completed',
-              label: `已完成（${orderCounts.completed}）`,
+              label: `今日已完成（${orderCounts.completed}）`,
             },
             {
               key: 'cancelled',
-              label: `已取消（${orderCounts.cancelled}）`,
+              label: `今日已取消（${orderCounts.cancelled}）`,
             },
           ]}
         />
