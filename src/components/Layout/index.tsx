@@ -18,6 +18,9 @@ import {
   ApartmentOutlined,
   ClusterOutlined,
   MonitorOutlined,
+  ControlOutlined,
+  FileTextOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useAppStore } from '@/store';
@@ -103,6 +106,33 @@ const Layout: React.FC = () => {
           key: '/schedule/business-process',
           icon: <ApartmentOutlined />,
           label: '业务流程',
+        },
+        {
+          key: '/schedule/business-orders',
+          icon: <FileTextOutlined />,
+          label: '业务订单',
+        },
+      ],
+    },
+    {
+      key: 'dispatch',
+      icon: <ControlOutlined />,
+      label: '调度管理',
+      children: [
+        {
+          key: '/dispatch/tasks',
+          icon: <FileTextOutlined />,
+          label: '运单任务',
+        },
+        {
+          key: '/dispatch/idle-docking',
+          icon: <NodeIndexOutlined />,
+          label: '空闲停靠',
+        },
+        {
+          key: '/dispatch/auto-charging',
+          icon: <ThunderboltOutlined />,
+          label: '自动充电',
         },
       ],
     },

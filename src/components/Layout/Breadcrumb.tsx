@@ -1,6 +1,6 @@
 import React from 'react';
 import { Breadcrumb as AntBreadcrumb } from 'antd';
-import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined, ClusterOutlined, MonitorOutlined } from '@ant-design/icons';
+import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined, ClusterOutlined, MonitorOutlined, ControlOutlined, FileTextOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { useLocation, Link } from 'react-router-dom';
 
 const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
@@ -17,9 +17,14 @@ const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
   '/system/users': { title: '用户管理', icon: <TeamOutlined /> },
   '/system/roles': { title: '角色管理', icon: <SafetyOutlined /> },
   '/system/permissions': { title: '权限管理', icon: <SafetyOutlined /> },
+  '/dispatch': { title: '调度管理', icon: <ControlOutlined /> },
+  '/dispatch/tasks': { title: '运单任务', icon: <FileTextOutlined /> },
+  '/dispatch/idle-docking': { title: '空闲停靠', icon: <NodeIndexOutlined /> },
+  '/dispatch/auto-charging': { title: '自动充电', icon: <ThunderboltOutlined /> },
   '/scene/cross-map-path-groups': { title: '跨地图路径组', icon: <ClusterOutlined /> },
   '/schedule': { title: '排程管理', icon: <ScheduleOutlined /> },
   '/schedule/business-process': { title: '业务流程', icon: <ApartmentOutlined /> },
+  '/schedule/business-orders': { title: '业务订单', icon: <FileTextOutlined /> },
   
 };
 

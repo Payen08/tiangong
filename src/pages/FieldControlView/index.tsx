@@ -2292,7 +2292,7 @@ const FieldControlView: React.FC = () => {
       case 'completed': return '已完成';
       case 'cancelled': return '已取消';
       case 'failed': return '失败';
-      case 'error': return '异常';
+      case 'error': return '已挂起';
       default: return '待执行'; // 默认显示待执行状态
     }
   };
@@ -2558,7 +2558,7 @@ const FieldControlView: React.FC = () => {
           onClick={() => handleTaskDelete(task.id)}
           style={{ color: '#ff4d4f' }}
         >
-          删除
+          取消
         </Button>
       );
     }
@@ -2597,7 +2597,7 @@ const FieldControlView: React.FC = () => {
           onClick={() => handleTaskDelete(task.id)}
           style={{ color: '#ff4d4f' }}
         >
-          删除
+          取消
         </Button>
       );
     }

@@ -12,7 +12,11 @@ import MapManagement from '@/pages/SceneManagement/MapManagement';
 import CrossMapConnectionManagement from '@/pages/SystemManagement/CrossMapConnection';
 import CrossMapPathGroupManagement from '@/pages/SceneManagement/CrossMapPathGroup/index';
 import BusinessProcess from '@/pages/ScheduleManagement/BusinessProcess';
+import BusinessOrders from '@/pages/ScheduleManagement/BusinessOrders';
 import FieldControlView from '@/pages/FieldControlView';
+import TaskManagement from '@/pages/DispatchManagement/TaskManagement';
+import IdleDockingManagement from '@/pages/DispatchManagement/IdleDockingManagement';
+import AutoChargingManagement from '@/pages/DispatchManagement/AutoChargingManagement';
 
 
 
@@ -75,7 +79,27 @@ export const router = createBrowserRouter([
             path: 'business-process',
             element: <BusinessProcess />,
           },
-
+          {
+            path: 'business-orders',
+            element: <BusinessOrders />,
+          },
+        ],
+      },
+      {
+        path: 'dispatch',
+        children: [
+          {
+            path: 'tasks',
+            element: <TaskManagement />,
+          },
+          {
+            path: 'idle-docking',
+            element: <IdleDockingManagement />,
+          },
+          {
+            path: 'auto-charging',
+            element: <AutoChargingManagement />,
+          },
         ],
       },
       {
