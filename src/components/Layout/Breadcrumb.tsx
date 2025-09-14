@@ -1,6 +1,6 @@
 import React from 'react';
 import { Breadcrumb as AntBreadcrumb } from 'antd';
-import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined, ClusterOutlined, MonitorOutlined, ControlOutlined, FileTextOutlined, ThunderboltOutlined, PartitionOutlined } from '@ant-design/icons';
+import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined, ClusterOutlined, MonitorOutlined, ControlOutlined, FileTextOutlined, ThunderboltOutlined, PartitionOutlined, AuditOutlined, CloudUploadOutlined } from '@ant-design/icons';
 import { useLocation, Link } from 'react-router-dom';
 
 const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
@@ -26,7 +26,10 @@ const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
   '/schedule/business-process': { title: '业务流程', icon: <ApartmentOutlined /> },
   '/schedule/business-orders': { title: '业务订单', icon: <FileTextOutlined /> },
   '/schedule/behavior-tree': { title: '行为树管理', icon: <PartitionOutlined /> },
-  
+  '/schedule/action-sequence': { title: '动作序列', icon: <ThunderboltOutlined /> },
+  '/admin': { title: '系统管理', icon: <SettingOutlined /> },
+  '/admin/logs': { title: '系统日志', icon: <AuditOutlined /> },
+  '/admin/upgrade': { title: '系统升级', icon: <CloudUploadOutlined /> },
 };
 
 const Breadcrumb: React.FC = () => {

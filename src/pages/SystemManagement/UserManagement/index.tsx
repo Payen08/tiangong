@@ -13,13 +13,14 @@ import {
   Popconfirm,
   Row,
   Col,
+  Tooltip,
+  Drawer,
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   SearchOutlined,
-  EyeOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -40,6 +41,8 @@ const UserManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [isAddDrawerVisible, setIsAddDrawerVisible] = useState(false);
   const [modalType, setModalType] = useState<'add' | 'edit' | 'view'>('add');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [form] = Form.useForm();
@@ -155,19 +158,12 @@ const UserManagement: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 100,
+      width: 80,
+      align: 'right',
       render: (_: any, record: User) => {
         const isAdmin = record.username === 'admin';
         return (
           <Space direction="vertical" size="small">
-            <Button
-              type="link"
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => handleView(record)}
-            >
-              查看
-            </Button>
             {!isAdmin && (
               <Button
                 type="link"
@@ -176,6 +172,17 @@ const UserManagement: React.FC = () => {
                 onClick={() => handleEdit(record)}
               >
                 编辑
+              </Button>
+            )}
+            {!isAdmin && (
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDeleteConfirm(record)}
+              >
+                删除
               </Button>
             )}
           </Space>
@@ -191,6 +198,7 @@ const UserManagement: React.FC = () => {
       dataIndex: 'username',
       key: 'username',
       width: getColumnWidth(120),
+      fixed: 'left',
       sorter: (a: User, b: User) => a.username.localeCompare(b.username),
     },
     {
@@ -198,7 +206,17 @@ const UserManagement: React.FC = () => {
       dataIndex: 'name',
       key: 'name',
       width: getColumnWidth(100),
+      fixed: 'left',
       sorter: (a: User, b: User) => a.name.localeCompare(b.name),
+      render: (name: string, record: User) => (
+        <Button
+          type="link"
+          style={{ color: '#1890ff', padding: 0, height: 'auto', fontWeight: 'normal' }}
+          onClick={() => handleEdit(record)}
+        >
+          {name}
+        </Button>
+      ),
     },
     {
       title: '手机号',
@@ -237,32 +255,55 @@ const UserManagement: React.FC = () => {
       dataIndex: 'createTime',
       key: 'createTime',
       width: getColumnWidth(160),
+      align: 'left',
+      ellipsis: true,
       sorter: (a: User, b: User) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime(),
+      render: (time: string) => {
+        const date = new Date(time);
+        const dateStr = date.toLocaleDateString('zh-CN');
+        const timeStr = date.toLocaleTimeString('zh-CN', { hour12: false });
+        return (
+          <Tooltip title={time}>
+            <div style={{ lineHeight: '1.2' }}>
+              <div style={{ fontSize: '13px', fontWeight: 500 }}>{dateStr}</div>
+              <div style={{ fontSize: '12px', color: '#666' }}>{timeStr}</div>
+            </div>
+          </Tooltip>
+        );
+      },
     },
     {
       title: '最后登录',
       dataIndex: 'lastLoginTime',
       key: 'lastLoginTime',
       width: getColumnWidth(160),
+      align: 'left',
+      ellipsis: true,
       sorter: (a: User, b: User) => new Date(a.lastLoginTime).getTime() - new Date(b.lastLoginTime).getTime(),
+      render: (time: string) => {
+        const date = new Date(time);
+        const dateStr = date.toLocaleDateString('zh-CN');
+        const timeStr = date.toLocaleTimeString('zh-CN', { hour12: false });
+        return (
+          <Tooltip title={time}>
+            <div style={{ lineHeight: '1.2' }}>
+              <div style={{ fontSize: '13px', fontWeight: 500 }}>{dateStr}</div>
+              <div style={{ fontSize: '12px', color: '#666' }}>{timeStr}</div>
+            </div>
+          </Tooltip>
+        );
+      },
     },
     {
       title: '操作',
       key: 'action',
-      width: getColumnWidth(180),
+      width: 120,
       fixed: 'right',
+      align: 'right',
       render: (_: any, record: User) => {
         const isAdmin = record.username === 'admin';
         return (
           <Space size="small">
-            <Button
-              type="link"
-              size="small"
-              icon={<EyeOutlined />}
-              onClick={() => handleView(record)}
-            >
-              查看
-            </Button>
             {!isAdmin && (
               <Button
                 type="link"
@@ -274,23 +315,16 @@ const UserManagement: React.FC = () => {
               </Button>
             )}
             {!isAdmin && (
-              <Popconfirm
-                title="确定要删除这个用户吗？"
-                onConfirm={() => handleDelete(record.id)}
-                okText="确定"
-                cancelText="取消"
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDeleteConfirm(record)}
               >
-                <Button
-                  type="link"
-                  size="small"
-                  danger
-                  icon={<DeleteOutlined />}
-                >
-                  删除
-                </Button>
-              </Popconfirm>
+                删除
+              </Button>
             )}
-            
           </Space>
         );
       },
@@ -315,7 +349,7 @@ const UserManagement: React.FC = () => {
     setModalType('add');
     setCurrentUser(null);
     form.resetFields();
-    setIsModalVisible(true);
+    setIsAddDrawerVisible(true);
   };
 
   const handleEdit = (user: User) => {
@@ -326,14 +360,19 @@ const UserManagement: React.FC = () => {
     setModalType('edit');
     setCurrentUser(user);
     form.setFieldsValue(user);
-    setIsModalVisible(true);
+    setIsDrawerVisible(true);
   };
 
-  const handleView = (user: User) => {
-    setModalType('view');
-    setCurrentUser(user);
-    form.setFieldsValue(user);
-    setIsModalVisible(true);
+
+
+  const handleDeleteConfirm = (record: User) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除用户 "${record.name}" 吗？删除后该用户的所有数据将无法恢复。`,
+      onOk: () => {
+        handleDelete(record.id);
+      },
+    });
   };
 
   const handleDelete = (id: string) => {
@@ -387,6 +426,18 @@ const UserManagement: React.FC = () => {
 
   const handleModalCancel = () => {
     setIsModalVisible(false);
+    form.resetFields();
+  };
+
+  const handleDrawerClose = () => {
+    setIsDrawerVisible(false);
+    setCurrentUser(null);
+    form.resetFields();
+  };
+
+  const handleAddDrawerClose = () => {
+    setIsAddDrawerVisible(false);
+    setCurrentUser(null);
     form.resetFields();
   };
 
@@ -467,13 +518,31 @@ const UserManagement: React.FC = () => {
       <Modal
         title={getModalTitle()}
         open={isModalVisible}
-        onOk={handleModalOk}
         onCancel={handleModalCancel}
-        confirmLoading={loading}
         width={600}
-        okText={modalType === 'view' ? '关闭' : '确定'}
-        cancelText="取消"
-        cancelButtonProps={{ style: { display: modalType === 'view' ? 'none' : 'inline-block' } }}
+        footer={
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '8px',
+            padding: '8px 0'
+          }}>
+            {modalType === 'view' ? (
+              <Button onClick={handleModalCancel}>
+                关闭
+              </Button>
+            ) : (
+              <>
+                <Button type="primary" onClick={handleModalOk} loading={loading}>
+                  确定
+                </Button>
+                <Button onClick={handleModalCancel}>
+                  取消
+                </Button>
+              </>
+            )}
+          </div>
+        }
       >
         <Form
           form={form}
@@ -548,6 +617,239 @@ const UserManagement: React.FC = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      <Drawer
+        title="编辑用户"
+        placement="right"
+        onClose={handleDrawerClose}
+        open={isDrawerVisible}
+        width={isMobile ? '100%' : 600}
+        destroyOnClose
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          style={{ paddingBottom: '80px' }}
+          onFinish={async (values: Partial<User>) => {
+            try {
+              setLoading(true);
+              if (currentUser) {
+                const updatedUsers = users.map((user) =>
+                  user.id === currentUser.id ? { ...user, ...values } : user
+                );
+                setUsers(updatedUsers);
+                message.success('更新成功');
+              }
+              setIsDrawerVisible(false);
+              form.resetFields();
+            } catch (error) {
+              console.error('更新失败:', error);
+            } finally {
+              setLoading(false);
+            }
+          }}
+        >
+          <Form.Item
+            label="用户名"
+            name="username"
+            rules={[
+              { required: true, message: '请输入用户名' },
+              { min: 3, message: '用户名至少3个字符' },
+              { pattern: /^[a-zA-Z0-9_]+$/, message: '用户名只能包含字母、数字和下划线' },
+            ]}
+          >
+            <Input placeholder="请输入用户名" disabled />
+          </Form.Item>
+
+          <Form.Item
+            label="姓名"
+            name="name"
+            rules={[{ required: true, message: '请输入姓名' }]}
+          >
+            <Input placeholder="请输入姓名" />
+          </Form.Item>
+
+          <Form.Item
+            label="手机号"
+            name="phone"
+            rules={[
+              { required: true, message: '请输入手机号' },
+              { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' },
+            ]}
+          >
+            <Input placeholder="请输入手机号" />
+          </Form.Item>
+
+          <Form.Item
+            label="角色"
+            name="role"
+            rules={[{ required: true, message: '请选择角色' }]}
+          >
+            <Select placeholder="请选择角色">
+              <Select.Option value="超级管理员">超级管理员</Select.Option>
+              <Select.Option value="管理员">管理员</Select.Option>
+              <Select.Option value="编辑员">编辑员</Select.Option>
+              <Select.Option value="普通用户">普通用户</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="状态"
+            name="status"
+            rules={[{ required: true, message: '请选择状态' }]}
+          >
+            <Select placeholder="请选择状态">
+              <Select.Option value="active">正常</Select.Option>
+              <Select.Option value="inactive">禁用</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <div style={{ 
+            position: 'absolute', 
+            bottom: 0, 
+            left: 0, 
+            right: 0, 
+            padding: '16px 24px', 
+            borderTop: '1px solid #f0f0f0', 
+            background: '#fff',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '8px'
+          }}>
+            <Button type="primary" htmlType="submit" loading={loading}>
+              保存
+            </Button>
+            <Button onClick={handleDrawerClose}>
+              取消
+            </Button>
+          </div>
+        </Form>
+      </Drawer>
+
+      {/* 新增用户抽屉 */}
+      <Drawer
+        title="新增用户"
+        placement="right"
+        onClose={handleAddDrawerClose}
+        open={isAddDrawerVisible}
+        width={isMobile ? '100%' : 600}
+        destroyOnClose
+      >
+        <Form
+          form={form}
+          layout="vertical"
+          style={{ paddingBottom: '80px' }}
+          onFinish={async (values: Partial<User>) => {
+            try {
+              setLoading(true);
+              // 如果密码为空，设置默认密码
+              const password = values.password || '123456';
+              const newUser: User = {
+                ...values,
+                password,
+                id: Date.now().toString(),
+                createTime: new Date().toLocaleString('zh-CN'),
+                lastLoginTime: '-',
+              } as User;
+              setUsers([...users, newUser]);
+              message.success('添加成功');
+              setIsAddDrawerVisible(false);
+              form.resetFields();
+            } catch (error) {
+              console.error('添加失败:', error);
+            } finally {
+              setLoading(false);
+            }
+          }}
+        >
+          <Form.Item
+            label="用户名"
+            name="username"
+            rules={[
+              { required: true, message: '请输入用户名' },
+              { min: 3, message: '用户名至少3个字符' },
+              { pattern: /^[a-zA-Z0-9_]+$/, message: '用户名只能包含字母、数字和下划线' },
+            ]}
+          >
+            <Input placeholder="请输入用户名" />
+          </Form.Item>
+
+          <Form.Item
+            label="姓名"
+            name="name"
+            rules={[{ required: true, message: '请输入姓名' }]}
+          >
+            <Input placeholder="请输入姓名" />
+          </Form.Item>
+
+          <Form.Item
+            label="密码"
+            name="password"
+            rules={[
+              { min: 6, message: '密码至少6个字符' },
+              { max: 6, message: '密码最多6个字符' },
+              { pattern: /^[^\s\u4e00-\u9fa5]*$/, message: '密码不支持空格和中文' },
+            ]}
+          >
+            <Input.Password placeholder="请输入密码（不填写默认为123456）" />
+          </Form.Item>
+
+          <Form.Item
+            label="手机号"
+            name="phone"
+            rules={[
+              { required: true, message: '请输入手机号' },
+              { pattern: /^1[3-9]\d{9}$/, message: '请输入有效的手机号' },
+            ]}
+          >
+            <Input placeholder="请输入手机号" />
+          </Form.Item>
+
+          <Form.Item
+            label="角色"
+            name="role"
+            rules={[{ required: true, message: '请选择角色' }]}
+          >
+            <Select placeholder="请选择角色">
+              <Select.Option value="超级管理员">超级管理员</Select.Option>
+              <Select.Option value="管理员">管理员</Select.Option>
+              <Select.Option value="编辑员">编辑员</Select.Option>
+              <Select.Option value="普通用户">普通用户</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="状态"
+            name="status"
+            rules={[{ required: true, message: '请选择状态' }]}
+          >
+            <Select placeholder="请选择状态">
+              <Select.Option value="active">正常</Select.Option>
+              <Select.Option value="inactive">禁用</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <div style={{ 
+            position: 'absolute', 
+            bottom: 0, 
+            left: 0, 
+            right: 0, 
+            padding: '16px 24px', 
+            borderTop: '1px solid #f0f0f0', 
+            background: '#fff',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '8px'
+          }}>
+            <Button type="primary" htmlType="submit" loading={loading}>
+              保存
+            </Button>
+            <Button onClick={handleAddDrawerClose}>
+              取消
+            </Button>
+          </div>
+        </Form>
+      </Drawer>
     </div>
   );
 };

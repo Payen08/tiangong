@@ -14,6 +14,8 @@ import {
   Select,
   Row,
   Col,
+  Drawer,
+  Tooltip,
 } from 'antd';
 import {
   PlusOutlined,
@@ -40,12 +42,13 @@ interface Role {
 const RoleManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [isPermissionModalVisible, setIsPermissionModalVisible] = useState(false);
-  const [modalType, setModalType] = useState<'add' | 'edit' | 'view'>('add');
+  const [isPermissionDrawerVisible, setIsPermissionDrawerVisible] = useState(false);
+  const [isAddDrawerVisible, setIsAddDrawerVisible] = useState(false);
+  const [isEditDrawerVisible, setIsEditDrawerVisible] = useState(false);
   const [currentRole, setCurrentRole] = useState<Role | null>(null);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
-  const [form] = Form.useForm();
+  const [addForm] = Form.useForm();
+  const [editForm] = Form.useForm();
   
   // 屏幕尺寸检测
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -173,20 +176,25 @@ const RoleManagement: React.FC = () => {
       key: 'roleInfo',
       render: (_: any, record: Role) => (
         <div>
-          <div style={{ fontWeight: 'bold' }}>{record.name}</div>
+          <div style={{ fontWeight: 'bold' }}>
+            <Button
+              type="link"
+              style={{ color: '#1890ff', padding: 0, height: 'auto', fontWeight: 'bold' }}
+              onClick={() => handleEdit(record)}
+            >
+              {record.name}
+            </Button>
+          </div>
           <div style={{ fontSize: '12px', color: '#666' }}>
             <Tag color="blue" size="small">{record.code}</Tag>
-          </div>
-          <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-            {record.description}
           </div>
           <div style={{ marginTop: '4px' }}>
             <Tag color={record.status === 'active' ? 'success' : 'error'} size="small">
               {record.status === 'active' ? '启用' : '禁用'}
             </Tag>
-            <Tag color={record.userCount > 0 ? 'green' : 'default'} size="small">
+            <span style={{ color: '#1890ff', fontWeight: 500, marginLeft: '8px' }}>
               {record.userCount}人
-            </Tag>
+            </span>
           </div>
         </div>
       ),
@@ -194,27 +202,34 @@ const RoleManagement: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 100,
-      render: (_: any, record: Role) => (
-        <Space direction="vertical" size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleView(record)}
-          >
-            查看
-          </Button>
-          <Button
-            type="link"
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-        </Space>
-      ),
+      width: 70,
+      align: 'right',
+      render: (_: any, record: Role) => {
+        const isSuperAdmin = record.code === 'super_admin';
+        return (
+          <Space direction="vertical" size="small">
+            <Button
+              type="link"
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+            >
+              编辑
+            </Button>
+            {!isSuperAdmin && (
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDeleteConfirm(record)}
+              >
+                删除
+              </Button>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 
@@ -224,8 +239,18 @@ const RoleManagement: React.FC = () => {
       title: '角色名称',
       dataIndex: 'name',
       key: 'name',
-      width: getColumnWidth(150),
+      width: 150,
+      fixed: 'left',
       sorter: (a: Role, b: Role) => a.name.localeCompare(b.name),
+      render: (name: string, record: Role) => (
+        <Button
+          type="link"
+          style={{ color: '#1890ff', padding: 0, height: 'auto', fontWeight: 'normal' }}
+          onClick={() => handleEdit(record)}
+        >
+          {name}
+        </Button>
+      ),
     },
     {
       title: '角色编码',
@@ -235,19 +260,13 @@ const RoleManagement: React.FC = () => {
       render: (code: string) => <Tag color="blue">{code}</Tag>,
     },
     {
-      title: '描述',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-    },
-    {
       title: '用户数量',
       dataIndex: 'userCount',
       key: 'userCount',
       width: getColumnWidth(100),
       sorter: (a: Role, b: Role) => a.userCount - b.userCount,
       render: (count: number) => (
-        <Tag color={count > 0 ? 'green' : 'default'}>{count}</Tag>
+        <span style={{ color: '#1890ff', fontWeight: 500 }}>{count}</span>
       ),
     },
     {
@@ -266,23 +285,31 @@ const RoleManagement: React.FC = () => {
       dataIndex: 'createTime',
       key: 'createTime',
       width: getColumnWidth(160),
+      align: 'left',
+      ellipsis: true,
       sorter: (a: Role, b: Role) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime(),
+      render: (time: string) => {
+        const date = new Date(time);
+        const dateStr = date.toLocaleDateString('zh-CN');
+        const timeStr = date.toLocaleTimeString('zh-CN', { hour12: false });
+        return (
+          <Tooltip title={time}>
+            <div style={{ lineHeight: '1.2' }}>
+              <div style={{ fontSize: '13px', fontWeight: 500 }}>{dateStr}</div>
+              <div style={{ fontSize: '12px', color: '#666' }}>{timeStr}</div>
+            </div>
+          </Tooltip>
+        );
+      },
     },
     {
       title: '操作',
       key: 'action',
-      width: getColumnWidth(220),
+      width: 150,
       fixed: 'right',
+      align: 'right',
       render: (_: any, record: Role) => (
         <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleView(record)}
-          >
-            查看
-          </Button>
           <Button
             type="link"
             size="small"
@@ -299,23 +326,17 @@ const RoleManagement: React.FC = () => {
           >
             编辑
           </Button>
-          <Popconfirm
-            title="确定要删除这个角色吗？"
-            description="删除后该角色下的用户将失去相应权限"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
-          >
+          {record.code !== 'super_admin' && (
             <Button
               type="link"
               size="small"
               danger
               icon={<DeleteOutlined />}
-              disabled={record.code === 'super_admin'}
+              onClick={() => handleDeleteConfirm(record)}
             >
               删除
             </Button>
-          </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -329,30 +350,43 @@ const RoleManagement: React.FC = () => {
   );
 
   const handleAdd = () => {
-    setModalType('add');
     setCurrentRole(null);
-    form.resetFields();
-    setIsModalVisible(true);
+    addForm.resetFields();
+    setIsAddDrawerVisible(true);
   };
 
   const handleEdit = (role: Role) => {
-    setModalType('edit');
     setCurrentRole(role);
-    form.setFieldsValue(role);
-    setIsModalVisible(true);
+    editForm.setFieldsValue(role);
+    setIsEditDrawerVisible(true);
   };
 
-  const handleView = (role: Role) => {
-    setModalType('view');
-    setCurrentRole(role);
-    form.setFieldsValue(role);
-    setIsModalVisible(true);
+  const handleAddDrawerClose = () => {
+    setIsAddDrawerVisible(false);
+    setCurrentRole(null);
+    addForm.resetFields();
+  };
+
+  const handleEditDrawerClose = () => {
+    setIsEditDrawerVisible(false);
+    setCurrentRole(null);
+    editForm.resetFields();
   };
 
   const handlePermission = (role: Role) => {
     setCurrentRole(role);
     setSelectedPermissions(role.permissions);
-    setIsPermissionModalVisible(true);
+    setIsPermissionDrawerVisible(true);
+  };
+
+  const handleDeleteConfirm = (record: Role) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除角色 "${record.name}" 吗？删除后该角色下的用户将失去相应权限。`,
+      onOk: () => {
+        handleDelete(record.id);
+      },
+    });
   };
 
   const handleDelete = (id: string) => {
@@ -360,36 +394,41 @@ const RoleManagement: React.FC = () => {
     message.success('删除成功');
   };
 
-  const handleModalOk = async () => {
-    if (modalType === 'view') {
-      setIsModalVisible(false);
-      return;
-    }
-
+  const handleAddSubmit = async () => {
     try {
-      const values = await form.validateFields();
+      const values = await addForm.validateFields();
       setLoading(true);
 
-      if (modalType === 'add') {
-        const newRole: Role = {
-          ...values,
-          id: Date.now().toString(),
-          permissions: [],
-          userCount: 0,
-          createTime: new Date().toLocaleString('zh-CN'),
-        };
-        setRoles([...roles, newRole]);
-        message.success('添加成功');
-      } else if (modalType === 'edit' && currentRole) {
+      const newRole: Role = {
+        ...values,
+        id: Date.now().toString(),
+        permissions: [],
+        userCount: 0,
+        createTime: new Date().toLocaleString('zh-CN'),
+      };
+      setRoles([...roles, newRole]);
+      message.success('添加成功');
+      handleAddDrawerClose();
+    } catch (error) {
+      console.error('表单验证失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditSubmit = async () => {
+    try {
+      const values = await editForm.validateFields();
+      setLoading(true);
+
+      if (currentRole) {
         const updatedRoles = roles.map((role) =>
           role.id === currentRole.id ? { ...role, ...values } : role
         );
         setRoles(updatedRoles);
         message.success('更新成功');
+        handleEditDrawerClose();
       }
-
-      setIsModalVisible(false);
-      form.resetFields();
     } catch (error) {
       console.error('表单验证失败:', error);
     } finally {
@@ -407,25 +446,17 @@ const RoleManagement: React.FC = () => {
       setRoles(updatedRoles);
       message.success('权限更新成功');
     }
-    setIsPermissionModalVisible(false);
-  };
-
-  const handleModalCancel = () => {
-    setIsModalVisible(false);
-    form.resetFields();
+    setIsPermissionDrawerVisible(false);
   };
 
   const handlePermissionCancel = () => {
-    setIsPermissionModalVisible(false);
+    setIsPermissionDrawerVisible(false);
   };
 
-  const getModalTitle = () => {
-    const titleMap = {
-      add: '新增角色',
-      edit: '编辑角色',
-      view: '查看角色',
-    };
-    return titleMap[modalType];
+  const handlePermissionDrawerClose = () => {
+    setIsPermissionDrawerVisible(false);
+    setCurrentRole(null);
+    setSelectedPermissions([]);
   };
 
   return (
@@ -493,22 +524,20 @@ const RoleManagement: React.FC = () => {
         />
       </Card>
 
-      {/* 角色信息模态框 */}
-      <Modal
-        title={getModalTitle()}
-        open={isModalVisible}
-        onOk={handleModalOk}
-        onCancel={handleModalCancel}
-        confirmLoading={loading}
-        width={600}
-        okText={modalType === 'view' ? '关闭' : '确定'}
-        cancelText="取消"
-        cancelButtonProps={{ style: { display: modalType === 'view' ? 'none' : 'inline-block' } }}
+      {/* 新增角色抽屉 */}
+      <Drawer
+        title="新增角色"
+        placement="right"
+        width={isMobile ? '100%' : 600}
+        onClose={handleAddDrawerClose}
+        open={isAddDrawerVisible}
+        footer={null}
       >
         <Form
-          form={form}
+          form={addForm}
           layout="vertical"
-          disabled={modalType === 'view'}
+          onFinish={handleAddSubmit}
+          style={{ paddingBottom: '80px' }}
         >
           <Form.Item
             label="角色名称"
@@ -556,20 +585,136 @@ const RoleManagement: React.FC = () => {
             </Select>
           </Form.Item>
         </Form>
-      </Modal>
+        
+        {/* 底部固定按钮 */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: '16px 24px',
+            background: '#fff',
+            borderTop: '1px solid #f0f0f0',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '12px'
+          }}
+        >
+          <Button onClick={handleAddDrawerClose}>
+            取消
+          </Button>
+          <Button 
+            type="primary" 
+            loading={loading}
+            onClick={handleAddSubmit}
+          >
+            保存
+          </Button>
+        </div>
+      </Drawer>
 
-      {/* 权限配置模态框 */}
-      <Modal
-        title={`配置权限 - ${currentRole?.name}`}
-        open={isPermissionModalVisible}
-        onOk={handlePermissionOk}
-        onCancel={handlePermissionCancel}
-        width={600}
-        okText="确定"
-        cancelText="取消"
+      {/* 编辑角色抽屉 */}
+      <Drawer
+        title="编辑角色"
+        placement="right"
+        width={isMobile ? '100%' : 600}
+        onClose={handleEditDrawerClose}
+        open={isEditDrawerVisible}
+        footer={null}
       >
-        <div className="mb-4">
-          <p className="text-gray-600 mb-2">请选择该角色拥有的权限：</p>
+        <Form
+          form={editForm}
+          layout="vertical"
+          onFinish={handleEditSubmit}
+          style={{ paddingBottom: '80px' }}
+        >
+          <Form.Item
+            label="角色名称"
+            name="name"
+            rules={[
+              { required: true, message: '请输入角色名称' },
+              { min: 2, message: '角色名称至少2个字符' },
+            ]}
+          >
+            <Input placeholder="请输入角色名称" />
+          </Form.Item>
+
+          <Form.Item
+            label="角色编码"
+            name="code"
+            rules={[
+              { required: true, message: '请输入角色编码' },
+              { pattern: /^[a-zA-Z0-9_]+$/, message: '角色编码只能包含字母、数字和下划线' },
+            ]}
+          >
+            <Input placeholder="请输入角色编码" />
+          </Form.Item>
+
+          <Form.Item
+            label="描述"
+            name="description"
+            rules={[{ required: true, message: '请输入角色描述' }]}
+          >
+            <Input.TextArea
+              placeholder="请输入角色描述"
+              rows={3}
+              maxLength={200}
+              showCount
+            />
+          </Form.Item>
+
+          <Form.Item
+            label="状态"
+            name="status"
+            rules={[{ required: true, message: '请选择状态' }]}
+          >
+            <Select placeholder="请选择状态">
+              <Select.Option value="active">启用</Select.Option>
+              <Select.Option value="inactive">禁用</Select.Option>
+            </Select>
+          </Form.Item>
+        </Form>
+        
+        {/* 底部固定按钮 */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: '16px 24px',
+            background: '#fff',
+            borderTop: '1px solid #f0f0f0',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '12px'
+          }}
+        >
+          <Button onClick={handleEditDrawerClose}>
+            取消
+          </Button>
+          <Button 
+            type="primary" 
+            loading={loading}
+            onClick={handleEditSubmit}
+          >
+            保存
+          </Button>
+        </div>
+      </Drawer>
+
+      {/* 权限配置抽屉 */}
+      <Drawer
+        title={`配置权限 - ${currentRole?.name}`}
+        placement="right"
+        width={isMobile ? '100%' : 600}
+        onClose={handlePermissionDrawerClose}
+        open={isPermissionDrawerVisible}
+        footer={null}
+      >
+        <div style={{ paddingBottom: '80px' }}>
+          <p style={{ color: '#666', marginBottom: '16px' }}>请选择该角色拥有的权限：</p>
           <Tree
             checkable
             checkedKeys={selectedPermissions}
@@ -580,7 +725,34 @@ const RoleManagement: React.FC = () => {
             defaultExpandAll
           />
         </div>
-      </Modal>
+        
+        {/* 底部固定按钮 */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: '16px 24px',
+            background: '#fff',
+            borderTop: '1px solid #f0f0f0',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '12px'
+          }}
+        >
+          <Button onClick={handlePermissionDrawerClose}>
+            取消
+          </Button>
+          <Button 
+            type="primary" 
+            loading={loading}
+            onClick={handlePermissionOk}
+          >
+            保存
+          </Button>
+        </div>
+      </Drawer>
     </div>
   );
 };

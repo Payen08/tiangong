@@ -5,6 +5,8 @@ import Home from '@/pages/Home';
 import UserManagement from '@/pages/SystemManagement/UserManagement';
 import RoleManagement from '@/pages/SystemManagement/RoleManagement';
 import PermissionManagement from '@/pages/SystemManagement/PermissionManagement';
+import SystemLogs from '@/pages/SystemManagement/SystemLogs';
+import SystemUpgrade from '@/pages/SystemManagement/SystemUpgrade';
 import ProductManagement from '@/pages/ProductManagement/index';
 import AddProduct from '@/pages/ProductManagement/AddProduct';
 import DeviceManagement from '@/pages/DeviceManagement/index';
@@ -126,6 +128,19 @@ export const router = createBrowserRouter([
           {
             path: 'permissions',
             element: <PermissionManagement />,
+          },
+        ],
+      },
+      {
+        path: 'admin',
+        children: [
+          {
+            path: 'logs',
+            element: <SystemLogs />,
+          },
+          {
+            path: 'upgrade',
+            element: <SystemUpgrade />,
           },
         ],
       },

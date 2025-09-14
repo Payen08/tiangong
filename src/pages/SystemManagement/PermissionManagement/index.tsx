@@ -6,21 +6,21 @@ import {
   Input,
   Space,
   Tag,
-  Modal,
+  Drawer,
   Form,
   Select,
   message,
-  Popconfirm,
+  Modal,
   TreeSelect,
   Row,
   Col,
+  Tooltip,
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
   DeleteOutlined,
   SearchOutlined,
-  EyeOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -40,8 +40,8 @@ interface Permission {
 const PermissionManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [modalType, setModalType] = useState<'add' | 'edit' | 'view'>('add');
+  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [drawerType, setDrawerType] = useState<'add' | 'edit'>('add');
   const [currentPermission, setCurrentPermission] = useState<Permission | null>(null);
   const [form] = Form.useForm();
   
@@ -235,9 +235,7 @@ const PermissionManagement: React.FC = () => {
               {record.type === 'menu' ? '菜单' : record.type === 'button' ? '按钮' : 'API'}
             </Tag>
           </div>
-          <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
-            {record.description}
-          </div>
+
           <div style={{ marginTop: '4px' }}>
             <Tag color={record.status === 'active' ? 'success' : 'error'} size="small">
               {record.status === 'active' ? '启用' : '禁用'}
@@ -249,17 +247,10 @@ const PermissionManagement: React.FC = () => {
     {
       title: '操作',
       key: 'action',
-      width: 100,
+      width: 80,
+      align: 'right',
       render: (_: any, record: Permission & { level: number }) => (
         <Space direction="vertical" size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleView(record)}
-          >
-            查看
-          </Button>
           <Button
             type="link"
             size="small"
@@ -280,6 +271,7 @@ const PermissionManagement: React.FC = () => {
       dataIndex: 'name',
       key: 'name',
       width: getColumnWidth(250),
+      fixed: 'left',
       render: (name: string, record: Permission & { level: number }) => (
         <span style={{ paddingLeft: record.level * 20 }}>
           {name}
@@ -315,12 +307,7 @@ const PermissionManagement: React.FC = () => {
       width: getColumnWidth(200),
       render: (path: string) => path || '-',
     },
-    {
-      title: '描述',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-    },
+
     {
       title: '状态',
       dataIndex: 'status',
@@ -337,22 +324,31 @@ const PermissionManagement: React.FC = () => {
       dataIndex: 'createTime',
       key: 'createTime',
       width: getColumnWidth(160),
+      align: 'left',
+      ellipsis: true,
+      sorter: (a: Permission & { level: number }, b: Permission & { level: number }) => new Date(a.createTime).getTime() - new Date(b.createTime).getTime(),
+      render: (time: string) => {
+        const date = new Date(time);
+        const dateStr = date.toLocaleDateString('zh-CN');
+        const timeStr = date.toLocaleTimeString('zh-CN', { hour12: false });
+        return (
+          <Tooltip title={time}>
+            <div style={{ lineHeight: '1.2' }}>
+              <div style={{ fontSize: '13px', fontWeight: 500 }}>{dateStr}</div>
+              <div style={{ fontSize: '12px', color: '#666' }}>{timeStr}</div>
+            </div>
+          </Tooltip>
+        );
+      },
     },
     {
       title: '操作',
       key: 'action',
-      width: getColumnWidth(180),
+      width: getColumnWidth(120),
       fixed: 'right',
+      align: 'right',
       render: (_: any, record: Permission & { level: number }) => (
         <Space size="small">
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => handleView(record)}
-          >
-            查看
-          </Button>
           <Button
             type="link"
             size="small"
@@ -361,22 +357,15 @@ const PermissionManagement: React.FC = () => {
           >
             编辑
           </Button>
-          <Popconfirm
-            title="确定要删除这个权限吗？"
-            description="删除后子权限也会被删除"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确定"
-            cancelText="取消"
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDeleteConfirm(record)}
           >
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-            >
-              删除
-            </Button>
-          </Popconfirm>
+            删除
+          </Button>
         </Space>
       ),
     },
@@ -391,24 +380,28 @@ const PermissionManagement: React.FC = () => {
   );
 
   const handleAdd = () => {
-    setModalType('add');
+    setDrawerType('add');
     setCurrentPermission(null);
     form.resetFields();
-    setIsModalVisible(true);
+    setIsDrawerVisible(true);
   };
 
   const handleEdit = (permission: Permission) => {
-    setModalType('edit');
+    setDrawerType('edit');
     setCurrentPermission(permission);
     form.setFieldsValue(permission);
-    setIsModalVisible(true);
+    setIsDrawerVisible(true);
   };
 
-  const handleView = (permission: Permission) => {
-    setModalType('view');
-    setCurrentPermission(permission);
-    form.setFieldsValue(permission);
-    setIsModalVisible(true);
+  const handleDeleteConfirm = (permission: Permission) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除权限 "${permission.name}" 吗？删除后子权限也会被删除，此操作不可恢复。`,
+      okText: '确定',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: () => handleDelete(permission.id),
+    });
   };
 
   const handleDelete = (id: string) => {
@@ -429,17 +422,12 @@ const PermissionManagement: React.FC = () => {
     message.success('删除成功');
   };
 
-  const handleModalOk = async () => {
-    if (modalType === 'view') {
-      setIsModalVisible(false);
-      return;
-    }
-
+  const handleDrawerOk = async () => {
     try {
       const values = await form.validateFields();
       setLoading(true);
 
-      if (modalType === 'add') {
+      if (drawerType === 'add') {
         const newPermission: Permission = {
           ...values,
           id: Date.now().toString(),
@@ -471,7 +459,7 @@ const PermissionManagement: React.FC = () => {
           setPermissions([...permissions, newPermission]);
         }
         message.success('添加成功');
-      } else if (modalType === 'edit' && currentPermission) {
+      } else if (drawerType === 'edit' && currentPermission) {
         // 更新权限
         const updatePermission = (perms: Permission[]): Permission[] => {
           return perms.map((perm) => {
@@ -491,7 +479,7 @@ const PermissionManagement: React.FC = () => {
         message.success('更新成功');
       }
 
-      setIsModalVisible(false);
+      setIsDrawerVisible(false);
       form.resetFields();
     } catch (error) {
       console.error('表单验证失败:', error);
@@ -500,18 +488,20 @@ const PermissionManagement: React.FC = () => {
     }
   };
 
-  const handleModalCancel = () => {
-    setIsModalVisible(false);
+  const handleDrawerCancel = () => {
+    setIsDrawerVisible(false);
     form.resetFields();
   };
 
-  const getModalTitle = () => {
-    const titleMap = {
-      add: '新增权限',
-      edit: '编辑权限',
-      view: '查看权限',
-    };
-    return titleMap[modalType];
+  const getDrawerTitle = () => {
+    switch (drawerType) {
+      case 'add':
+        return '新增权限';
+      case 'edit':
+        return '编辑权限';
+      default:
+        return '权限管理';
+    }
   };
 
   return (
@@ -578,22 +568,19 @@ const PermissionManagement: React.FC = () => {
         />
       </Card>
 
-      <Modal
-        title={getModalTitle()}
-        open={isModalVisible}
-        onOk={handleModalOk}
-        onCancel={handleModalCancel}
-        confirmLoading={loading}
-        width={600}
-        okText={modalType === 'view' ? '关闭' : '确定'}
-        cancelText="取消"
-        cancelButtonProps={{ style: { display: modalType === 'view' ? 'none' : 'inline-block' } }}
+      <Drawer
+        title={getDrawerTitle()}
+        placement="right"
+        width={isMobile ? '100%' : 600}
+        onClose={handleDrawerCancel}
+        open={isDrawerVisible}
+        footer={null}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          disabled={modalType === 'view'}
-        >
+        <div style={{ paddingBottom: '80px' }}>
+          <Form
+            form={form}
+            layout="vertical"
+          >
           <Form.Item
             label="权限名称"
             name="name"
@@ -673,7 +660,35 @@ const PermissionManagement: React.FC = () => {
             </Select>
           </Form.Item>
         </Form>
-      </Modal>
+        </div>
+        
+        {/* 底部固定按钮 */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            padding: '16px 24px',
+            borderTop: '1px solid #f0f0f0',
+            backgroundColor: '#fff',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '12px'
+          }}
+        >
+          <Button onClick={handleDrawerCancel}>
+            取消
+          </Button>
+          <Button 
+            type="primary" 
+            onClick={handleDrawerOk}
+            loading={loading}
+          >
+            确定
+          </Button>
+        </div>
+      </Drawer>
     </div>
   );
 };

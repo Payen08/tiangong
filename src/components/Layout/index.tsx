@@ -22,6 +22,8 @@ import {
   FileTextOutlined,
   ThunderboltOutlined,
   PartitionOutlined,
+  AuditOutlined,
+  CloudUploadOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useAppStore } from '@/store';
@@ -150,7 +152,7 @@ const Layout: React.FC = () => {
     {
       key: 'system',
       icon: <UserOutlined />,
-      label: '系统管理',
+      label: '用户权限',
       children: [
         {
           key: '/system/users',
@@ -166,6 +168,23 @@ const Layout: React.FC = () => {
           key: '/system/permissions',
           icon: <SafetyOutlined />,
           label: '权限管理',
+        },
+      ],
+    },
+    {
+      key: 'admin',
+      icon: <SettingOutlined />,
+      label: '系统管理',
+      children: [
+        {
+          key: '/admin/logs',
+          icon: <AuditOutlined />,
+          label: '系统日志',
+        },
+        {
+          key: '/admin/upgrade',
+          icon: <CloudUploadOutlined />,
+          label: '系统升级',
         },
       ],
     },
