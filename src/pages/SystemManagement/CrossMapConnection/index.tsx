@@ -311,7 +311,7 @@ const CrossMapConnectionManagement: React.FC = () => {
   };
 
   const handleSave = (connectionData: any) => {
-    console.log('接收到的连接数据:', connectionData);
+    
     
     // 映射字段名称
     const mappedData = {

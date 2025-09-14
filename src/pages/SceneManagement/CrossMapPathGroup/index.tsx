@@ -386,7 +386,7 @@ const CrossMapPathGroupManagement: React.FC = () => {
   };
 
   const handleSave = (pathGroupData: any) => {
-    console.log('接收到的路径组数据:', pathGroupData);
+    
     
     if (editingPathGroup) {
       // 编辑模式

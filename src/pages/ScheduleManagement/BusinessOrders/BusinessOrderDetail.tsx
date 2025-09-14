@@ -241,7 +241,7 @@ const BusinessOrderDetail: React.FC<BusinessOrderDetailProps> = ({
             type="link"
             icon={<EyeOutlined />}
             size="small"
-            onClick={() => console.log('查看任务详情:', record)}
+            onClick={() => {}}
           >
             详情
           </Button>
@@ -249,7 +249,7 @@ const BusinessOrderDetail: React.FC<BusinessOrderDetailProps> = ({
             type="link"
             icon={<BugOutlined />}
             size="small"
-            onClick={() => console.log('诊断任务:', record)}
+            onClick={() => {}}
           >
             诊断
           </Button>

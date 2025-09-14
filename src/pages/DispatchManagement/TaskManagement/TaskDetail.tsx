@@ -5,14 +5,10 @@ import {
   Descriptions,
   Tag,
   Timeline,
-  Row,
-  Col,
   Typography,
   Space,
-  Button,
 } from 'antd';
 import {
-  CloseOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   ExclamationCircleOutlined,
@@ -21,7 +17,7 @@ import {
 import { useResponsive } from '@/hooks/useResponsive';
 import BehaviorTreeCanvas from '@/components/BehaviorTreeCanvas';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 // 运单任务详情数据类型
 interface TaskDetailRecord {
@@ -94,6 +90,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ visible, onClose, taskData }) =
   ];
 
   // 模拟行为树数据 - 按用户需求重新设计结构
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const behaviorTreeData: BehaviorTreeNode = {
     id: 'root',
     title: '树根',
@@ -334,12 +331,12 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ visible, onClose, taskData }) =
                   {
                     id: 'root',
                     label: '树根',
-                    type: 'root',
+                    type: 'start',
                     x: 350,
                     y: 50,
                     width: 120,
                     height: 60,
-                    status: 'success'
+                    behaviorTreeData: { status: 'success' }
                   },
                   {
                     id: 'sequence',
@@ -349,38 +346,38 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ visible, onClose, taskData }) =
                     y: 150,
                     width: 120,
                     height: 60,
-                    status: 'success'
+                    behaviorTreeData: { status: 'success' }
                   },
                   {
                     id: 'move',
                     label: '移动',
-                    type: 'move',
+                    type: 'businessProcess',
                     x: 150,
                     y: 280,
                     width: 120,
                     height: 60,
-                    status: 'success'
+                    behaviorTreeData: { status: 'success' }
                   },
                   {
                     id: 'script',
                     label: '脚本',
-                    type: 'action',
+                    type: 'businessProcess',
                     x: 350,
                     y: 280,
                     width: 120,
                     height: 60,
-                    status: 'failure',
+                    behaviorTreeData: { status: 'failure' },
                     data: { error: '脚本执行失败\n错误代码: SCRIPT_ERROR\n详细信息: 脚本语法错误，第15行缺少分号' }
                   },
                   {
                     id: 'update_attr',
                     label: '更新设备自定义属性',
-                    type: 'action',
+                    type: 'businessProcess',
                     x: 550,
                     y: 280,
                     width: 200,
                     height: 60,
-                    status: 'failure',
+                    behaviorTreeData: { status: 'failure' },
                     data: { error: '属性更新失败\n错误代码: ATTR_UPDATE_ERROR\n详细信息: 设备连接超时，无法更新属性值' }
                   }
                 ]}

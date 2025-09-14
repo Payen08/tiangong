@@ -1,6 +1,6 @@
 import React from 'react';
 import { Breadcrumb as AntBreadcrumb } from 'antd';
-import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined, ClusterOutlined, MonitorOutlined, ControlOutlined, FileTextOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined, ClusterOutlined, MonitorOutlined, ControlOutlined, FileTextOutlined, ThunderboltOutlined, PartitionOutlined } from '@ant-design/icons';
 import { useLocation, Link } from 'react-router-dom';
 
 const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
@@ -25,6 +25,7 @@ const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
   '/schedule': { title: '排程管理', icon: <ScheduleOutlined /> },
   '/schedule/business-process': { title: '业务流程', icon: <ApartmentOutlined /> },
   '/schedule/business-orders': { title: '业务订单', icon: <FileTextOutlined /> },
+  '/schedule/behavior-tree': { title: '行为树管理', icon: <PartitionOutlined /> },
   
 };
 

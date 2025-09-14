@@ -13,7 +13,9 @@ import CrossMapConnectionManagement from '@/pages/SystemManagement/CrossMapConne
 import CrossMapPathGroupManagement from '@/pages/SceneManagement/CrossMapPathGroup/index';
 import BusinessProcess from '@/pages/ScheduleManagement/BusinessProcess';
 import BusinessOrders from '@/pages/ScheduleManagement/BusinessOrders';
-import FieldControlView from '@/pages/FieldControlView';
+import BehaviorTree from '@/pages/ScheduleManagement/BehaviorTree';
+import ActionSequence from '@/pages/ScheduleManagement/ActionSequence';
+
 import TaskManagement from '@/pages/DispatchManagement/TaskManagement';
 import IdleDockingManagement from '@/pages/DispatchManagement/IdleDockingManagement';
 import AutoChargingManagement from '@/pages/DispatchManagement/AutoChargingManagement';
@@ -82,6 +84,14 @@ export const router = createBrowserRouter([
           {
             path: 'business-orders',
             element: <BusinessOrders />,
+          },
+          {
+            path: 'behavior-tree',
+            element: <BehaviorTree />,
+          },
+          {
+            path: 'action-sequence',
+            element: <ActionSequence />,
           },
         ],
       },

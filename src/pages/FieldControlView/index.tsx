@@ -231,6 +231,73 @@ const FieldControlView: React.FC = () => {
   // 暂停的机器人列表
   const [pausedRobots, setPausedRobots] = useState<Set<string>>(new Set());
   
+
+  
+  // 选中状态管理
+  const [selectedLines, setSelectedLines] = useState<string[]>([]);
+  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  
+
+  
+  // 获取所有机器人（使用robotsState以确保显示正确的状态和位置）
+  
+  // 获取地图名称的辅助函数
+  const getMapName = (mapId: string) => {
+    const map = mockMaps.find(m => m.id === mapId);
+    return map ? map.name : mapId;
+  };
+
+  // 处理机器人点击
+  const handleRobotClick = (robot: Robot) => {
+    setSelectedRobot(robot.id);
+    centerOnRobot(robot.id);
+  };
+  
+  // 居中显示选中的机器人
+  const centerOnRobot = (robotId: string) => {
+    const robot = allRobots.find(r => r.id === robotId);
+    if (!robot || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const canvasWidth = canvas.offsetWidth;
+    const canvasHeight = canvas.offsetHeight;
+
+    // 计算画布中心点
+    const centerX = canvasWidth / 2;
+    const centerY = canvasHeight / 2;
+
+    // 计算需要的偏移量，使机器人位置居中
+    const newOffsetX = centerX - robot.position.x * scale;
+    const newOffsetY = centerY - robot.position.y * scale;
+
+    setOffsetX(newOffsetX);
+    setOffsetY(newOffsetY);
+  };
+  
+  // 属性面板处理函数
+  const handlePropertySave = (data: any) => {
+    // 处理属性保存逻辑
+    setPropertyPanelVisible(false);
+  };
+  
+  const handlePropertyPanelClose = () => {
+    setPropertyPanelVisible(false);
+  };
+  
+  // 示例路径节点数据
+  const pathNodes = [
+    { id: 'p1', x: 80, y: 120, name: 'P1' },
+    { id: 'p2', x: 200, y: 120, name: 'P2' },
+    { id: 'p3', x: 320, y: 120, name: 'P3' },
+    { id: 'p4', x: 440, y: 120, name: 'P4' },
+    { id: 'p5', x: 560, y: 120, name: 'P5' },
+    { id: 'p6', x: 720, y: 200, name: 'P6' },
+    { id: 'p7', x: 600, y: 280, name: 'P7' },
+    { id: 'p8', x: 480, y: 280, name: 'P8' },
+    { id: 'p9', x: 360, y: 280, name: 'P9' },
+    { id: 'p10', x: 240, y: 280, name: 'P10' }
+  ];
+  
   // 根据地图数据动态生成路径点序列
   const getPathSequence = (mapId: string) => {
     if (mapId === 'map1') {
@@ -281,11 +348,6 @@ const FieldControlView: React.FC = () => {
 
   // 获取当前地图的路径点序列
   const pathSequence = getPathSequence(selectedMap);
-  
-  // 选中状态管理
-  const [selectedPoints, setSelectedPoints] = useState<string[]>([]);
-  const [selectedLines, setSelectedLines] = useState<string[]>([]);
-  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
   
   // 属性面板状态管理
   const [propertyPanelVisible, setPropertyPanelVisible] = useState(false);
@@ -640,7 +702,6 @@ const FieldControlView: React.FC = () => {
 
   // 获取当前地图数据
   const currentMapData = getMapData(selectedMap);
-  const pathNodes = currentMapData.nodes;
   const pathLines = currentMapData.lines;
   const mapAreas = currentMapData.areas;
 
@@ -659,7 +720,7 @@ const FieldControlView: React.FC = () => {
       '其他': '#8c8c8c'       // 灰色
     };
     return colorMap[type] || '#8c8c8c';
-  }
+  };
 
   // 选中状态检查函数
 
@@ -743,43 +804,7 @@ const FieldControlView: React.FC = () => {
   const allRobots = robotsState.length > 0 ? robotsState : robots;
   
   // 获取地图名称的辅助函数
-  const getMapName = (mapId: string) => {
-    const map = mockMaps.find(m => m.id === mapId);
-    return map ? map.name : mapId;
-  };
 
-  // 居中显示选中的机器人
-  const centerOnRobot = (robotId: string) => {
-    const robot = allRobots.find(r => r.id === robotId);
-    if (!robot || !canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const canvasWidth = canvas.offsetWidth;
-    const canvasHeight = canvas.offsetHeight;
-
-    // 计算画布中心点
-    const centerX = canvasWidth / 2;
-    const centerY = canvasHeight / 2;
-
-    // 计算需要的偏移量，使机器人位置居中
-    const newOffsetX = centerX - robot.position.x * scale;
-    const newOffsetY = centerY - robot.position.y * scale;
-
-    setOffsetX(newOffsetX);
-    setOffsetY(newOffsetY);
-  };
-  
-  // 处理机器人点击事件
-  const handleRobotClick = (robot: Robot) => {
-    // 如果机器人不在当前地图，先切换地图
-    if (robot.mapId !== selectedMap) {
-      setSelectedMap(robot.mapId);
-    }
-    
-    // 选中机器人并居中显示
-    setSelectedRobot(robot.id);
-    centerOnRobot(robot.id);
-  };
 
   // 当选中机器人改变时，自动居中显示
   useEffect(() => {
@@ -811,10 +836,10 @@ const FieldControlView: React.FC = () => {
         const rect = canvas.getBoundingClientRect();
         const devicePixelRatio = window.devicePixelRatio || 1;
         
-        console.log('Canvas rect:', rect);
+        
         
         if (rect.width === 0 || rect.height === 0) {
-          console.log('Canvas has zero size, skipping update');
+          
           return;
         }
         
@@ -826,12 +851,7 @@ const FieldControlView: React.FC = () => {
         canvas.style.width = rect.width + 'px';
         canvas.style.height = rect.height + 'px';
         
-        console.log('Canvas size updated:', {
-          width: canvas.width,
-          height: canvas.height,
-          displayWidth: rect.width,
-          displayHeight: rect.height
-        });
+
         
         // 缩放Canvas上下文以适应设备像素比
         const ctx = canvas.getContext('2d');
@@ -846,7 +866,7 @@ const FieldControlView: React.FC = () => {
         
         // 立即触发一次绘制，确保Canvas内容显示
          setTimeout(() => {
-           console.log('Immediate redraw after canvas ready');
+           
            setRedrawTrigger(prev => prev + 1);
          }, 10);
       });
@@ -875,11 +895,10 @@ const FieldControlView: React.FC = () => {
     const forceRedraw = () => {
       const canvas = canvasRef.current;
       if (canvas && canvas.offsetWidth > 0 && canvas.offsetHeight > 0) {
-        console.log('Force setting canvas ready');
+        
         setCanvasReady(true);
         // 强制触发一次重绘
         setTimeout(() => {
-          console.log('Force redraw trigger');
           setRedrawTrigger(prev => prev + 1);
         }, 50);
       } else {
@@ -898,13 +917,13 @@ const FieldControlView: React.FC = () => {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) {
-      console.log('Canvas ref is null');
+      
       return;
     }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      console.log('Canvas context is null');
+      
       return;
     }
 
@@ -914,12 +933,12 @@ const FieldControlView: React.FC = () => {
     
     // 如果Canvas尺寸为0或未准备好，不进行绘制
     if (displayWidth === 0 || displayHeight === 0 || !canvasReady) {
-      console.log('Canvas not ready for drawing:', { displayWidth, displayHeight, canvasReady });
+
       return;
     }
     const devicePixelRatio = window.devicePixelRatio || 1;
     
-    console.log('Canvas drawing:', {
+    console.log('Canvas debug info:', {
       displayWidth,
       displayHeight,
       canvasWidth: canvas.width,
@@ -1202,7 +1221,7 @@ const FieldControlView: React.FC = () => {
     // 绘制路径节点（使用新的点类型系统）
     
     pathNodes.forEach(point => {
-      const pointColor = getPointColor(point.type);
+      const pointColor = '#1890ff'; // 默认蓝色
       // 移除选中效果
       const pointSize = 8 / scale; // 统一大小
       
@@ -1213,37 +1232,11 @@ const FieldControlView: React.FC = () => {
       ctx.arc(point.x, point.y, pointSize, 0, 2 * Math.PI);
       ctx.stroke();
       
-      // 绘制点的内部填充（节点类型为透明，其他类型为对应颜色）
-      if (point.type !== '节点') {
-        ctx.fillStyle = pointColor;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, pointSize - 2 / scale, 0, 2 * Math.PI); // 减去描边宽度
-        ctx.fill();
-      }
-      
-      // 绘制方向指示器（节点类型除外）
-      if (point.type !== '节点' && point.direction !== undefined) {
-        const arrowSize = 6 / scale;
-        const arrowDistance = pointSize + 3 / scale;
-        const angle = (point.direction * Math.PI) / 180;
-        
-        // 计算箭头位置
-        const arrowX = point.x + arrowDistance * Math.cos(angle);
-        const arrowY = point.y + arrowDistance * Math.sin(angle);
-        
-        // 绘制箭头
-        ctx.fillStyle = pointColor;
-        ctx.save();
-        ctx.translate(arrowX, arrowY);
-        ctx.rotate(angle);
-        ctx.beginPath();
-        ctx.moveTo(arrowSize, 0);
-        ctx.lineTo(-arrowSize / 2, -arrowSize / 2);
-        ctx.lineTo(-arrowSize / 2, arrowSize / 2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
+      // 绘制点的内部填充
+      ctx.fillStyle = pointColor;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, pointSize - 2 / scale, 0, 2 * Math.PI); // 减去描边宽度
+      ctx.fill();
       
       // 绘制点名称
       ctx.fillStyle = '#000000';
@@ -1931,14 +1924,14 @@ const FieldControlView: React.FC = () => {
       // 切换点的选中状态
       if (event.ctrlKey || event.metaKey) {
         // 多选模式
-        setSelectedPoints(prev => 
+        setSelectedLines(prev => 
           prev.includes(clickedPoint.id) 
             ? prev.filter(id => id !== clickedPoint.id)
             : [...prev, clickedPoint.id]
         );
       } else {
         // 单选模式
-        setSelectedPoints(prev => 
+        setSelectedLines(prev => 
           prev.includes(clickedPoint.id) ? [] : [clickedPoint.id]
         );
         setSelectedLines([]);
@@ -2002,7 +1995,7 @@ const FieldControlView: React.FC = () => {
         setSelectedLines(prev => 
           prev.includes(clickedLine.id) ? [] : [clickedLine.id]
         );
-        setSelectedPoints([]);
+        setSelectedLines([]);
         setSelectedAreas([]);
       }
       setSelectedRobot(null);
@@ -2036,7 +2029,7 @@ const FieldControlView: React.FC = () => {
         setSelectedAreas(prev => 
           prev.includes(clickedArea.id) ? [] : [clickedArea.id]
         );
-        setSelectedPoints([]);
+        setSelectedLines([]);
         setSelectedLines([]);
       }
       setSelectedRobot(null);
@@ -2045,7 +2038,7 @@ const FieldControlView: React.FC = () => {
     
     // 点击空白区域，清除所有选中状态
     setSelectedRobot(null);
-    setSelectedPoints([]);
+    setSelectedLines([]);
     setSelectedLines([]);
     setSelectedAreas([]);
   };
@@ -2193,19 +2186,7 @@ const FieldControlView: React.FC = () => {
     }
   };
   
-  // 处理属性保存
-  const handlePropertySave = (data: any) => {
-    // 根据元素类型更新对应的数据
-    // 注意：这里应该调用实际的API来保存数据
-    console.log('保存属性数据:', data);
-  };
-  
-  // 关闭属性面板
-   const handlePropertyPanelClose = () => {
-     setPropertyPanelVisible(false);
-     setPropertyElementType(null);
-     setPropertyElementData(null);
-   };
+
   
   // 重置画布视图
   const resetView = () => {
@@ -2448,7 +2429,7 @@ const FieldControlView: React.FC = () => {
   };
 
   const handleTaskDiagnose = (taskId: string) => {
-    console.log('诊断任务:', taskId);
+    
     // 这里可以添加实际的诊断任务逻辑，比如打开诊断弹窗
   };
 

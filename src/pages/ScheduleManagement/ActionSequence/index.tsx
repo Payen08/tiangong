@@ -1,13 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AddBusinessProcess from './AddBusinessProcess-original';
-import { 
-  businessProcessData, 
-  type BusinessProcessRecord,
-  addBusinessProcess,
-  updateBusinessProcess,
-  deleteBusinessProcess
-} from '../../../data/businessProcessData';
+import AddActionSequence from './AddActionSequence-original';
+import AddActionSequenceNew from './AddActionSequence';
+import { actionSequenceData, addActionSequence, updateActionSequence, deleteActionSequence, ActionSequenceRecord } from '../../../data/actionSequenceData';
 import {
   Card,
   Table,
@@ -39,18 +34,18 @@ import type { MenuProps } from 'antd';
 const { Option } = Select;
 const { confirm } = Modal;
 
-const BusinessProcess: React.FC = () => {
+const ActionSequence: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<BusinessProcessRecord | null>(null);
+  const [editingRecord, setEditingRecord] = useState<ActionSequenceRecord | null>(null);
   const [isAddDrawerVisible, setIsAddDrawerVisible] = useState(false);
-  const [editingDrawerRecord, setEditingDrawerRecord] = useState<BusinessProcessRecord | null>(null);
-  const [isEditingProcessKey, setIsEditingProcessKey] = useState(false);
-  const [editingProcessKeyRecord, setEditingProcessKeyRecord] = useState<BusinessProcessRecord | null>(null);
-  const [processKeyForm] = Form.useForm();
+  const [editingDrawerRecord, setEditingDrawerRecord] = useState<ActionSequenceRecord | null>(null);
+  const [isEditingSequenceKey, setIsEditingSequenceKey] = useState(false);
+  const [editingSequenceKeyRecord, setEditingSequenceKeyRecord] = useState<ActionSequenceRecord | null>(null);
+  const [sequenceKeyForm] = Form.useForm();
   const [form] = Form.useForm();
 
   // 检测屏幕尺寸
@@ -75,7 +70,7 @@ const BusinessProcess: React.FC = () => {
   };
 
   // 使用共享数据源
-  const [dataSource, setDataSource] = useState<BusinessProcessRecord[]>(businessProcessData);
+  const [dataSource, setDataSource] = useState<ActionSequenceRecord[]>(actionSequenceData);
 
   const getStatusTag = (status: string) => {
     const statusMap = {
@@ -87,7 +82,7 @@ const BusinessProcess: React.FC = () => {
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
-  const handleStatusChange = (record: BusinessProcessRecord, newStatus: string) => {
+  const handleStatusChange = (record: ActionSequenceRecord, newStatus: string) => {
     const statusText = {
       enabled: '启用',
       disabled: '停用',
@@ -97,7 +92,7 @@ const BusinessProcess: React.FC = () => {
     confirm({
       title: `确认${statusText}`,
       icon: <ExclamationCircleOutlined />,
-      content: `确定要${statusText}业务流程"${record.businessName}"吗？`,
+      content: `确定要${statusText}动作序列"${record.sequenceName}"吗？`,
       onOk() {
         const updatedData = {
           status: newStatus as 'enabled' | 'disabled' | 'obsolete',
@@ -115,32 +110,32 @@ const BusinessProcess: React.FC = () => {
         );
         
         // 同步更新共享数据源
-        updateBusinessProcess(record.id, updatedData);
+        updateActionSequence(record.id, updatedData);
         
         message.success(`${statusText}成功`);
       },
     });
   };
 
-  const handleDelete = (record: BusinessProcessRecord) => {
+  const handleDelete = (record: ActionSequenceRecord) => {
     confirm({
       title: '确认删除',
       icon: <ExclamationCircleOutlined />,
-      content: `确定要删除业务流程"${record.businessName}"吗？此操作不可恢复。`,
+      content: `确定要删除动作序列"${record.sequenceName}"吗？此操作不可恢复。`,
       okType: 'danger',
       onOk() {
         // 更新本地状态
         setDataSource(prev => prev.filter(item => item.id !== record.id));
         
         // 同步更新共享数据源
-        deleteBusinessProcess(record.id);
+        deleteActionSequence(record.id);
         
         message.success('删除成功');
       },
     });
   };
 
-  const getMoreMenuItems = (record: BusinessProcessRecord): MenuProps['items'] => {
+  const getMoreMenuItems = (record: ActionSequenceRecord): MenuProps['items'] => {
     const items: MenuProps['items'] = [];
 
     if (record.status === 'enabled') {
@@ -180,37 +175,37 @@ const BusinessProcess: React.FC = () => {
     return items;
   };
 
-  // 处理流程key编辑
-  const handleEditProcessKey = (record: BusinessProcessRecord) => {
-    setEditingProcessKeyRecord(record);
-    processKeyForm.setFieldsValue({ identifier: record.identifier });
-    setIsEditingProcessKey(true);
+  // 处理序列key编辑
+  const handleEditSequenceKey = (record: ActionSequenceRecord) => {
+    setEditingSequenceKeyRecord(record);
+    sequenceKeyForm.setFieldsValue({ identifier: record.identifier });
+    setIsEditingSequenceKey(true);
   };
 
-  const handleProcessKeyModalOk = async () => {
+  const handleSequenceKeyModalOk = async () => {
     try {
-      const values = await processKeyForm.validateFields();
-      const oldKey = editingProcessKeyRecord?.identifier;
+      const values = await sequenceKeyForm.validateFields();
+      const oldKey = editingSequenceKeyRecord?.identifier;
       const newKey = values.identifier;
       
       // 检查是否有实际变更
       if (oldKey === newKey) {
-        message.info('流程key未发生变更');
-        setIsEditingProcessKey(false);
-        setEditingProcessKeyRecord(null);
-        processKeyForm.resetFields();
+        message.info('序列key未发生变更');
+        setIsEditingSequenceKey(false);
+        setEditingSequenceKeyRecord(null);
+        sequenceKeyForm.resetFields();
         return;
       }
       
       // 显示确认对话框
       Modal.confirm({
-        title: '确认修改流程key',
+        title: '确认修改序列key',
         content: (
           <div>
-            <p><strong>业务名称：</strong>{editingProcessKeyRecord?.businessName}</p>
-            <p><strong>原流程key：</strong><code style={{background: '#f5f5f5', padding: '2px 4px'}}>{oldKey}</code></p>
-            <p><strong>新流程key：</strong><code style={{background: '#e6f7ff', padding: '2px 4px'}}>{newKey}</code></p>
-            <p style={{color: '#ff4d4f', marginTop: '12px'}}>⚠️ 修改流程key后，请确保相关系统同步更新配置</p>
+            <p><strong>序列名称：</strong>{editingSequenceKeyRecord?.sequenceName}</p>
+            <p><strong>原序列key：</strong><code style={{background: '#f5f5f5', padding: '2px 4px'}}>{oldKey}</code></p>
+            <p><strong>新序列key：</strong><code style={{background: '#e6f7ff', padding: '2px 4px'}}>{newKey}</code></p>
+            <p style={{color: '#ff4d4f', marginTop: '12px'}}>⚠️ 修改序列key后，请确保相关系统同步更新配置</p>
           </div>
         ),
         onOk: () => {
@@ -218,7 +213,7 @@ const BusinessProcess: React.FC = () => {
           
           // 模拟API调用
           setTimeout(() => {
-            if (editingProcessKeyRecord) {
+            if (editingSequenceKeyRecord) {
               const updatedData = {
                 identifier: newKey,
                 updateTime: new Date().toLocaleString('zh-CN'),
@@ -228,20 +223,20 @@ const BusinessProcess: React.FC = () => {
               // 更新本地状态
               setDataSource(prev =>
                 prev.map(item =>
-                  item.id === editingProcessKeyRecord.id
+                  item.id === editingSequenceKeyRecord.id
                     ? { ...item, ...updatedData }
                     : item
                 )
               );
               
               // 同步更新共享数据源
-              updateBusinessProcess(editingProcessKeyRecord.id, updatedData);
+              updateActionSequence(editingSequenceKeyRecord.id, updatedData);
               
-              message.success('流程key修改成功');
+              message.success('序列key修改成功');
             }
-            setIsEditingProcessKey(false);
-            setEditingProcessKeyRecord(null);
-            processKeyForm.resetFields();
+            setIsEditingSequenceKey(false);
+            setEditingSequenceKeyRecord(null);
+            sequenceKeyForm.resetFields();
             setLoading(false);
           }, 1000);
         },
@@ -251,19 +246,19 @@ const BusinessProcess: React.FC = () => {
     }
   };
 
-  const handleProcessKeyModalCancel = () => {
-    setIsEditingProcessKey(false);
-    setEditingProcessKeyRecord(null);
-    processKeyForm.resetFields();
+  const handleSequenceKeyModalCancel = () => {
+    setIsEditingSequenceKey(false);
+    setEditingSequenceKeyRecord(null);
+    sequenceKeyForm.resetFields();
   };
 
   // 移动端列配置
-  const mobileColumns: ColumnsType<BusinessProcessRecord> = [
+  const mobileColumns: ColumnsType<ActionSequenceRecord> = [
     {
-      title: '业务流程信息',
-      key: 'processInfo',
+      title: '动作序列信息',
+      key: 'sequenceInfo',
       fixed: 'left',
-      render: (_: any, record: BusinessProcessRecord) => (
+      render: (_: any, record: ActionSequenceRecord) => (
         <div style={{ padding: '8px 0' }}>
           <div style={{ marginBottom: '4px' }}>
             <span 
@@ -273,11 +268,11 @@ const BusinessProcess: React.FC = () => {
                 fontSize: '14px'
               }}
             >
-              {record.businessName}
+              {record.sequenceName}
             </span>
           </div>
           <div style={{ fontSize: '12px', marginBottom: '4px', display: 'flex', alignItems: 'center' }}>
-            <span style={{ color: '#666', marginRight: '4px' }}>流程key:</span>
+            <span style={{ color: '#666', marginRight: '4px' }}>序列key:</span>
             <Space size={4}>
               <Tooltip title={record.identifier}>
                 <span 
@@ -292,28 +287,28 @@ const BusinessProcess: React.FC = () => {
                   }} 
                   onClick={() => {
                     navigator.clipboard.writeText(record.identifier);
-                    message.success('流程key已复制到剪贴板');
+                    message.success('序列key已复制到剪贴板');
                   }}
                 >
                   {record.identifier}
                 </span>
               </Tooltip>
-              <Tooltip title="复制流程key">
+              <Tooltip title="复制序列key">
                 <Button
                   type="text"
                   size="small"
                   icon={<CopyOutlined style={{ color: '#1890ff' }} />}
                   onClick={() => {
                     navigator.clipboard.writeText(record.identifier);
-                    message.success('流程key已复制到剪贴板');
+                    message.success('序列key已复制到剪贴板');
                   }}
                   style={{ padding: 0, minWidth: 'auto', height: 'auto' }}
                 />
               </Tooltip>
-              <Tooltip title="编辑流程key">
+              <Tooltip title="编辑序列key">
                 <EditOutlined
                   style={{ color: '#1890ff', cursor: 'pointer', fontSize: '12px' }}
-                  onClick={() => handleEditProcessKey(record)}
+                  onClick={() => handleEditSequenceKey(record)}
                 />
               </Tooltip>
             </Space>
@@ -333,7 +328,7 @@ const BusinessProcess: React.FC = () => {
       width: getColumnWidth(100),
       align: 'right',
       fixed: 'right',
-      render: (_: any, record: BusinessProcessRecord) => (
+      render: (_: any, record: ActionSequenceRecord) => (
         <Space size={2} direction="vertical">
           <Button
             type="link"
@@ -362,15 +357,15 @@ const BusinessProcess: React.FC = () => {
   ];
 
   // 桌面端列配置
-  const desktopColumns: ColumnsType<BusinessProcessRecord> = [
+  const desktopColumns: ColumnsType<ActionSequenceRecord> = [
     {
-      title: '业务名称',
-      dataIndex: 'businessName',
-      key: 'businessName',
+      title: '序列名称',
+      dataIndex: 'sequenceName',
+      key: 'sequenceName',
       width: getColumnWidth(200),
       align: 'left',
       ellipsis: true,
-      render: (name: string, record: BusinessProcessRecord) => (
+      render: (name: string, record: ActionSequenceRecord) => (
         <Tooltip title={name}>
           <span 
             style={{ color: '#1890ff', cursor: 'pointer' }}
@@ -385,13 +380,13 @@ const BusinessProcess: React.FC = () => {
       ),
     },
     {
-      title: '流程key',
+      title: '序列key',
       dataIndex: 'identifier',
       key: 'identifier',
       width: getColumnWidth(220),
       align: 'left',
       ellipsis: true,
-      render: (identifier: string, record: BusinessProcessRecord) => (
+      render: (identifier: string, record: ActionSequenceRecord) => (
         <Space size={4}>
           <Tooltip title={identifier}>
             <span 
@@ -406,30 +401,30 @@ const BusinessProcess: React.FC = () => {
               }} 
               onClick={() => {
                 navigator.clipboard.writeText(identifier);
-                message.success('流程key已复制到剪贴板');
+                message.success('序列key已复制到剪贴板');
               }}
             >
               {identifier}
             </span>
           </Tooltip>
-          <Tooltip title="复制流程key">
+          <Tooltip title="复制序列key">
             <Button
               type="text"
               size="small"
               icon={<CopyOutlined style={{ color: '#1890ff' }} />}
               onClick={() => {
                 navigator.clipboard.writeText(identifier);
-                message.success('流程key已复制到剪贴板');
+                message.success('序列key已复制到剪贴板');
               }}
               style={{ padding: 0, minWidth: 'auto', height: 'auto' }}
             />
           </Tooltip>
-          <Tooltip title="编辑流程key">
+          <Tooltip title="编辑序列key">
             <Button
               type="text"
               size="small"
               icon={<EditOutlined style={{ color: '#1890ff' }} />}
-              onClick={() => handleEditProcessKey(record)}
+              onClick={() => handleEditSequenceKey(record)}
               style={{ padding: 0, minWidth: 'auto', height: 'auto' }}
             />
           </Tooltip>
@@ -451,7 +446,7 @@ const BusinessProcess: React.FC = () => {
       width: getColumnWidth(160),
       align: 'left',
       ellipsis: true,
-      sorter: (a: BusinessProcessRecord, b: BusinessProcessRecord) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
+      sorter: (a: ActionSequenceRecord, b: ActionSequenceRecord) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
       render: (time: string) => {
         const date = new Date(time);
         const dateStr = date.toLocaleDateString('zh-CN');
@@ -485,9 +480,9 @@ const BusinessProcess: React.FC = () => {
       width: getColumnWidth(120),
       align: 'right',
       fixed: 'right',
-      render: (_: any, record: BusinessProcessRecord) => (
+      render: (_: any, record: ActionSequenceRecord) => (
         <Space size={4}>
-          <Tooltip title="编辑业务流程">
+          <Tooltip title="编辑动作序列">
             <Button
               type="link"
               icon={<EditOutlined />}
@@ -537,12 +532,12 @@ const BusinessProcess: React.FC = () => {
         );
         
         // 同步更新共享数据源
-        updateBusinessProcess(editingRecord.id, updatedData);
+        updateActionSequence(editingRecord.id, updatedData);
         
         message.success('编辑成功');
       } else {
         // 新增
-        const newRecord: BusinessProcessRecord = {
+        const newRecord: ActionSequenceRecord = {
           id: Date.now().toString(),
           ...values,
           updateTime: new Date().toLocaleString('zh-CN'),
@@ -553,9 +548,9 @@ const BusinessProcess: React.FC = () => {
         setDataSource(prev => [newRecord, ...prev]);
         
         // 同步更新共享数据源
-    
-        addBusinessProcess(newRecord);
-    
+        
+        addActionSequence(newRecord);
+        
         
         message.success('新增成功');
       }
@@ -574,7 +569,7 @@ const BusinessProcess: React.FC = () => {
   const filteredData = dataSource
     .filter(item => {
       const matchesSearch = !searchText || 
-        item.businessName.toLowerCase().includes(searchText.toLowerCase()) ||
+        item.sequenceName.toLowerCase().includes(searchText.toLowerCase()) ||
         item.identifier.toLowerCase().includes(searchText.toLowerCase()) ||
         (item.remark && item.remark.toLowerCase().includes(searchText.toLowerCase()));
       const matchesStatus = !statusFilter || item.status === statusFilter;
@@ -621,7 +616,7 @@ const BusinessProcess: React.FC = () => {
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col xs={24} sm={24} md={10} lg={8} xl={8} xxl={12}>
             <Input
-              placeholder="请输入业务名称搜索"
+              placeholder="请输入序列名称搜索"
               prefix={<SearchOutlined />}
               value={searchText}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
@@ -690,7 +685,7 @@ const BusinessProcess: React.FC = () => {
 
       {/* 新增/编辑弹窗 */}
       <Modal
-        title={editingRecord ? '编辑业务流程' : '新增业务流程'}
+        title={editingRecord ? '编辑动作序列' : '新增动作序列'}
         open={isModalVisible}
         onCancel={() => {
           setIsModalVisible(false);
@@ -706,26 +701,26 @@ const BusinessProcess: React.FC = () => {
           onFinish={handleSubmit}
         >
           <Form.Item
-            name="businessName"
-            label="业务名称"
+            name="sequenceName"
+            label="序列名称"
             rules={[
-              { required: true, message: '请输入业务名称' },
-              { max: 50, message: '业务名称不能超过50个字符' },
+              { required: true, message: '请输入序列名称' },
+              { max: 50, message: '序列名称不能超过50个字符' },
             ]}
           >
-            <Input placeholder="请输入业务名称" />
+            <Input placeholder="请输入序列名称" />
           </Form.Item>
 
           <Form.Item
             name="identifier"
-            label="流程key"
+            label="序列key"
             rules={[
-              { required: true, message: '请输入流程key' },
-              { pattern: /^[a-zA-Z][a-zA-Z0-9_]*$/, message: '流程key必须以字母开头，只能包含字母、数字和下划线' },
-              { max: 30, message: '流程key不能超过30个字符' },
+              { required: true, message: '请输入序列key' },
+              { pattern: /^[a-zA-Z][a-zA-Z0-9_]*$/, message: '序列key必须以字母开头，只能包含字母、数字和下划线' },
+              { max: 30, message: '序列key不能超过30个字符' },
             ]}
           >
-            <Input placeholder="请输入流程key" />
+            <Input placeholder="请输入序列key" />
           </Form.Item>
 
           <Form.Item
@@ -773,53 +768,53 @@ const BusinessProcess: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 流程key编辑Modal */}
+      {/* 序列key编辑Modal */}
       <Modal
-        title="编辑流程key"
-        open={isEditingProcessKey}
-        onOk={handleProcessKeyModalOk}
-        onCancel={handleProcessKeyModalCancel}
+        title="编辑序列key"
+        open={isEditingSequenceKey}
+        onOk={handleSequenceKeyModalOk}
+        onCancel={handleSequenceKeyModalCancel}
         confirmLoading={loading}
         width={500}
       >
         <Form
-          form={processKeyForm}
+          form={sequenceKeyForm}
           layout="vertical"
           initialValues={{
-            identifier: editingProcessKeyRecord?.identifier || '',
+            identifier: editingSequenceKeyRecord?.identifier || '',
           }}
         >
           <Form.Item
-            label="流程key"
+            label="序列key"
             name="identifier"
             rules={[
-              { required: true, message: '请输入流程key' },
-              { min: 3, message: '流程key至少3个字符' },
-              { max: 50, message: '流程key最多50个字符' },
-              { pattern: /^[a-zA-Z0-9_-]+$/, message: '流程key只能包含字母、数字、下划线和连字符' },
+              { required: true, message: '请输入序列key' },
+              { min: 3, message: '序列key至少3个字符' },
+              { max: 50, message: '序列key最多50个字符' },
+              { pattern: /^[a-zA-Z0-9_-]+$/, message: '序列key只能包含字母、数字、下划线和连字符' },
             ]}
           >
-            <Input placeholder="请输入流程key" />
+            <Input placeholder="请输入序列key" />
           </Form.Item>
           <div style={{ color: '#666', fontSize: '12px', marginTop: '-16px', marginBottom: '16px' }}>
-            注意：流程key用于业务流程唯一标识，修改后请确保相关系统同步更新
+            注意：序列key用于动作序列唯一标识，修改后请确保相关系统同步更新
           </div>
         </Form>
       </Modal>
 
-      {/* 新增/编辑业务流程 Drawer */}
-      <AddBusinessProcess
+      {/* 新增/编辑动作序列 Drawer */}
+      <AddActionSequence
         visible={isAddDrawerVisible}
         onClose={() => {
           setIsAddDrawerVisible(false);
           setEditingDrawerRecord(null);
         }}
         onSave={(data) => {
-        
           
-          const newRecord: BusinessProcessRecord = {
+          
+          const newRecord: ActionSequenceRecord = {
             id: editingDrawerRecord ? editingDrawerRecord.id : Date.now().toString(),
-            businessName: data.businessName || '未命名流程',
+            sequenceName: data.sequenceName || '未命名序列',
             identifier: data.identifier || '',
             status: data.status || 'enabled',
             remark: data.remark || '',
@@ -828,22 +823,22 @@ const BusinessProcess: React.FC = () => {
             canvasData: data.canvasData || { nodes: [], connections: [], subCanvases: [] }
           };
           
-      
+          
 
           if (editingDrawerRecord) {
              // 编辑模式
-       
-             updateBusinessProcess(editingDrawerRecord.id, newRecord);
-             // 直接从businessProcessData获取最新数据，确保数据同步
-             setDataSource([...businessProcessData]);
-             message.success('业务流程编辑成功！');
+             
+             updateActionSequence(editingDrawerRecord.id, newRecord);
+             // 直接从actionSequenceData获取最新数据，确保数据同步
+             setDataSource([...actionSequenceData]);
+             message.success('动作序列编辑成功！');
            } else {
              // 新增模式
-       
-             addBusinessProcess(newRecord);
-             // 直接从businessProcessData获取最新数据，避免重复添加
-             setDataSource([...businessProcessData]);
-             message.success('业务流程创建成功！');
+             
+             addActionSequence(newRecord);
+             // 直接从actionSequenceData获取最新数据，避免重复添加
+             setDataSource([...actionSequenceData]);
+             message.success('动作序列创建成功！');
            }
 
           setIsAddDrawerVisible(false);
@@ -855,4 +850,4 @@ const BusinessProcess: React.FC = () => {
   );
 };
 
-export default BusinessProcess;
+export default ActionSequence;

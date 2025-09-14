@@ -21,6 +21,7 @@ import {
   ControlOutlined,
   FileTextOutlined,
   ThunderboltOutlined,
+  PartitionOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useAppStore } from '@/store';
@@ -111,6 +112,16 @@ const Layout: React.FC = () => {
           key: '/schedule/business-orders',
           icon: <FileTextOutlined />,
           label: '业务订单',
+        },
+        {
+          key: '/schedule/behavior-tree',
+          icon: <PartitionOutlined />,
+          label: '行为树管理',
+        },
+        {
+          key: '/schedule/action-sequence',
+          icon: <ThunderboltOutlined />,
+          label: '动作序列',
         },
       ],
     },

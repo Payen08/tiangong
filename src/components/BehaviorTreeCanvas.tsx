@@ -5,46 +5,73 @@ import {
   ZoomOutOutlined, 
   HomeOutlined,
   UndoOutlined,
-  RedoOutlined
+  RedoOutlined,
+  FlagOutlined,
+  SettingOutlined,
+  OrderedListOutlined,
+  BranchesOutlined,
+  QuestionCircleOutlined,
+  SwapOutlined,
+  NodeIndexOutlined
 } from '@ant-design/icons';
 
-// 行为树节点类型
-type BehaviorNodeType = 'root' | 'sequence' | 'move' | 'action' | 'condition';
+// 统一的节点类型定义（与AddBehaviorTree.tsx保持一致）
+type NodeType = 'start' | 'end' | 'stage' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
 
-// 行为树节点接口
-interface BehaviorTreeNode {
+// 连接点接口（与AddBehaviorTree.tsx保持一致）
+interface ConnectionPoint {
   id: string;
-  type: BehaviorNodeType;
+  type: 'input' | 'output';
+  position: { x: number; y: number };
+  connected: boolean;
+  label?: string;
+  nodeId?: string;
+  // 兼容旧版本属性
+  x?: number;
+  y?: number;
+}
+
+// 统一的流程节点接口（与AddBehaviorTree.tsx保持一致）
+interface FlowNode {
+  id: string;
+  type: NodeType;
   x: number;
   y: number;
   width: number;
   height: number;
   label: string;
-  status?: 'success' | 'failure' | 'running' | 'idle';
-  inputs?: ConnectionPoint[];
-  outputs?: ConnectionPoint[];
+  customName?: string;
+  triggerCondition?: string;
+  demandDevicesTriggerCondition?: string;
+  supplyDevicesTriggerCondition?: string;
+  demandDevices?: string[];
+  supplyDevices?: string[];
+  demandDevicesNames?: string;
+  supplyDevicesNames?: string;
   data?: any;
+  // 行为树节点特有属性
+  behaviorTreeData?: {
+    status?: 'success' | 'failure' | 'running' | 'idle';
+    conditionExpression?: string;
+    repeatCount?: number;
+    maxRetries?: number;
+    timeout?: number;
+    inputs?: ConnectionPoint[];
+    outputs?: ConnectionPoint[];
+    description?: string;
+    priority?: number;
+  };
 }
 
-
-
-// 连接点接口
-interface ConnectionPoint {
-  id: string;
-  type: 'input' | 'output';
-  x: number;
-  y: number;
-  nodeId: string;
-  label?: string;
-}
-
-// 连接线接口
-interface BehaviorConnection {
+// 统一的连接线接口（与AddBehaviorTree.tsx保持一致）
+interface Connection {
   id: string;
   sourceId: string;
   targetId: string;
   sourcePoint: { x: number; y: number };
   targetPoint: { x: number; y: number };
+  sourceType?: 'node' | 'stage' | 'subcanvas' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
+  targetType?: 'node' | 'stage' | 'subcanvas' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
 }
 
 // 画布状态接口
@@ -60,8 +87,8 @@ interface CanvasState {
 
 // 历史状态接口
 interface HistoryState {
-  nodes: BehaviorTreeNode[];
-  connections: BehaviorConnection[];
+  nodes: FlowNode[];
+  connections: Connection[];
   canvasState: {
     offsetX: number;
     offsetY: number;
@@ -71,10 +98,10 @@ interface HistoryState {
 
 // 组件属性接口
 interface BehaviorTreeCanvasProps {
-  nodes: BehaviorTreeNode[];
-  connections?: BehaviorConnection[];
-  onNodesChange?: (nodes: BehaviorTreeNode[]) => void;
-  onConnectionsChange?: (connections: BehaviorConnection[]) => void;
+  nodes: FlowNode[];
+  connections?: Connection[];
+  onNodesChange?: (nodes: FlowNode[]) => void;
+  onConnectionsChange?: (connections: Connection[]) => void;
   readonly?: boolean;
   width?: number;
   height?: number;
@@ -90,13 +117,13 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   height = 600
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [nodes, setNodes] = useState<BehaviorTreeNode[]>(initialNodes.length > 0 ? initialNodes : [
-    { id: '1', type: 'root', label: '根节点', x: 200, y: 50, width: 120, height: 60, status: 'running' },
-    { id: '2', type: 'condition', label: '检查条件', x: 200, y: 150, width: 120, height: 60, status: 'success' },
-    { id: '3', type: 'action', label: '执行动作A', x: 100, y: 250, width: 120, height: 60, status: 'failure', data: { error: '网络连接超时\n错误代码: TIMEOUT_ERROR\n详细信息: 连接服务器失败，请检查网络设置' } },
-    { id: '4', type: 'action', label: '执行动作B', x: 300, y: 250, width: 120, height: 60, status: 'failure', data: { error: '参数验证失败\n错误代码: VALIDATION_ERROR\n详细信息: 输入参数不符合要求，期望数字类型但收到字符串' } },
+  const [nodes, setNodes] = useState<FlowNode[]>(initialNodes.length > 0 ? initialNodes : [
+    { id: '1', type: 'start', label: '根节点', x: 200, y: 50, width: 120, height: 60, behaviorTreeData: { status: 'running' } },
+    { id: '2', type: 'condition', label: '检查条件', x: 200, y: 150, width: 120, height: 60, behaviorTreeData: { status: 'success' } },
+    { id: '3', type: 'businessProcess', label: '执行动作A', x: 100, y: 250, width: 120, height: 60, behaviorTreeData: { status: 'failure' }, data: { error: '网络连接超时\n错误代码: TIMEOUT_ERROR\n详细信息: 连接服务器失败，请检查网络设置' } },
+    { id: '4', type: 'businessProcess', label: '执行动作B', x: 300, y: 250, width: 120, height: 60, behaviorTreeData: { status: 'failure' }, data: { error: '参数验证失败\n错误代码: VALIDATION_ERROR\n详细信息: 输入参数不符合要求，期望数字类型但收到字符串' } },
   ]);
-  const [connections, setConnections] = useState<BehaviorConnection[]>(initialConnections);
+  const [connections, setConnections] = useState<Connection[]>(initialConnections);
   const [canvasState, setCanvasState] = useState<CanvasState>({
     offsetX: 0,
     offsetY: 0,
@@ -109,7 +136,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   
   // 拖拽相关状态
   const [isDraggingNode, setIsDraggingNode] = useState(false);
-  const [draggedNode, setDraggedNode] = useState<BehaviorTreeNode | null>(null);
+  const [draggedNode, setDraggedNode] = useState<FlowNode | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   
   // 连线相关状态
@@ -124,7 +151,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   
   // 异常详情显示状态
   const [errorDetailVisible, setErrorDetailVisible] = useState(false);
-  const [errorDetailNode, setErrorDetailNode] = useState<BehaviorTreeNode | null>(null);
+  const [errorDetailNode, setErrorDetailNode] = useState<FlowNode | null>(null);
   
   // 历史记录
   const [history, setHistory] = useState<HistoryState[]>([]);
@@ -142,18 +169,26 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   };
 
   // 节点类型配置
-  const getNodeConfig = (type: BehaviorNodeType) => {
+  const getNodeConfig = (type: NodeType) => {
     switch (type) {
-      case 'root':
+      case 'start':
         return { color: '#722ed1', icon: '◉', shape: 'rect' };
+      case 'end':
+        return { color: '#ff4d4f', icon: '◼', shape: 'rect' };
+      case 'stage':
+        return { color: '#52c41a', icon: '🏁', shape: 'rect' };
+      case 'businessProcess':
+        return { color: '#fa8c16', icon: '⚙', shape: 'rect' };
       case 'sequence':
         return { color: '#1890ff', icon: '⚡', shape: 'rect' };
-      case 'move':
-        return { color: '#52c41a', icon: '↗', shape: 'rect' };
-      case 'action':
-        return { color: '#fa8c16', icon: '⚙', shape: 'rect' };
+      case 'parallel':
+        return { color: '#13c2c2', icon: '∥', shape: 'rect' };
       case 'condition':
-        return { color: '#eb2f96', icon: '◆', shape: 'diamond' };
+        return { color: '#eb2f96', icon: '◆', shape: 'rect' };
+      case 'inverter':
+        return { color: '#f759ab', icon: '!', shape: 'rect' };
+      case 'repeat':
+        return { color: '#faad14', icon: '↻', shape: 'rect' };
       default:
         return { color: '#d9d9d9', icon: '●', shape: 'rect' };
     }
@@ -172,7 +207,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   }, [canvasState.offsetX, canvasState.offsetY, canvasState.scale]);
 
   // 查找位置上的节点
-  const findNodeAtPosition = useCallback((x: number, y: number): BehaviorTreeNode | null => {
+  const findNodeAtPosition = useCallback((x: number, y: number): FlowNode | null => {
     for (let i = nodes.length - 1; i >= 0; i--) {
       const node = nodes[i];
       if (x >= node.x && x <= node.x + node.width &&
@@ -194,6 +229,8 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
         return {
           id: `${node.id}_input`,
           type: 'input',
+          position: { x: inputX, y: inputY },
+          connected: false,
           x: inputX,
           y: inputY,
           nodeId: node.id
@@ -208,6 +245,8 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
         return {
           id: `${node.id}_output`,
           type: 'output',
+          position: { x: outputX, y: outputY },
+          connected: false,
           x: outputX,
           y: outputY,
           nodeId: node.id
@@ -218,9 +257,9 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   }, [nodes]);
 
   // 检测异常图标点击
-  const findErrorIconAtPosition = useCallback((x: number, y: number): BehaviorTreeNode | null => {
+  const findErrorIconAtPosition = useCallback((x: number, y: number): FlowNode | null => {
     for (const node of nodes) {
-      if (node.status === 'failure') {
+      if (node.behaviorTreeData?.status === 'failure') {
         // 异常图标位置：节点右下角（与绘制位置保持一致）
         const iconX = node.x + node.width - 20;
         const iconY = node.y + node.height - 8;
@@ -506,12 +545,18 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
         );
         
         if (!existingConnection) {
-          const newConnection: BehaviorConnection = {
+          const newConnection: Connection = {
             id: `connection_${Date.now()}`,
-            sourceId: dragConnectionStart.nodeId,
-            targetId: targetPoint.nodeId,
-            sourcePoint: { x: dragConnectionStart.x, y: dragConnectionStart.y },
-            targetPoint: { x: targetPoint.x, y: targetPoint.y }
+            sourceId: dragConnectionStart.nodeId || '',
+            targetId: targetPoint.nodeId || '',
+            sourcePoint: { 
+              x: dragConnectionStart.x || dragConnectionStart.position?.x || 0, 
+              y: dragConnectionStart.y || dragConnectionStart.position?.y || 0 
+            },
+            targetPoint: { 
+              x: targetPoint.x || targetPoint.position?.x || 0, 
+              y: targetPoint.y || targetPoint.position?.y || 0 
+            }
           };
           
           setConnections(prev => [...prev, newConnection]);
@@ -603,7 +648,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   }, [canvasState.offsetX, canvasState.offsetY, canvasState.scale]);
 
   // 绘制贝塞尔曲线连接线
-  const drawBezierConnection = useCallback((ctx: CanvasRenderingContext2D, connection: BehaviorConnection, isHovered: boolean = false) => {
+  const drawBezierConnection = useCallback((ctx: CanvasRenderingContext2D, connection: Connection, isHovered: boolean = false) => {
     const { sourcePoint, targetPoint } = connection;
     
     ctx.save();
@@ -644,8 +689,9 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   }, []);
 
   // 绘制节点
-  const drawNode = useCallback((ctx: CanvasRenderingContext2D, node: BehaviorTreeNode) => {
-    const { x, y, width, height, type, label, status } = node;
+  const drawNode = useCallback((ctx: CanvasRenderingContext2D, node: FlowNode) => {
+    const { x, y, width, height, type, label } = node;
+    const status = node.behaviorTreeData?.status;
     const isSelected = selectedNode === node.id;
     const config = getNodeConfig(type);
     const isError = status === 'failure';
@@ -658,8 +704,8 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     ctx.shadowOffsetX = 2;
     ctx.shadowOffsetY = 2;
     
-    // 绘制节点背景 - 树根节点为深灰色，异常节点为浅红色背景，其他节点为白色
-    if (type === 'root') {
+    // 绘制节点背景 - 开始节点为深灰色，异常节点为浅红色背景，其他节点为白色
+    if (type === 'start') {
       ctx.fillStyle = '#2c3e50';
     } else if (isError) {
       ctx.fillStyle = '#fff2f0'; // 异常节点浅红色背景
@@ -693,13 +739,13 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     }
     
     // 绘制图标
-    ctx.fillStyle = type === 'root' ? '#ffffff' : config.color;
+    ctx.fillStyle = type === 'start' ? '#ffffff' : config.color;
     ctx.font = '20px Arial';
     ctx.textAlign = 'center';
     ctx.fillText(config.icon, x + 20, y + height / 2 + 6);
     
-    // 绘制标签 - 树根节点文字为白色，其他节点为黑色
-    ctx.fillStyle = type === 'root' ? '#ffffff' : '#333333';
+    // 绘制标签 - 开始节点文字为白色，其他节点为黑色
+    ctx.fillStyle = type === 'start' ? '#ffffff' : '#333333';
     ctx.font = '16px Arial';
     ctx.textAlign = 'left';
     const maxWidth = width - 45;
@@ -724,8 +770,8 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
       ctx.fillText('!', x + width - 20, y + height - 8);
     }
     
-    // 绘制连接点 - 在节点上下位置（树根节点不绘制端点）
-    if (type !== 'root') {
+    // 绘制连接点 - 在节点上下位置（开始节点不绘制端点）
+    if (type !== 'start') {
       // 输入端点（节点顶部）
       const inputX = x + width / 2;
       const inputY = y;
@@ -812,14 +858,16 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
       
-      const controlOffset = Math.abs(dragConnectionEnd.y - dragConnectionStart.y) * 0.5;
-      const cp1x = dragConnectionStart.x;
-      const cp1y = dragConnectionStart.y + controlOffset;
+      const startX = dragConnectionStart.x || dragConnectionStart.position?.x || 0;
+      const startY = dragConnectionStart.y || dragConnectionStart.position?.y || 0;
+      const controlOffset = Math.abs(dragConnectionEnd.y - startY) * 0.5;
+      const cp1x = startX;
+      const cp1y = startY + controlOffset;
       const cp2x = dragConnectionEnd.x;
       const cp2y = dragConnectionEnd.y - controlOffset;
       
       ctx.beginPath();
-      ctx.moveTo(dragConnectionStart.x, dragConnectionStart.y);
+      ctx.moveTo(startX, startY);
       ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, dragConnectionEnd.x, dragConnectionEnd.y);
       ctx.stroke();
     }
@@ -1016,4 +1064,4 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
 };
 
 export default BehaviorTreeCanvas;
-export type { BehaviorTreeNode, BehaviorConnection, ConnectionPoint, BehaviorNodeType };
+export type { FlowNode, Connection, ConnectionPoint, NodeType };

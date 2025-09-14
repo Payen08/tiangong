@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AddBusinessProcess from './AddBusinessProcess-original';
+import AddBehaviorTree from './AddBehaviorTree';
 import { 
-  businessProcessData, 
-  type BusinessProcessRecord,
-  addBusinessProcess,
-  updateBusinessProcess,
-  deleteBusinessProcess
-} from '../../../data/businessProcessData';
+  behaviorTreeData, 
+  type BehaviorTreeRecord,
+  addBehaviorTree,
+  updateBehaviorTree,
+  deleteBehaviorTree
+} from '../../../data/behaviorTreeData';
 import {
   Card,
   Table,
@@ -39,17 +39,17 @@ import type { MenuProps } from 'antd';
 const { Option } = Select;
 const { confirm } = Modal;
 
-const BusinessProcess: React.FC = () => {
+const BehaviorTree: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<BusinessProcessRecord | null>(null);
+  const [editingRecord, setEditingRecord] = useState<BehaviorTreeRecord | null>(null);
   const [isAddDrawerVisible, setIsAddDrawerVisible] = useState(false);
-  const [editingDrawerRecord, setEditingDrawerRecord] = useState<BusinessProcessRecord | null>(null);
+  const [editingDrawerRecord, setEditingDrawerRecord] = useState<BehaviorTreeRecord | null>(null);
   const [isEditingProcessKey, setIsEditingProcessKey] = useState(false);
-  const [editingProcessKeyRecord, setEditingProcessKeyRecord] = useState<BusinessProcessRecord | null>(null);
+  const [editingProcessKeyRecord, setEditingProcessKeyRecord] = useState<BehaviorTreeRecord | null>(null);
   const [processKeyForm] = Form.useForm();
   const [form] = Form.useForm();
 
@@ -67,6 +67,43 @@ const BusinessProcess: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // 键盘快捷键支持
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ctrl/Cmd + N: 新增行为树
+      if ((event.ctrlKey || event.metaKey) && event.key === 'n') {
+        event.preventDefault();
+        setEditingDrawerRecord(null);
+        setIsAddDrawerVisible(true);
+      }
+      // Ctrl/Cmd + R: 刷新数据
+      if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+        event.preventDefault();
+        handleRefresh();
+      }
+      // ESC: 关闭弹窗
+      if (event.key === 'Escape') {
+        if (isAddDrawerVisible) {
+          setIsAddDrawerVisible(false);
+          setEditingDrawerRecord(null);
+        }
+        if (isModalVisible) {
+          setIsModalVisible(false);
+          setEditingRecord(null);
+          form.resetFields();
+        }
+        if (isEditingProcessKey) {
+          setIsEditingProcessKey(false);
+          setEditingProcessKeyRecord(null);
+          processKeyForm.resetFields();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isAddDrawerVisible, isModalVisible, isEditingProcessKey, form, processKeyForm]);
+
   // 动态列宽计算函数
   const getColumnWidth = (baseWidth: number) => {
     if (isMobile) return baseWidth * 0.8;
@@ -75,7 +112,7 @@ const BusinessProcess: React.FC = () => {
   };
 
   // 使用共享数据源
-  const [dataSource, setDataSource] = useState<BusinessProcessRecord[]>(businessProcessData);
+  const [dataSource, setDataSource] = useState<BehaviorTreeRecord[]>(behaviorTreeData);
 
   const getStatusTag = (status: string) => {
     const statusMap = {
@@ -87,7 +124,7 @@ const BusinessProcess: React.FC = () => {
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
-  const handleStatusChange = (record: BusinessProcessRecord, newStatus: string) => {
+  const handleStatusChange = (record: BehaviorTreeRecord, newStatus: string) => {
     const statusText = {
       enabled: '启用',
       disabled: '停用',
@@ -97,7 +134,18 @@ const BusinessProcess: React.FC = () => {
     confirm({
       title: `确认${statusText}`,
       icon: <ExclamationCircleOutlined />,
-      content: `确定要${statusText}业务流程"${record.businessName}"吗？`,
+      content: (
+        <div>
+          <p>确定要{statusText}行为树"{record.treeName}"吗？</p>
+          {newStatus === 'obsolete' && (
+            <p style={{ color: '#ff4d4f', fontSize: '12px', margin: '8px 0 0 0' }}>
+              注意：作废后的行为树将无法恢复使用
+            </p>
+          )}
+        </div>
+      ),
+      okText: '确认',
+      cancelText: '取消',
       onOk() {
         const updatedData = {
           status: newStatus as 'enabled' | 'disabled' | 'obsolete',
@@ -115,32 +163,52 @@ const BusinessProcess: React.FC = () => {
         );
         
         // 同步更新共享数据源
-        updateBusinessProcess(record.id, updatedData);
+        updateBehaviorTree(record.id, updatedData);
         
-        message.success(`${statusText}成功`);
+        message.success({
+          content: `行为树"${record.treeName}"${statusText}成功`,
+          duration: 3
+        });
       },
     });
   };
 
-  const handleDelete = (record: BusinessProcessRecord) => {
+  const handleDelete = (record: BehaviorTreeRecord) => {
     confirm({
       title: '确认删除',
-      icon: <ExclamationCircleOutlined />,
-      content: `确定要删除业务流程"${record.businessName}"吗？此操作不可恢复。`,
+      icon: <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />,
+      content: (
+        <div>
+          <p>确定要删除行为树"{record.treeName}"吗？</p>
+          <p style={{ color: '#ff4d4f', fontSize: '12px', margin: '8px 0 0 0' }}>
+            ⚠️ 此操作不可恢复，请谨慎操作
+          </p>
+          <div style={{ background: '#fff2f0', padding: '8px', borderRadius: '4px', margin: '8px 0 0 0', fontSize: '12px' }}>
+            <strong>删除影响：</strong>
+            <br />• 行为树配置将永久丢失
+            <br />• 相关的执行记录将被清除
+          </div>
+        </div>
+      ),
+      okText: '确认删除',
+      cancelText: '取消',
       okType: 'danger',
       onOk() {
         // 更新本地状态
         setDataSource(prev => prev.filter(item => item.id !== record.id));
         
         // 同步更新共享数据源
-        deleteBusinessProcess(record.id);
+        deleteBehaviorTree(record.id);
         
-        message.success('删除成功');
+        message.success({
+          content: `行为树"${record.treeName}"删除成功`,
+          duration: 3
+        });
       },
     });
   };
 
-  const getMoreMenuItems = (record: BusinessProcessRecord): MenuProps['items'] => {
+  const getMoreMenuItems = (record: BehaviorTreeRecord): MenuProps['items'] => {
     const items: MenuProps['items'] = [];
 
     if (record.status === 'enabled') {
@@ -181,16 +249,16 @@ const BusinessProcess: React.FC = () => {
   };
 
   // 处理流程key编辑
-  const handleEditProcessKey = (record: BusinessProcessRecord) => {
+  const handleEditProcessKey = (record: BehaviorTreeRecord) => {
     setEditingProcessKeyRecord(record);
-    processKeyForm.setFieldsValue({ identifier: record.identifier });
+    processKeyForm.setFieldsValue({ identifier: record.treeKey });
     setIsEditingProcessKey(true);
   };
 
   const handleProcessKeyModalOk = async () => {
     try {
       const values = await processKeyForm.validateFields();
-      const oldKey = editingProcessKeyRecord?.identifier;
+      const oldKey = editingProcessKeyRecord?.treeKey;
       const newKey = values.identifier;
       
       // 检查是否有实际变更
@@ -207,7 +275,7 @@ const BusinessProcess: React.FC = () => {
         title: '确认修改流程key',
         content: (
           <div>
-            <p><strong>业务名称：</strong>{editingProcessKeyRecord?.businessName}</p>
+            <p><strong>行为树名称：</strong>{editingProcessKeyRecord?.treeName}</p>
             <p><strong>原流程key：</strong><code style={{background: '#f5f5f5', padding: '2px 4px'}}>{oldKey}</code></p>
             <p><strong>新流程key：</strong><code style={{background: '#e6f7ff', padding: '2px 4px'}}>{newKey}</code></p>
             <p style={{color: '#ff4d4f', marginTop: '12px'}}>⚠️ 修改流程key后，请确保相关系统同步更新配置</p>
@@ -220,7 +288,7 @@ const BusinessProcess: React.FC = () => {
           setTimeout(() => {
             if (editingProcessKeyRecord) {
               const updatedData = {
-                identifier: newKey,
+                treeKey: newKey,
                 updateTime: new Date().toLocaleString('zh-CN'),
                 updatedBy: '当前用户',
               };
@@ -235,7 +303,7 @@ const BusinessProcess: React.FC = () => {
               );
               
               // 同步更新共享数据源
-              updateBusinessProcess(editingProcessKeyRecord.id, updatedData);
+              updateBehaviorTree(editingProcessKeyRecord.id, updatedData);
               
               message.success('流程key修改成功');
             }
@@ -258,12 +326,12 @@ const BusinessProcess: React.FC = () => {
   };
 
   // 移动端列配置
-  const mobileColumns: ColumnsType<BusinessProcessRecord> = [
+  const mobileColumns: ColumnsType<BehaviorTreeRecord> = [
     {
       title: '业务流程信息',
       key: 'processInfo',
       fixed: 'left',
-      render: (_: any, record: BusinessProcessRecord) => (
+      render: (_: any, record: BehaviorTreeRecord) => (
         <div style={{ padding: '8px 0' }}>
           <div style={{ marginBottom: '4px' }}>
             <span 
@@ -273,42 +341,42 @@ const BusinessProcess: React.FC = () => {
                 fontSize: '14px'
               }}
             >
-              {record.businessName}
-            </span>
+                {record.treeName}
+              </span>
           </div>
           <div style={{ fontSize: '12px', marginBottom: '4px', display: 'flex', alignItems: 'center' }}>
-            <span style={{ color: '#666', marginRight: '4px' }}>流程key:</span>
-            <Space size={4}>
-              <Tooltip title={record.identifier}>
-                <span 
-                  style={{ 
-                    color: '#1890ff', 
-                    cursor: 'pointer',
-                    maxWidth: '80px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    display: 'inline-block'
-                  }} 
-                  onClick={() => {
-                    navigator.clipboard.writeText(record.identifier);
-                    message.success('流程key已复制到剪贴板');
-                  }}
-                >
-                  {record.identifier}
-                </span>
-              </Tooltip>
+              <span style={{ color: '#666', marginRight: '4px' }}>流程key:</span>
+              <Space size={4}>
+                <Tooltip title={record.treeKey}>
+                  <span 
+                    style={{ 
+                      color: '#1890ff', 
+                      cursor: 'pointer',
+                      maxWidth: '80px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'inline-block'
+                    }} 
+                    onClick={() => {
+                      navigator.clipboard.writeText(record.treeKey);
+                      message.success('流程key已复制到剪贴板');
+                    }}
+                  >
+                    {record.treeKey}
+                  </span>
+                </Tooltip>
               <Tooltip title="复制流程key">
-                <Button
-                  type="text"
-                  size="small"
-                  icon={<CopyOutlined style={{ color: '#1890ff' }} />}
-                  onClick={() => {
-                    navigator.clipboard.writeText(record.identifier);
-                    message.success('流程key已复制到剪贴板');
-                  }}
-                  style={{ padding: 0, minWidth: 'auto', height: 'auto' }}
-                />
+                  <Button
+                    type="text"
+                    size="small"
+                    icon={<CopyOutlined style={{ color: '#1890ff' }} />}
+                    onClick={() => {
+                      navigator.clipboard.writeText(record.treeKey);
+                      message.success('流程key已复制到剪贴板');
+                    }}
+                    style={{ padding: 0, minWidth: 'auto', height: 'auto' }}
+                  />
               </Tooltip>
               <Tooltip title="编辑流程key">
                 <EditOutlined
@@ -333,7 +401,7 @@ const BusinessProcess: React.FC = () => {
       width: getColumnWidth(100),
       align: 'right',
       fixed: 'right',
-      render: (_: any, record: BusinessProcessRecord) => (
+      render: (_: any, record: BehaviorTreeRecord) => (
         <Space size={2} direction="vertical">
           <Button
             type="link"
@@ -362,15 +430,15 @@ const BusinessProcess: React.FC = () => {
   ];
 
   // 桌面端列配置
-  const desktopColumns: ColumnsType<BusinessProcessRecord> = [
+  const desktopColumns: ColumnsType<BehaviorTreeRecord> = [
     {
-      title: '业务名称',
-      dataIndex: 'businessName',
-      key: 'businessName',
+      title: '行为树名称',
+      dataIndex: 'treeName',
+      key: 'treeName',
       width: getColumnWidth(200),
       align: 'left',
       ellipsis: true,
-      render: (name: string, record: BusinessProcessRecord) => (
+      render: (name: string, record: BehaviorTreeRecord) => (
         <Tooltip title={name}>
           <span 
             style={{ color: '#1890ff', cursor: 'pointer' }}
@@ -386,12 +454,12 @@ const BusinessProcess: React.FC = () => {
     },
     {
       title: '流程key',
-      dataIndex: 'identifier',
-      key: 'identifier',
+      dataIndex: 'treeKey',
+      key: 'treeKey',
       width: getColumnWidth(220),
       align: 'left',
       ellipsis: true,
-      render: (identifier: string, record: BusinessProcessRecord) => (
+      render: (identifier: string, record: BehaviorTreeRecord) => (
         <Space size={4}>
           <Tooltip title={identifier}>
             <span 
@@ -451,7 +519,7 @@ const BusinessProcess: React.FC = () => {
       width: getColumnWidth(160),
       align: 'left',
       ellipsis: true,
-      sorter: (a: BusinessProcessRecord, b: BusinessProcessRecord) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
+      sorter: (a: BehaviorTreeRecord, b: BehaviorTreeRecord) => new Date(a.updateTime).getTime() - new Date(b.updateTime).getTime(),
       render: (time: string) => {
         const date = new Date(time);
         const dateStr = date.toLocaleDateString('zh-CN');
@@ -485,9 +553,9 @@ const BusinessProcess: React.FC = () => {
       width: getColumnWidth(120),
       align: 'right',
       fixed: 'right',
-      render: (_: any, record: BusinessProcessRecord) => (
+      render: (_: any, record: BehaviorTreeRecord) => (
         <Space size={4}>
-          <Tooltip title="编辑业务流程">
+          <Tooltip title="编辑行为树">
             <Button
               type="link"
               icon={<EditOutlined />}
@@ -519,6 +587,9 @@ const BusinessProcess: React.FC = () => {
     try {
       setLoading(true);
       
+      // 模拟网络延迟，提供更真实的用户体验
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
       if (editingRecord) {
         // 编辑
         const updatedData = {
@@ -537,12 +608,15 @@ const BusinessProcess: React.FC = () => {
         );
         
         // 同步更新共享数据源
-        updateBusinessProcess(editingRecord.id, updatedData);
+        updateBehaviorTree(editingRecord.id, updatedData);
         
-        message.success('编辑成功');
+        message.success({
+          content: `行为树"${values.treeName}"编辑成功`,
+          duration: 3
+        });
       } else {
         // 新增
-        const newRecord: BusinessProcessRecord = {
+        const newRecord: BehaviorTreeRecord = {
           id: Date.now().toString(),
           ...values,
           updateTime: new Date().toLocaleString('zh-CN'),
@@ -553,18 +627,23 @@ const BusinessProcess: React.FC = () => {
         setDataSource(prev => [newRecord, ...prev]);
         
         // 同步更新共享数据源
-    
-        addBusinessProcess(newRecord);
-    
+        addBehaviorTree(newRecord);
         
-        message.success('新增成功');
+        message.success({
+          content: `行为树"${values.treeName}"创建成功`,
+          duration: 3
+        });
       }
       
       setIsModalVisible(false);
       setEditingRecord(null);
       form.resetFields();
     } catch (error) {
-      message.error('操作失败');
+      console.error('操作失败:', error);
+      message.error({
+        content: editingRecord ? '编辑行为树失败，请重试' : '创建行为树失败，请重试',
+        duration: 4
+      });
     } finally {
       setLoading(false);
     }
@@ -574,8 +653,8 @@ const BusinessProcess: React.FC = () => {
   const filteredData = dataSource
     .filter(item => {
       const matchesSearch = !searchText || 
-        item.businessName.toLowerCase().includes(searchText.toLowerCase()) ||
-        item.identifier.toLowerCase().includes(searchText.toLowerCase()) ||
+        item.treeName.toLowerCase().includes(searchText.toLowerCase()) ||
+        item.treeKey.toLowerCase().includes(searchText.toLowerCase()) ||
         (item.remark && item.remark.toLowerCase().includes(searchText.toLowerCase()));
       const matchesStatus = !statusFilter || item.status === statusFilter;
       return matchesSearch && matchesStatus;
@@ -619,42 +698,43 @@ const BusinessProcess: React.FC = () => {
       <Card>
         {/* 搜索和操作区域 */}
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col xs={24} sm={24} md={10} lg={8} xl={8} xxl={12}>
+          <Col xs={24} sm={24} md={12} lg={10} xl={10} xxl={12}>
             <Input
-              placeholder="请输入业务名称搜索"
+              placeholder={isMobile ? "搜索行为树" : "请输入行为树名称搜索"}
               prefix={<SearchOutlined />}
               value={searchText}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
               allowClear
-              size="middle"
+              size={isMobile ? "large" : "middle"}
             />
           </Col>
-          <Col xs={12} sm={12} md={5} lg={4} xl={4} xxl={4}>
+          <Col xs={8} sm={8} md={4} lg={4} xl={4} xxl={4}>
             <Select
-              placeholder="全部状态"
+              placeholder={isMobile ? "状态" : "全部状态"}
               value={statusFilter}
               onChange={setStatusFilter}
               allowClear
               style={{ width: '100%' }}
-              size="middle"
+              size={isMobile ? "large" : "middle"}
             >
               <Option value="enabled">启用</Option>
               <Option value="disabled">停用</Option>
               <Option value="obsolete">作废</Option>
             </Select>
           </Col>
-          <Col xs={6} sm={6} md={3} lg={4} xl={4} xxl={3}>
+          <Col xs={8} sm={8} md={4} lg={4} xl={4} xxl={3}>
             <Button
               icon={<ReloadOutlined />}
               onClick={handleRefresh}
               loading={loading}
-              size="middle"
+              size={isMobile ? "large" : "middle"}
               style={{ width: '100%' }}
+              title="快捷键: Ctrl/Cmd + R"
             >
-              刷新
+              {isMobile ? "" : "刷新"}
             </Button>
           </Col>
-          <Col xs={6} sm={6} md={6} lg={8} xl={8} xxl={5}>
+          <Col xs={8} sm={8} md={4} lg={6} xl={6} xxl={5}>
             <Button
               type="primary"
               icon={<PlusOutlined />}
@@ -662,10 +742,11 @@ const BusinessProcess: React.FC = () => {
                 setEditingDrawerRecord(null);
                 setIsAddDrawerVisible(true);
               }}
-              size="middle"
+              size={isMobile ? "large" : "middle"}
               style={{ width: '100%' }}
+              title="快捷键: Ctrl/Cmd + N"
             >
-              新增
+              {isMobile ? "" : "新增"}
             </Button>
           </Col>
         </Row>
@@ -679,18 +760,22 @@ const BusinessProcess: React.FC = () => {
           {...tableConfig}
           pagination={{
             total: filteredData.length,
-            pageSize: 10,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total: number, range: [number, number]) => `第 ${range[0]}-${range[1]} 条/总共 ${total} 条`,
+            pageSize: isMobile ? 5 : 10,
+            showSizeChanger: !isMobile,
+            showQuickJumper: !isMobile,
+            showTotal: isMobile 
+              ? (total: number) => `共 ${total} 条`
+              : (total: number, range: [number, number]) => `第 ${range[0]}-${range[1]} 条/总共 ${total} 条`,
             size: isMobile ? 'small' : 'default',
+            simple: isMobile,
+            responsive: true,
           }}
         />
       </Card>
 
       {/* 新增/编辑弹窗 */}
       <Modal
-        title={editingRecord ? '编辑业务流程' : '新增业务流程'}
+        title={editingRecord ? '编辑行为树' : '新增行为树'}
         open={isModalVisible}
         onCancel={() => {
           setIsModalVisible(false);
@@ -706,26 +791,26 @@ const BusinessProcess: React.FC = () => {
           onFinish={handleSubmit}
         >
           <Form.Item
-            name="businessName"
-            label="业务名称"
+            name="treeName"
+            label="行为树名称"
             rules={[
-              { required: true, message: '请输入业务名称' },
-              { max: 50, message: '业务名称不能超过50个字符' },
+              { required: true, message: '请输入行为树名称' },
+              { max: 50, message: '行为树名称不能超过50个字符' },
             ]}
           >
-            <Input placeholder="请输入业务名称" />
+            <Input placeholder="请输入行为树名称" />
           </Form.Item>
 
           <Form.Item
-            name="identifier"
-            label="流程key"
+            name="treeKey"
+            label="树key"
             rules={[
-              { required: true, message: '请输入流程key' },
-              { pattern: /^[a-zA-Z][a-zA-Z0-9_]*$/, message: '流程key必须以字母开头，只能包含字母、数字和下划线' },
-              { max: 30, message: '流程key不能超过30个字符' },
+              { required: true, message: '请输入树key' },
+              { pattern: /^[a-zA-Z][a-zA-Z0-9_]*$/, message: '树key必须以字母开头，只能包含字母、数字和下划线' },
+              { max: 30, message: '树key不能超过30个字符' },
             ]}
           >
-            <Input placeholder="请输入流程key" />
+            <Input placeholder="请输入树key" />
           </Form.Item>
 
           <Form.Item
@@ -773,9 +858,9 @@ const BusinessProcess: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 流程key编辑Modal */}
+      {/* 树key编辑Modal */}
       <Modal
-        title="编辑流程key"
+        title="编辑树key"
         open={isEditingProcessKey}
         onOk={handleProcessKeyModalOk}
         onCancel={handleProcessKeyModalCancel}
@@ -786,41 +871,41 @@ const BusinessProcess: React.FC = () => {
           form={processKeyForm}
           layout="vertical"
           initialValues={{
-            identifier: editingProcessKeyRecord?.identifier || '',
+            treeKey: editingProcessKeyRecord?.treeKey || '',
           }}
         >
           <Form.Item
-            label="流程key"
-            name="identifier"
+            label="树key"
+            name="treeKey"
             rules={[
-              { required: true, message: '请输入流程key' },
-              { min: 3, message: '流程key至少3个字符' },
-              { max: 50, message: '流程key最多50个字符' },
-              { pattern: /^[a-zA-Z0-9_-]+$/, message: '流程key只能包含字母、数字、下划线和连字符' },
+              { required: true, message: '请输入树key' },
+              { min: 3, message: '树key至少3个字符' },
+              { max: 50, message: '树key最多50个字符' },
+              { pattern: /^[a-zA-Z0-9_-]+$/, message: '树key只能包含字母、数字、下划线和连字符' },
             ]}
           >
-            <Input placeholder="请输入流程key" />
+            <Input placeholder="请输入树key" />
           </Form.Item>
           <div style={{ color: '#666', fontSize: '12px', marginTop: '-16px', marginBottom: '16px' }}>
-            注意：流程key用于业务流程唯一标识，修改后请确保相关系统同步更新
+            注意：树key用于行为树唯一标识，修改后请确保相关系统同步更新
           </div>
         </Form>
       </Modal>
 
-      {/* 新增/编辑业务流程 Drawer */}
-      <AddBusinessProcess
+      {/* 新增/编辑行为树 Drawer */}
+      <AddBehaviorTree
         visible={isAddDrawerVisible}
         onClose={() => {
           setIsAddDrawerVisible(false);
           setEditingDrawerRecord(null);
         }}
         onSave={(data) => {
-        
           
-          const newRecord: BusinessProcessRecord = {
+          
+          const newRecord: BehaviorTreeRecord = {
             id: editingDrawerRecord ? editingDrawerRecord.id : Date.now().toString(),
-            businessName: data.businessName || '未命名流程',
-            identifier: data.identifier || '',
+            treeName: data.treeName || '未命名行为树',
+            treeKey: data.treeKey || '',
             status: data.status || 'enabled',
             remark: data.remark || '',
             updateTime: new Date().toLocaleString('zh-CN'),
@@ -828,22 +913,22 @@ const BusinessProcess: React.FC = () => {
             canvasData: data.canvasData || { nodes: [], connections: [], subCanvases: [] }
           };
           
-      
+          
 
           if (editingDrawerRecord) {
              // 编辑模式
-       
-             updateBusinessProcess(editingDrawerRecord.id, newRecord);
-             // 直接从businessProcessData获取最新数据，确保数据同步
-             setDataSource([...businessProcessData]);
-             message.success('业务流程编辑成功！');
+             
+             updateBehaviorTree(editingDrawerRecord.id, newRecord);
+             // 直接从behaviorTreeData获取最新数据，确保数据同步
+             setDataSource([...behaviorTreeData]);
+             message.success('行为树编辑成功！');
            } else {
              // 新增模式
-       
-             addBusinessProcess(newRecord);
-             // 直接从businessProcessData获取最新数据，避免重复添加
-             setDataSource([...businessProcessData]);
-             message.success('业务流程创建成功！');
+             
+             addBehaviorTree(newRecord);
+             // 直接从behaviorTreeData获取最新数据，避免重复添加
+             setDataSource([...behaviorTreeData]);
+             message.success('行为树创建成功！');
            }
 
           setIsAddDrawerVisible(false);
@@ -855,4 +940,4 @@ const BusinessProcess: React.FC = () => {
   );
 };
 
-export default BusinessProcess;
+export default BehaviorTree;

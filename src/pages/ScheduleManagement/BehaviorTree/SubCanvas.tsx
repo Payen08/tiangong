@@ -58,8 +58,8 @@ interface SubProcessData {
   };
 }
 
-// 节点类型
-type NodeType = 'start' | 'end' | 'process' | 'businessProcess';
+// 统一的节点类型定义，与主画布保持一致
+type NodeType = 'start' | 'end' | 'stage' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
 
 // 流程节点接口
 interface FlowNode {
@@ -168,7 +168,7 @@ const SubCanvas: React.FC<SubCanvasProps> = ({
       color: '#52c41a'
     },
     {
-      type: 'process',
+      type: 'stage',
       icon: <SettingOutlined />,
       label: '阶段',
       color: '#1890ff'
@@ -179,6 +179,15 @@ const SubCanvas: React.FC<SubCanvasProps> = ({
       label: '结束',
       color: '#ff4d4f'
     }
+  ];
+
+  // 行为树控制节点配置 - 与主画布节点面板保持一致
+  const behaviorTreeNodes = [
+    { type: 'sequence', label: '顺序节点', icon: '→' },
+    { type: 'parallel', label: '并行节点', icon: '∥' },
+    { type: 'condition', label: '条件节点', icon: '?' },
+    { type: 'inverter', label: '逆变节点', icon: '!' },
+    { type: 'repeat', label: '重复节点', icon: '↻' }
   ];
   
   // 获取画布坐标
@@ -219,7 +228,7 @@ const SubCanvas: React.FC<SubCanvasProps> = ({
         if (Math.abs(x - inputX) <= 8 && Math.abs(y - inputY) <= 8) {
           return { nodeId: node.id, type: 'input' as const, x: inputX, y: inputY };
         }
-      } else if (type === 'process') {
+      } else if (type === 'stage') {
         // 阶段节点有输入和输出连接点
         const inputX = nodeX;
         const inputY = nodeY + height / 2;
@@ -426,8 +435,8 @@ const SubCanvas: React.FC<SubCanvasProps> = ({
       ctx.arc(inputX, inputY, inputRadius, 0, 2 * Math.PI);
       ctx.fill();
       ctx.stroke();
-    } else if (type === 'process') {
-      // 阶段节点左右两侧连接点
+    } else if (type === 'stage') {
+        // 阶段节点左右两侧连接点
       const inputX = x;
       const inputY = y + height / 2;
       const outputX = x + width;
@@ -1023,6 +1032,28 @@ const SubCanvas: React.FC<SubCanvasProps> = ({
                     {tool.label}
                   </Button>
                 ))}
+                
+                {/* 行为树控制节点 */}
+                <div style={{ marginTop: '16px', marginBottom: '8px', fontSize: '14px', fontWeight: 500, color: '#666' }}>
+                  行为树控制节点
+                </div>
+                {behaviorTreeNodes.map(node => (
+                  <Button
+                    key={node.type}
+                    type="default"
+                    onClick={() => {
+                      // 这里可以添加行为树控制节点的处理逻辑
+                      message.info(`添加${node.label}`);
+                      setShowNodePanel(false);
+                    }}
+                    style={{ textAlign: 'left', height: '40px' }}
+                  >
+                    <span style={{ marginRight: '8px' }}>
+                      {node.icon}
+                    </span>
+                    {node.label}
+                  </Button>
+                ))}
               </div>
               <div style={{ marginTop: '16px', textAlign: 'right' }}>
                 <Button onClick={() => setShowNodePanel(false)}>
@@ -1159,7 +1190,7 @@ const SubCanvas: React.FC<SubCanvasProps> = ({
             />
           </Form.Item>
           
-          {editingNode?.type === 'process' && (
+          {editingNode?.type === 'stage' && (
             <>
               <Form.Item
                 label="需求设备"

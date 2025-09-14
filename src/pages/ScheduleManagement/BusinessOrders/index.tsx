@@ -443,7 +443,7 @@ const BusinessOrders: React.FC = () => {
       onOk() {
         message.success(`运单任务 "${task.taskName}" 启动成功`);
         // 这里可以添加实际的启动逻辑
-        console.log('启动运单任务:', task, businessOrder);
+    
       },
     });
   };
@@ -504,7 +504,7 @@ const BusinessOrders: React.FC = () => {
       onOk() {
         message.success(`运单任务 "${task.taskName}" 停止成功`);
         // 这里可以添加实际的停止逻辑
-        console.log('停止运单任务:', task, businessOrder);
+    
       },
     });
   };
@@ -660,7 +660,7 @@ const BusinessOrders: React.FC = () => {
   const handleDiagnoseBusinessOrder = (record: BusinessOrderRecord) => {
     message.info(`正在诊断业务订单 "${record.orderName}"...`);
     // 这里可以添加实际的诊断逻辑
-    console.log('诊断业务订单:', record);
+
     
     // 模拟诊断结果
     setTimeout(() => {
@@ -684,7 +684,7 @@ const BusinessOrders: React.FC = () => {
   const handleDiagnoseWaybillTask = (task: WaybillTask, businessOrder: BusinessOrderRecord) => {
     message.info(`正在诊断运单任务 "${task.taskName}"...`);
     // 这里可以添加实际的诊断逻辑
-    console.log('诊断运单任务:', task, businessOrder);
+
     
     // 模拟诊断结果
     setTimeout(() => {
