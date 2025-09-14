@@ -5,14 +5,14 @@ import {
   Button,
   Space,
   Input,
-  Select,
-  Tag,
+  // Select,
+  // Tag,
   Drawer,
   message,
   Popconfirm,
   Row,
   Col,
-  Typography,
+  // Typography,
   Tooltip,
 } from 'antd';
 import {
@@ -26,8 +26,8 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import AddCrossMapConnection from './AddCrossMapConnection';
 
-const { Title } = Typography;
-const { Option } = Select;
+// const { Title } = Typography;
+// const { Option } = Select;
 
 // 跨地图连接数据接口
 interface CrossMapConnection {

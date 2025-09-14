@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   Table,
@@ -30,7 +30,6 @@ import type { ColumnsType } from 'antd/es/table';
 import { useResponsive } from '@/hooks/useResponsive';
 import TaskDetail from './TaskDetail';
 
-const { Search } = Input;
 const { Option } = Select;
 const { confirm } = Modal;
 
@@ -812,8 +811,6 @@ const TaskManagement: React.FC = () => {
       size: 'middle' as const,
     };
   };
-
-  const tableConfig = getTableConfig();
 
   return (
     <div style={{ background: 'transparent' }}>

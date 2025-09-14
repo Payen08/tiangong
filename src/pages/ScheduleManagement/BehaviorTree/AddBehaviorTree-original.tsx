@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Drawer,
   Form,
@@ -11,9 +11,7 @@ import {
   message,
   Tooltip,
   Card,
-  Space,
   Radio,
-  Tabs,
 } from 'antd';
 import StagePropertyPanel from './StagePropertyPanel';
 import BusinessProcessPropertyPanel from './BusinessProcessPropertyPanel';
@@ -25,15 +23,7 @@ import {
   ZoomOutOutlined, 
   HomeOutlined,
   PlayCircleOutlined,
-  StopOutlined,
   PlusOutlined,
-  ApiOutlined,
-  BranchesOutlined,
-  ClockCircleOutlined,
-  SettingOutlined,
-  CloseOutlined,
-  SearchOutlined,
-  SelectOutlined,
   SortAscendingOutlined,
   DeleteOutlined
 } from '@ant-design/icons';
@@ -67,12 +57,12 @@ interface ExecutionDevice {
   conditionGroups?: TriggerConditionGroup[];
 }
 
-interface BehaviorTreeData {
-  treeName: string;
-  treeKey: string;
-  status: 'enabled' | 'disabled' | 'obsolete';
-  executionDevices?: ExecutionDevice[];
-}
+// interface BehaviorTreeData {
+//   treeName: string;
+//   treeKey: string;
+//   status: 'enabled' | 'disabled' | 'obsolete';
+//   executionDevices?: ExecutionDevice[];
+// }
 
 interface AddBehaviorTreeProps {
   visible: boolean;
@@ -104,7 +94,7 @@ interface HistoryState {
   };
 }
 
-type NodeType = 'start' | 'end' | 'stage' | 'businessProcess';
+type NodeType = 'start' | 'end' | 'stage' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
 
 interface SubCanvasViewConfig {
   scale: number;
@@ -177,12 +167,12 @@ interface Connection {
   targetType?: 'node' | 'stage' | 'subcanvas' | 'businessProcess';
 }
 
-interface NodeTool {
-  type: NodeType;
-  icon: React.ReactNode;
-  label: string;
-  color: string;
-}
+// interface NodeTool {
+//   type: NodeType;
+//   icon: React.ReactNode;
+//   label: string;
+//   color: string;
+// }
 
 const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({ 
   visible,
@@ -214,42 +204,42 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
     historyIndex: -1
   });
 
-  const [invalidNodes, setInvalidNodes] = useState<string[]>([]);
+  // const [invalidNodes, setInvalidNodes] = useState<string[]>([]);
 
-  const [history, setHistory] = useState<HistoryState[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [history] = useState<HistoryState[]>([]);
+  const [historyIndex] = useState(-1);
 
   const [nodes, setNodes] = useState<FlowNode[]>([]);
-  const [connections, setConnections] = useState<Connection[]>([]);
-  const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [selectedConnection, setSelectedConnection] = useState<string | null>(null);
-  const [draggedNode, setDraggedNode] = useState<FlowNode | null>(null);
-  const [isDraggingNode, setIsDraggingNode] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  // const [connections] = useState<Connection[]>([]);
+  // const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  // const [selectedConnection, setSelectedConnection] = useState<string | null>(null);
+  // const [draggedNode, setDraggedNode] = useState<FlowNode | null>(null);
+  // const [isDraggingNode, setIsDraggingNode] = useState(false);
+  // const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
-  const [isDraggingSubCanvas, setIsDraggingSubCanvas] = useState(false);
-  const [draggedSubCanvas, setDraggedSubCanvas] = useState<SubCanvas | null>(null);
-  const [subCanvasDragOffset, setSubCanvasDragOffset] = useState({ x: 0, y: 0 });
+  // const [isDraggingSubCanvas, setIsDraggingSubCanvas] = useState(false);
+  // const [draggedSubCanvas, setDraggedSubCanvas] = useState<SubCanvas | null>(null);
+  // const [subCanvasDragOffset, setSubCanvasDragOffset] = useState({ x: 0, y: 0 });
 
-  const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
-  const [insertingConnectionId, setInsertingConnectionId] = useState<string | null>(null);
+  // const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
+  // const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  // const [insertingConnectionId, setInsertingConnectionId] = useState<string | null>(null);
 
-  const [hoveredConnectionPoint, setHoveredConnectionPoint] = useState<{nodeId: string, type: 'input' | 'output' | 'subcanvas' | 'bottom'} | null>(null);
-  const [hoveredSubCanvasLine, setHoveredSubCanvasLine] = useState<string | null>(null);
-  const [isDraggingConnection, setIsDraggingConnection] = useState(false);
-  const [dragConnectionStart, setDragConnectionStart] = useState<{nodeId: string, type: 'input' | 'output' | 'subcanvas' | 'bottom', x: number, y: number} | null>(null);
-  const [dragConnectionEnd, setDragConnectionEnd] = useState<{x: number, y: number} | null>(null);
+  const [hoveredConnectionPoint] = useState<{nodeId: string, type: 'input' | 'output' | 'subcanvas' | 'bottom'} | null>(null);
+  // const [hoveredSubCanvasLine, setHoveredSubCanvasLine] = useState<string | null>(null);
+  // const [isDraggingConnection, setIsDraggingConnection] = useState(false);
+  // const [dragConnectionStart, setDragConnectionStart] = useState<{nodeId: string, type: 'input' | 'output' | 'subcanvas' | 'bottom', x: number, y: number} | null>(null);
+  // const [dragConnectionEnd, setDragConnectionEnd] = useState<{x: number, y: number} | null>(null);
 
-  const [subCanvases, setSubCanvases] = useState<SubCanvas[]>([]);
-  const [selectedSubCanvas, setSelectedSubCanvas] = useState<string | null>(null);
+  // const [subCanvases, setSubCanvases] = useState<SubCanvas[]>([]);
+  // const [selectedSubCanvas, setSelectedSubCanvas] = useState<string | null>(null);
 
   const [editingSubProcess, setEditingSubProcess] = useState<string | null>(null);
 
-  const [openSubCanvasWindows, setOpenSubCanvasWindows] = useState<Map<string, { nodeId: string; position: { x: number; y: number } }>>(new Map());
+  // const [openSubCanvasWindows, setOpenSubCanvasWindows] = useState<Map<string, { nodeId: string; position: { x: number; y: number } }>>(new Map());
 
-  const [showNodePanel, setShowNodePanel] = useState(false);
-  const [nodeAddPosition, setNodeAddPosition] = useState({ x: 0, y: 0 });
+  // const [showNodePanel, setShowNodePanel] = useState(false);
+  // const [nodeAddPosition, setNodeAddPosition] = useState({ x: 0, y: 0 });
 
   const [stagePropertyPanelVisible, setStagePropertyPanelVisible] = useState(false);
   const [selectedStageNode, setSelectedStageNode] = useState<FlowNode | null>(null);
@@ -257,8 +247,8 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
   const [businessProcessPropertyPanelVisible, setBusinessProcessPropertyPanelVisible] = useState(false);
   const [selectedBusinessProcessNode, setSelectedBusinessProcessNode] = useState<FlowNode | null>(null);
 
-  const [hoveredDemandDevice, setHoveredDemandDevice] = useState<{nodeId: string, deviceText: string, x: number, y: number} | null>(null);
-  const [hoveredTriggerCondition, setHoveredTriggerCondition] = useState<{nodeId: string, conditionText: string, x: number, y: number} | null>(null);
+  // const [hoveredDemandDevice, setHoveredDemandDevice] = useState<{nodeId: string, deviceText: string, x: number, y: number} | null>(null);
+  // const [hoveredTriggerCondition, setHoveredTriggerCondition] = useState<{nodeId: string, conditionText: string, x: number, y: number} | null>(null);
 
   const [executionDevices, setExecutionDevices] = useState<ExecutionDevice[]>([
     {
@@ -377,13 +367,12 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
     updateExecutionDevice(deviceId, { conditionGroups: updatedGroups });
   };
 
-  const handleStageNodeClick = (node: FlowNode) => {
-    setSelectedStageNode(node);
-    setStagePropertyPanelVisible(true);
-  };
+  // const handleStageNodeClick = (node: FlowNode) => {
+  //   setSelectedStageNode(node);
+  //   setStagePropertyPanelVisible(true);
+  // };
 
-  const handleSaveStageNode = (nodeData: any) => {
-
+  const handleSaveStageNode = () => {
     setStagePropertyPanelVisible(false);
   };
 
@@ -392,8 +381,7 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
     setSelectedStageNode(null);
   };
 
-  const handleSaveBusinessProcessNode = (nodeData: any) => {
-
+  const handleSaveBusinessProcessNode = () => {
     setBusinessProcessPropertyPanelVisible(false);
   };
 
@@ -417,13 +405,13 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
       const newIndex = historyIndex - 1;
       const state = history[newIndex];
       setNodes(state.nodes);
-      setConnections(state.connections);
-      setSubCanvases(state.subCanvases);
+      // setConnections(state.connections);
+      // setSubCanvases(state.subCanvases);
       setCanvasState(prev => ({
         ...prev,
         ...state.canvasState
       }));
-      setHistoryIndex(newIndex);
+      // setHistoryIndex(newIndex);
     }
   };
 
@@ -432,13 +420,13 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
       const newIndex = historyIndex + 1;
       const state = history[newIndex];
       setNodes(state.nodes);
-      setConnections(state.connections);
-      setSubCanvases(state.subCanvases);
+      // setConnections(state.connections);
+      // setSubCanvases(state.subCanvases);
       setCanvasState(prev => ({
         ...prev,
         ...state.canvasState
       }));
-      setHistoryIndex(newIndex);
+      // setHistoryIndex(newIndex);
     }
   };
 
@@ -469,11 +457,11 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
 
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseDown = () => {
 
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = () => {
 
   };
 
@@ -485,7 +473,7 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
 
   };
 
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+  const handleWheel = () => {
 
   };
 
@@ -614,12 +602,12 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
                     onMouseLeave={handleMouseLeave}
                     onWheel={handleWheel}
                     style={{ 
-                      cursor: isDraggingConnection ? 'crosshair' : 
+                      cursor: // isDraggingConnection ? 'crosshair' : 
                              (hoveredConnectionPoint ? 'crosshair' : 
-                             (isDraggingNode ? 'grabbing' : 
-                             (isDraggingSubCanvas ? 'grabbing' :
+                             // (isDraggingNode ? 'grabbing' : 
+                             // (isDraggingSubCanvas ? 'grabbing' :
                              (canvasState.isSpacePressed ? 'grab' : 
-                             'default')))),
+                             'default')), // ))),
                       backgroundColor: '#f5f7fa'
                     }}
                   />
@@ -730,7 +718,7 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
                             title={`条件组 ${groupIndex + 1}`}
                             style={{ marginBottom: '8px' }}
                           >
-                            {group.conditions.map((condition, conditionIndex) => (
+                            {group.conditions.map((condition, _conditionIndex) => (
                               <div key={condition.id} style={{ marginBottom: '12px' }}>
                                 <Row gutter={8}>
                                   <Col span={8}>

@@ -40,6 +40,7 @@ interface ExecutionDetail {
 }
 
 // 行为树节点数据类型
+/*
 interface BehaviorTreeNode {
   id: string;
   title: string;
@@ -49,14 +50,17 @@ interface BehaviorTreeNode {
   inputs?: NodePort[];  // 输入端点
   outputs?: NodePort[]; // 输出端点
 }
+*/
 
-// 节点端点类型
+// 节点端口类型
+/*
 interface NodePort {
   id: string;
   name: string;
   type: 'input' | 'output';
   dataType: string; // 数据类型，如 'position', 'command', 'status' 等
 }
+*/
 
 interface TaskDetailProps {
   visible: boolean;
@@ -91,6 +95,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ visible, onClose, taskData }) =
 
   // 模拟行为树数据 - 按用户需求重新设计结构
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  /*
   const behaviorTreeData: BehaviorTreeNode = {
     id: 'root',
     title: '树根',
@@ -197,6 +202,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ visible, onClose, taskData }) =
       }
     ]
   };
+  */
 
   // 状态颜色映射
   const getStatusColor = (status: string) => {

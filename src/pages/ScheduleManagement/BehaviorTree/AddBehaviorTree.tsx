@@ -7,13 +7,10 @@ import {
   Button,
   Row,
   Col,
-  Steps,
   message,
   Tooltip,
   Card,
-  Space,
   Radio,
-  Tabs,
 } from 'antd';
 import StagePropertyPanel from './StagePropertyPanel';
 import BusinessProcessPropertyPanel from './BusinessProcessPropertyPanel';
@@ -28,13 +25,8 @@ import {
   PlayCircleOutlined,
   StopOutlined,
   PlusOutlined,
-  ApiOutlined,
-  BranchesOutlined,
   ClockCircleOutlined,
   SettingOutlined,
-  CloseOutlined,
-  SearchOutlined,
-  SelectOutlined,
   SortAscendingOutlined,
   DeleteOutlined,
   OrderedListOutlined,
@@ -45,7 +37,6 @@ import {
 } from '@ant-design/icons';
 // SubCanvas和IndependentSubCanvas导入已移除 - 阶段节点功能已移除
 
-const { TextArea } = Input;
 const { Option } = Select;
 
 // 触发条件接口
@@ -80,12 +71,7 @@ interface ExecutionDevice {
 }
 
 // 行为树接口
-interface BehaviorTreeData {
-  treeName: string;
-  treeKey: string;
-  status: 'enabled' | 'disabled' | 'obsolete';
-  executionDevices?: ExecutionDevice[];
-}
+// BehaviorTreeData interface removed - not used
 
 interface AddBehaviorTreeProps {
   visible: boolean;
@@ -237,7 +223,7 @@ interface NodeTool {
 
 // 动态高度计算函数（普通函数，不使用Hook）
 const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingContext2D) => {
-  const { type, customName, label, behaviorTreeData } = node;
+  const { type, behaviorTreeData } = node;
   
   // 基础高度配置
   const baseHeight = 60;
@@ -380,7 +366,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
   const [subCanvasDragOffset, setSubCanvasDragOffset] = useState({ x: 0, y: 0 });
 
   const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
+  // const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [insertingConnectionId, setInsertingConnectionId] = useState<string | null>(null);
   
   // 连接点交互状态
@@ -392,15 +378,14 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
   
   // 子画布状态管理
   const [subCanvases, setSubCanvases] = useState<SubCanvas[]>([]);
-  const [selectedSubCanvas, setSelectedSubCanvas] = useState<string | null>(null);
+  const [selectedSubCanvas] = useState<string | null>(null);
   
   // 子流程编辑状态
-  const [editingSubProcess, setEditingSubProcess] = useState<string | null>(null); // 当前编辑的子流程节点ID
+  const [editingSubProcess] = useState<string | null>(null); // 当前编辑的子流程节点ID
   
   // 右键菜单状态已移除
   
-  // 独立子画布窗口管理
-  const [openSubCanvasWindows, setOpenSubCanvasWindows] = useState<Map<string, { nodeId: string; position: { x: number; y: number } }>>(new Map());
+  // 独立子画布窗口管理已移除，因为未被使用
   
   // 添加节点面板状态
   const [showNodePanel, setShowNodePanel] = useState(false);
@@ -434,76 +419,76 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
   ]);
   
   // 设备类型选项
-  const deviceTypeOptions = [
-    { label: '传感器', value: 'sensor' },
-    { label: '执行器', value: 'actuator' },
-    { label: '控制器', value: 'controller' },
-    { label: '监控设备', value: 'monitor' }
-  ];
+  // const deviceTypeOptions = [
+  //   { label: '传感器', value: 'sensor' },
+  //   { label: '执行器', value: 'actuator' },
+  //   { label: '控制器', value: 'controller' },
+  //   { label: '监控设备', value: 'monitor' }
+  // ];
 
   // 设备选项（根据设备类型动态变化）
-  const getDeviceOptions = (deviceType: string) => {
-    const deviceMap: Record<string, Array<{ label: string; value: string }>> = {
-      sensor: [
-        { label: '温度传感器', value: 'temp_sensor' },
-        { label: '湿度传感器', value: 'humidity_sensor' },
-        { label: '压力传感器', value: 'pressure_sensor' }
-      ],
-      actuator: [
-        { label: '电机', value: 'motor' },
-        { label: '阀门', value: 'valve' },
-        { label: '泵', value: 'pump' }
-      ],
-      controller: [
-        { label: 'PLC控制器', value: 'plc' },
-        { label: '单片机', value: 'mcu' },
-        { label: '工控机', value: 'ipc' }
-      ],
-      monitor: [
-        { label: '摄像头', value: 'camera' },
-        { label: '显示屏', value: 'display' },
-        { label: '报警器', value: 'alarm' }
-      ]
-    };
-    return deviceMap[deviceType] || [];
-  };
+  // const getDeviceOptions = (deviceType: string) => {
+  //   const deviceMap: Record<string, Array<{ label: string; value: string }>> = {
+  //     sensor: [
+  //       { label: '温度传感器', value: 'temp_sensor' },
+  //       { label: '湿度传感器', value: 'humidity_sensor' },
+  //       { label: '压力传感器', value: 'pressure_sensor' }
+  //     ],
+  //     actuator: [
+  //       { label: '电机', value: 'motor' },
+  //       { label: '阀门', value: 'valve' },
+  //       { label: '泵', value: 'pump' }
+  //     ],
+  //     controller: [
+  //       { label: 'PLC控制器', value: 'plc' },
+  //       { label: '单片机', value: 'mcu' },
+  //       { label: '工控机', value: 'ipc' }
+  //     ],
+  //     monitor: [
+  //       { label: '摄像头', value: 'camera' },
+  //       { label: '显示屏', value: 'display' },
+  //       { label: '报警器', value: 'alarm' }
+  //     ]
+  //   };
+  //   return deviceMap[deviceType] || [];
+  // };
   
   // 根据设备ID获取设备中文名称
-  const getDeviceNameById = (deviceId: string): string => {
-    const allDeviceTypes = ['sensor', 'actuator', 'controller', 'monitor'];
-    for (const deviceType of allDeviceTypes) {
-      const options = getDeviceOptions(deviceType);
-      const device = options.find(option => option.value === deviceId);
-      if (device) {
-        return device.label;
-      }
-    }
-    return deviceId; // 如果找不到，返回原始ID
-  };
+  // const getDeviceNameById = (deviceId: string): string => {
+  //   const allDeviceTypes = ['sensor', 'actuator', 'controller', 'monitor'];
+  //   for (const deviceType of allDeviceTypes) {
+  //     const options = getDeviceOptions(deviceType);
+  //     const device = options.find(option => option.value === deviceId);
+  //     if (device) {
+  //       return device.label;
+  //     }
+  //   }
+  //   return deviceId; // 如果找不到，返回原始ID
+  // };
   
   // 添加执行设备
-  const addExecutionDevice = () => {
-    const newDevice: ExecutionDevice = {
-      id: `device_${Date.now()}`,
-      deviceType: 'sensor',
-      devices: [],
-      triggerType: 'general',
-      conditionType: 'none'
-    };
-    setExecutionDevices(prev => [...prev, newDevice]);
-  };
+  // const addExecutionDevice = () => {
+  //   const newDevice: ExecutionDevice = {
+  //     id: `device_${Date.now()}`,
+  //     deviceType: 'sensor',
+  //     devices: [],
+  //     triggerType: 'general',
+  //     conditionType: 'none'
+  //   };
+  //   setExecutionDevices(prev => [...prev, newDevice]);
+  // };
   
   // 更新执行设备
-  const updateExecutionDevice = (deviceId: string, updates: Partial<ExecutionDevice>) => {
-    setExecutionDevices(prev => prev.map(device => 
-      device.id === deviceId ? { ...device, ...updates } : device
-    ));
-  };
+  // const updateExecutionDevice = (deviceId: string, updates: Partial<ExecutionDevice>) => {
+  //   setExecutionDevices(prev => prev.map(device => 
+  //     device.id === deviceId ? { ...device, ...updates } : device
+  //   ));
+  // };
   
   // 删除执行设备
-  const removeExecutionDevice = (deviceId: string) => {
-    setExecutionDevices(prev => prev.filter(device => device.id !== deviceId));
-  };
+  // const removeExecutionDevice = (deviceId: string) => {
+  //   setExecutionDevices(prev => prev.filter(device => device.id !== deviceId));
+  // };
   
   // 数据源选项
   const dataSourceOptions = [
@@ -520,119 +505,119 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
   ];
 
   // 添加触发条件组
-  const addTriggerConditionGroup = (deviceId: string): void => {
-    const newGroup: TriggerConditionGroup = {
-      id: `group_${Date.now()}`,
-      conditions: [{
-        id: `cond_${Date.now()}`,
-        dataSource: 'product',
-        dataItem: '',
-        property: '',
-        compareType: 'equal',
-        value: ''
-      }],
-      logicOperator: 'and'
-    };
+  const addTriggerConditionGroup = (/* deviceId: string */): void => {
+    // const newGroup: TriggerConditionGroup = {
+    //   id: `group_${Date.now()}`,
+    //   conditions: [{
+    //     id: `cond_${Date.now()}`,
+    //     dataSource: 'product',
+    //     dataItem: '',
+    //     property: '',
+    //     compareType: 'equal',
+    //     value: ''
+    //   }],
+    //   logicOperator: 'and'
+    // };
     
-    const device = executionDevices.find(dev => dev.id === deviceId);
-    updateExecutionDevice(deviceId, {
-      conditionGroups: [...(device?.conditionGroups || []), newGroup]
-    });
+    // const device = executionDevices.find(dev => dev.id === deviceId);
+    // updateExecutionDevice(deviceId, {
+    //   conditionGroups: [...(device?.conditionGroups || []), newGroup]
+    // });
   };
 
   // 添加触发条件到组
-  const addTriggerCondition = (deviceId: string, groupId: string): void => {
-    const newCondition: TriggerCondition = {
-      id: `cond_${Date.now()}`,
-      dataSource: 'product',
-      dataItem: '',
-      property: '',
-      compareType: 'equal',
-      value: ''
-    };
+  const addTriggerCondition = (deviceId: string, /* groupId: string */): void => {
+    // const newCondition: TriggerCondition = {
+    //   id: `cond_${Date.now()}`,
+    //   dataSource: 'product',
+    //   dataItem: '',
+    //   property: '',
+    //   compareType: 'equal',
+    //   value: ''
+    // };}]}}}
     
     const device = executionDevices.find(dev => dev.id === deviceId);
     if (device) {
-      const updatedGroups = device.conditionGroups?.map(group => 
-        group.id === groupId 
-          ? { ...group, conditions: [...group.conditions, newCondition] }
-          : group
-      ) || [];
+      // const updatedGroups = device.conditionGroups?.map(group => 
+      //   group.id === groupId 
+      //     ? { ...group, conditions: [...group.conditions, newCondition] }
+      //     : group
+      // ) || [];
       
-      updateExecutionDevice(deviceId, {
-        conditionGroups: updatedGroups
-      });
+      // updateExecutionDevice(deviceId, {
+       //   conditionGroups: updatedGroups
+       // });
     }
   };
 
   // 删除触发条件组
-  const removeTriggerConditionGroup = (deviceId: string, groupId: string): void => {
+  const removeTriggerConditionGroup = (deviceId: string, /* groupId: string */): void => {
     const device = executionDevices.find(dev => dev.id === deviceId);
     if (device) {
-      updateExecutionDevice(deviceId, {
-        conditionGroups: device.conditionGroups?.filter(group => group.id !== groupId) || []
-      });
+      // updateExecutionDevice(deviceId, {
+      //   conditionGroups: device.conditionGroups?.filter(group => group.id !== groupId) || []
+      // });
     }
   };
 
   // 删除触发条件
-  const removeTriggerCondition = (deviceId: string, groupId: string, conditionId: string): void => {
+  const removeTriggerCondition = (deviceId: string, /* groupId: string, conditionId: string */): void => {
     const device = executionDevices.find(dev => dev.id === deviceId);
     if (device) {
-      const updatedGroups = device.conditionGroups?.map(group => 
-        group.id === groupId 
-          ? { ...group, conditions: group.conditions.filter(cond => cond.id !== conditionId) }
-          : group
-      ) || [];
+      // const updatedGroups = device.conditionGroups?.map(group => 
+      //   group.id === groupId 
+      //     ? { ...group, conditions: group.conditions.filter(cond => cond.id !== conditionId) }
+      //     : group
+      // ) || [];
       
-      updateExecutionDevice(deviceId, {
-        conditionGroups: updatedGroups
-      });
+      // updateExecutionDevice(deviceId, {
+        //   conditionGroups: updatedGroups
+        // });
     }
   };
 
   // 更新触发条件组
-  const updateTriggerConditionGroup = (deviceId: string, groupId: string, updates: Partial<TriggerConditionGroup>): void => {
+  const updateTriggerConditionGroup = (deviceId: string, /* groupId: string, updates: Partial<TriggerConditionGroup> */): void => {
     const device = executionDevices.find(dev => dev.id === deviceId);
     if (device) {
-      const updatedGroups = device.conditionGroups?.map(group => 
-        group.id === groupId ? { ...group, ...updates } : group
-      ) || [];
+      // const updatedGroups = device.conditionGroups?.map(group => 
+      //   group.id === groupId ? { ...group, ...updates } : group
+      // ) || [];
       
-      updateExecutionDevice(deviceId, {
-        conditionGroups: updatedGroups
-      });
+      // updateExecutionDevice(deviceId, {
+      //   conditionGroups: updatedGroups
+      // });
     }
   };
 
   // 更新触发条件
-  const updateTriggerCondition = (deviceId: string, groupId: string, conditionId: string, updates: Partial<TriggerCondition>): void => {
+  const updateTriggerCondition = (deviceId: string, /* groupId: string, conditionId: string, updates: Partial<TriggerCondition> */): void => {
     const device = executionDevices.find(dev => dev.id === deviceId);
     if (device) {
-      const updatedGroups = device.conditionGroups?.map(group => 
-        group.id === groupId 
-          ? {
-              ...group, 
-              conditions: group.conditions.map(cond => 
-                cond.id === conditionId ? { ...cond, ...updates } : cond
-              )
-            }
-          : group
-      ) || [];
+      // const updatedGroups = device.conditionGroups?.map(group => 
+      //   group.id === groupId 
+      //     ? {
+      //         ...group, 
+      //         conditions: group.conditions.map(cond => 
+      //           cond.id === conditionId ? { ...cond, ...updates } : cond
+      //         )
+      //       }
+      //     : group
+      // ) || [];
       
-      updateExecutionDevice(deviceId, {
-        conditionGroups: updatedGroups
-      });
+      // updateExecutionDevice(deviceId, {
+        //   conditionGroups: updatedGroups
+        // });
     }
   };
 
   // 处理阶段节点点击事件
-  const handleStageNodeClick = useCallback((node: FlowNode) => {
-    if (node.type === 'stage') {
-      setSelectedStageNode(node);
-      setStagePropertyPanelVisible(true);
-    }
-  }, []);
+  // const handleStageNodeClick = useCallback((node: FlowNode) => {
+  //   if (node.type === 'stage') {
+  //     setSelectedStageNode(node);
+  //     setStagePropertyPanelVisible(true);
+  //   }
+  // }, []);
 
   // 保存阶段节点属性
   const handleSaveStageNode = useCallback((updatedNode: FlowNode) => {
@@ -677,156 +662,148 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
   }, []);
   
   // 阶段节点已移除
-  const checkSubCanvasDoubleClick = useCallback((x: number, y: number, node: FlowNode): boolean => {
-    return false;
-  }, []);
+  // const checkSubCanvasDoubleClick = useCallback((_x: number, _y: number, _node: FlowNode): boolean => {
+  //   return false;
+  // }, []);
   
   // 阶段节点已移除
-  const checkOpenSubCanvasButtonClick = useCallback((x: number, y: number, node: FlowNode): boolean => {
+  const checkOpenSubCanvasButtonClick = useCallback((_x: number, _y: number, _node: FlowNode): boolean => {
     return false;
   }, []);
 
   // 创建默认子流程数据
-  const createDefaultSubProcess = useCallback((stageName: string): SubProcessData => {
-    const currentTime = new Date().toISOString();
-    return {
-      nodes: [
-        {
-          id: `sub_start_${Date.now()}`,
-          type: 'start' as NodeType,
-          x: 50,
-          y: 30,
-          width: 80,
-          height: 40,
-          label: '开始'
-        },
-        {
-          id: `sub_end_${Date.now() + 1}`,
-          type: 'end' as NodeType,
-          x: 200,
-          y: 30,
-          width: 80,
-          height: 40,
-          label: '结束'
-        }
-      ],
-      connections: [],
-      viewConfig: {
-        scale: 1.0,
-        offsetX: 0,
-        offsetY: 0,
-        gridSize: 20,
-        showGrid: true
-      },
-      metadata: {
-        name: `${stageName}子流程`,
-        description: `${stageName}的内部流程`,
-        version: '1.0.0',
-        createdAt: currentTime,
-        updatedAt: currentTime,
-        author: 'system'
-      },
-      settings: {
-        autoLayout: true,
-        snapToGrid: true,
-        allowCrossConnections: true,
-        maxNodes: 50
-      }
-    };
-  }, []);
+  // const createDefaultSubProcess = useCallback((stageName: string): SubProcessData => {
+  //   const currentTime = new Date().toISOString();
+  //   return {
+  //     nodes: [
+  //       {
+  //         id: `sub_start_${Date.now()}`,
+  //         type: 'start' as NodeType,
+  //         x: 50,
+  //         y: 30,
+  //         width: 80,
+  //         height: 40,
+  //         label: '开始'
+  //       },
+  //       {
+  //         id: `sub_end_${Date.now() + 1}`,
+  //         type: 'end' as NodeType,
+  //         x: 200,
+  //         y: 30,
+  //         width: 80,
+  //         height: 40,
+  //         label: '结束'
+  //       }
+  //     ],
+  //     connections: [],
+  //     viewConfig: {
+  //       scale: 1.0,
+  //       offsetX: 0,
+  //       offsetY: 0,
+  //       gridSize: 20,
+  //       showGrid: true
+  //     },
+  //     metadata: {
+  //       name: `${stageName}子流程`,
+  //       description: `${stageName}的内部流程`,
+  //       version: '1.0.0',
+  //       createdAt: currentTime,
+  //       updatedAt: currentTime,
+  //       author: 'system'
+  //     },
+  //     settings: {
+  //       autoLayout: true,
+  //       snapToGrid: true,
+  //       allowCrossConnections: true,
+  //       maxNodes: 50
+  //     }
+  //   };
+  // }, []);
   
   // 进入子流程编辑模式 - 阶段节点已移除
-  const enterSubProcessMode = useCallback((nodeId: string) => {
-    return; // 阶段节点已移除
-  }, []);
+  // const enterSubProcessMode = useCallback((_nodeId: string) => {
+  //   return; // 阶段节点已移除
+  // }, []);
   
   // 退出子流程编辑模式
-  const exitSubProcessMode = useCallback(() => {
-    setEditingSubProcess(null);
-    message.info('已退出子流程编辑模式');
-  }, []);
+  // const exitSubProcessMode = useCallback(() => {
+  //   setEditingSubProcess(null);
+  //   message.info('已退出子流程编辑模式');
+  // }, []);
 
   // 打开独立子画布窗口 - 阶段节点已移除
-  const openIndependentSubCanvas = useCallback((nodeId: string) => {
-    return; // 阶段节点已移除
-  }, []);
+  // const openIndependentSubCanvas = useCallback((_nodeId: string) => {
+  //   return; // 阶段节点已移除
+  // }, []);
 
-  // 关闭独立子画布窗口
-  const closeIndependentSubCanvas = useCallback((nodeId: string) => {
-    setOpenSubCanvasWindows(prev => {
-      const newMap = new Map(prev);
-      newMap.delete(nodeId);
-      return newMap;
-    });
-    message.info('子画布窗口已关闭');
-  }, []);
+  // 关闭独立子画布窗口函数已移除，因为相关状态变量已删除
 
   // 更新子流程数据
-  const updateSubProcess = useCallback((nodeId: string, updatedData: SubProcessData) => {
-    setNodes(prev => prev.map(node => 
-      node.id === nodeId 
-        ? { ...node, subProcess: updatedData }
-        : node
-    ));
-  }, []);
+  // const updateSubProcess = useCallback((nodeId: string, updatedData: SubProcessData) => {
+  //   setNodes(prev => prev.map(node => 
+  //     node.id === nodeId 
+  //       ? { ...node, subProcess: updatedData }
+  //       : node
+  //   ));
+  // }, []);
 
   // 更新子流程数据（支持部分更新）
-  const updateSubProcessPartial = useCallback((nodeId: string, updates: Partial<SubProcessData>) => {
-    setNodes(prevNodes => 
-      prevNodes.map(node => {
-        if (node.id === nodeId && node.subProcess) {
-          const updatedSubProcess = {
-            ...node.subProcess,
-            ...updates,
-            metadata: {
-              ...node.subProcess.metadata,
-              ...updates.metadata,
-              updatedAt: new Date().toISOString()
-            }
-          };
-          
-          return { 
-            ...node, 
-            subProcess: updatedSubProcess
-          };
-        }
-        return node;
-      })
-    );
-  }, []);
+  // const updateSubProcessPartial = useCallback((nodeId: string, updates: Partial<SubProcessData>) => {
+  //   setNodes(prevNodes => 
+  //     prevNodes.map(node => {
+  //       if (node.id === nodeId && node.subProcess) {
+  //         const updatedSubProcess = {
+  //           ...node.subProcess,
+  //           ...updates,
+  //           metadata: {
+  //             ...node.subProcess.metadata,
+  //             ...updates.metadata,
+  //             updatedAt: new Date().toISOString()
+  //           }
+  //         };
+  //         
+  //         return { 
+  //           ...node, 
+  //           subProcess: updatedSubProcess
+  //         };
+  //       }
+  //       return node;
+  //     })
+  //   );
+  // }, []);
 
   // 验证子流程数据完整性
-  const validateSubProcess = useCallback((subProcess: SubProcessData): boolean => {
-    // 检查基本结构
-    if (!subProcess.nodes || !subProcess.connections || !subProcess.viewConfig || !subProcess.metadata || !subProcess.settings) {
-      return false;
-    }
-    
-    // 检查节点数量限制
-    if (subProcess.nodes.length > subProcess.settings.maxNodes) {
-      return false;
-    }
-    
-    // 检查是否有开始和结束节点
-    const hasStart = subProcess.nodes.some(node => node.type === 'start');
-    const hasEnd = subProcess.nodes.some(node => node.type === 'end');
-    
-    return hasStart && hasEnd;
-  }, []);
+  // const validateSubProcess = useCallback((subProcess: SubProcessData): boolean => {
+  //   // 检查基本结构
+  //   if (!subProcess.nodes || !subProcess.connections || !subProcess.viewConfig || !subProcess.metadata || !subProcess.settings) {
+  //     return false;
+  //   }
+  //   
+  //   // 检查节点数量限制
+  //   if (subProcess.nodes.length > subProcess.settings.maxNodes) {
+  //     return false;
+  //   }
+  //   
+  //   // 检查是否有开始和结束节点
+  //   const hasStart = subProcess.nodes.some(node => node.type === 'start');
+  //   const hasEnd = subProcess.nodes.some(node => node.type === 'end');
+  //   
+  //   return hasStart && hasEnd;
+  // }, []);
 
   // 获取子流程统计信息
-  const getSubProcessStats = useCallback((subProcess: SubProcessData) => {
-    const nodeCount = subProcess.nodes.length;
-    const connectionCount = subProcess.connections.length;
-    const processNodeCount = 0; // 阶段节点已移除
-    
-    return {
-      totalNodes: nodeCount,
-      processNodes: processNodeCount,
-      connections: connectionCount,
-      complexity: processNodeCount > 5 ? 'high' : processNodeCount > 2 ? 'medium' : 'low'
-    };
-  }, []);
+  // const getSubProcessStats = useCallback((subProcess: SubProcessData) => {
+  //   const nodeCount = subProcess.nodes.length;
+  //   const connectionCount = subProcess.connections.length;
+  //   const processNodeCount = 0; // 阶段节点已移除
+  //   
+  //   return {
+  //     totalNodes: nodeCount,
+  //     processNodes: processNodeCount,
+  //     connections: connectionCount,
+  //     complexity: processNodeCount > 5 ? 'high' : processNodeCount > 2 ? 'medium' : 'low'
+  //   };
+  // }, []);
   
   // 自动布局算法 - 检测并解决节点重叠
   const autoLayoutNodes = useCallback((newNodes: FlowNode[]) => {
@@ -2032,7 +2009,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
     };
   };
 
-  const handleFinish = async (values: any) => {
+  const handleFinish = async (_values: any) => {
     try {
       setLoading(true);
       
@@ -2146,7 +2123,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       const subConnections = parentNode.subProcess.connections;
 
       // 构建节点连接关系图
-      const nodeMap = new Map(subNodes.map(node => [node.id, node]));
+      // const nodeMap = new Map(subNodes.map(node => [node.id, node]));
       const adjacencyList = new Map<string, string[]>();
       const inDegree = new Map<string, number>();
 
@@ -2282,7 +2259,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
     } else {
       // 主流程编辑模式：对主流程节点进行排序
       // 构建节点连接关系图
-      const nodeMap = new Map(nodes.map(node => [node.id, node]));
+      // const nodeMap = new Map(nodes.map(node => [node.id, node]));
       const adjacencyList = new Map<string, string[]>();
       const inDegree = new Map<string, number>();
 
@@ -2551,7 +2528,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
     // 如果是阶段节点，创建一个包含卡片和设置图标的连续悬停区域
     if (node.type === 'stage') {
       const iconSize = 24;
-      const iconX = node.x + node.width - iconSize;
+      // const iconX = node.x + node.width - iconSize;
       const iconY = node.y - iconSize - 8; // 在卡片上方外部
       
       // 创建一个连续的矩形区域，包含卡片和设置图标
@@ -3005,7 +2982,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       setBehaviorTreeNodePropertyPanelVisible(false);
       setSelectedBehaviorTreeNode(null);
     }
-  }, [canvasState.isSpacePressed, getCanvasCoordinates, findAddButtonAtPosition, findNodeAtPosition, findSubCanvasAtPosition, findConnectionAtPosition, checkOpenSubCanvasButtonClick, openIndependentSubCanvas]);
+  }, [canvasState.isSpacePressed, getCanvasCoordinates, findAddButtonAtPosition, findNodeAtPosition, findSubCanvasAtPosition, findConnectionAtPosition, checkOpenSubCanvasButtonClick]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
@@ -3149,7 +3126,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       const triggerHover = findTriggerConditionAtPosition(canvasPos.x, canvasPos.y);
       setHoveredTriggerCondition(triggerHover);
       
-      setMousePosition({ x: canvasPos.x, y: canvasPos.y });
+      // setMousePosition({ x: canvasPos.x, y: canvasPos.y });
     }
   }, [isDraggingConnection, isDraggingNode, draggedNode, dragOffset, isDraggingSubCanvas, draggedSubCanvas, subCanvasDragOffset, canvasState.isDragging, canvasState.isSpacePressed, canvasState.lastMouseX, canvasState.lastMouseY, getCanvasCoordinates, findConnectionPointAtPosition, findConnectionAtPosition, findNodeAtPosition, findSubCanvasLineAtPosition, findDemandDeviceAtPosition, findTriggerConditionAtPosition]);
 
@@ -3308,7 +3285,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
     setHoveredConnection(null);
     setHoveredConnectionPoint(null);
     
-    setMousePosition({ x: 0, y: 0 });
+    // setMousePosition({ x: 0, y: 0 });
   }, []);
 
   // 右键菜单事件处理已移除
@@ -3976,8 +3953,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       const padding = 12;
       const contentX = x + padding;
       const contentY = y + padding;
-      const contentWidth = width - 2 * padding;
-      
+      const _contentWidth = width - 2 * padding;
       // 第一行：图标和名称水平排列
       const iconSize = 18;
       const iconY = contentY + 8;
@@ -4018,7 +3994,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
         // 计算字段值的位置和尺寸
         const labelWidth = ctx.measureText('需方设备: ').width;
         const valueText = node.demandDevicesNames;
-        const maxValueWidth = contentWidth - labelWidth - 16; // 预留右边距
+        const maxValueWidth = _contentWidth - labelWidth - 16; // 预留右边距
         
         // 处理文本溢出
         let displayText = valueText;
@@ -4056,7 +4032,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
         // 计算字段值的位置和尺寸
         const triggerLabelWidth = ctx.measureText('触发条件: ').width;
         const triggerValueText = node.demandDevicesTriggerCondition;
-        const maxTriggerWidth = contentWidth - triggerLabelWidth - 16;
+        const maxTriggerWidth = _contentWidth - triggerLabelWidth - 16;
         
         // 处理文本溢出
         let triggerDisplayText = triggerValueText;
@@ -4091,7 +4067,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       const padding = 12;
       const contentX = x + padding;
       const contentY = y + padding;
-      const contentWidth = width - 2 * padding;
+      const _contentWidth = width - 2 * padding;
       
       // 第一行：图标和名称水平排列
       const iconSize = 18;
@@ -4140,7 +4116,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
         // 计算字段值的位置和尺寸
         const labelWidth = ctx.measureText('流程Key: ').width;
         const valueText = node.data.processKey;
-        const maxValueWidth = contentWidth - labelWidth - 16; // 预留右边距
+        const maxValueWidth = _contentWidth - labelWidth - 16; // 预留右边距
         
         // 处理文本溢出
         let displayText = valueText;
@@ -4178,7 +4154,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
         // 计算字段值的位置和尺寸
         const timeLabelWidth = ctx.measureText('更新时间: ').width;
         const timeValueText = node.data.updateTime;
-        const maxTimeWidth = contentWidth - timeLabelWidth - 16;
+        const maxTimeWidth = _contentWidth - timeLabelWidth - 16;
         
         // 处理文本溢出
         let timeDisplayText = timeValueText;
@@ -4241,7 +4217,6 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       const padding = 12;
       const contentX = x + padding;
       const contentY = y + padding;
-      const contentWidth = width - 2 * padding;
       
       // 第一行：图标和名称水平排列
       const iconSize = 18;
@@ -4364,7 +4339,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       const padding = 12;
       const contentX = x + padding;
       const contentY = y + padding;
-      const contentWidth = width - 2 * padding;
+      // const contentWidth = width - 2 * padding;
       
       // 第一行：图标和名称水平排列
       const iconSize = 18;
@@ -4638,7 +4613,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       const padding = 12;
       const contentX = x + padding;
       const contentY = y + padding;
-      const contentWidth = width - 2 * padding;
+      // const contentWidth = width - 2 * padding;
       
       // 第一行：图标和名称水平排列
       const iconSize = 18;
@@ -4761,7 +4736,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       const padding = 12;
       const contentX = x + padding;
       const contentY = y + padding;
-      const contentWidth = width - 2 * padding;
+      // const contentWidth = width - 2 * padding;
       
       // 第一行：图标和名称水平排列
       const iconSize = 18;
@@ -5620,7 +5595,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
         // 删除选中的节点或连线
         if (selectedNode && selectedNode !== 'start-node' && selectedNode !== 'end-node') {
           // 查找要删除的节点
-          const nodeToDelete = nodes.find(node => node.id === selectedNode);
+          // const nodeToDelete = nodes.find(node => node.id === selectedNode);
           
           // 阶段节点删除逻辑已移除
           message.success('节点删除成功');
@@ -5780,7 +5755,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                                     conditionGroups: []
                                   }]);
                                 } else {
-                                  updateExecutionDevice(executionDevices[0].id, { conditionType: e.target.value });
+                                  // updateExecutionDevice(executionDevices[0].id, { conditionType: e.target.value });
                                 }
                               }}
                             >
@@ -5809,7 +5784,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                                       conditionGroups: []
                                     }]);
                                   }
-                                  addTriggerConditionGroup(executionDevices[0].id);
+                                  addTriggerConditionGroup();
                                 }}
                               >
                                 添加条件组
@@ -5847,7 +5822,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                                           type="text"
                                           size="small"
                                           icon={<PlusOutlined />}
-                                          onClick={() => addTriggerCondition(executionDevices[0].id, group.id)}
+                                          onClick={() => addTriggerCondition(executionDevices[0].id)}
                                           style={{ marginRight: 4 }}
                                         >
                                           添加条件
@@ -5857,7 +5832,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                                           danger
                                           size="small"
                                           icon={<DeleteOutlined />}
-                                          onClick={() => removeTriggerConditionGroup(executionDevices[0].id, group.id)}
+                                          onClick={() => removeTriggerConditionGroup(executionDevices[0].id)}
                                         />
                                       </div>
                                     </div>
@@ -5869,7 +5844,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                                         <div style={{ textAlign: 'center', margin: '8px 0' }}>
                                           <Radio.Group
                                              value={group.logicOperator}
-                                             onChange={(e: any) => updateTriggerConditionGroup(executionDevices[0].id, group.id, { logicOperator: e.target.value })}
+                                             onChange={(_e: any) => updateTriggerConditionGroup(executionDevices[0].id)}
                                              size="small"
                                            >
                                             <Radio.Button value="and">且</Radio.Button>
@@ -5889,7 +5864,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                                               danger
                                               size="small"
                                               icon={<DeleteOutlined />}
-                                              onClick={() => removeTriggerCondition(executionDevices[0].id, group.id, condition.id)}
+                                              onClick={() => removeTriggerCondition(executionDevices[0].id)}
                                             />
                                           </div>
                                         }
@@ -5903,11 +5878,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                                             <Select
                                               placeholder="请选择数据源"
                                               value={condition.dataSource}
-                                              onChange={(value: 'product' | 'global') => updateTriggerCondition(executionDevices[0].id, group.id, condition.id, { 
-                                                dataSource: value,
-                                                dataItem: undefined,
-                                                productAttribute: undefined
-                                              })}
+                                              onChange={(_value: 'product' | 'global') => updateTriggerCondition(executionDevices[0].id)}
                                               size="small"
                                               style={{ width: '100%' }}
                                             >
@@ -5927,7 +5898,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                                             <Select
                                               placeholder="请选择数据项"
                                               value={condition.dataItem}
-                                              onChange={(value: string) => updateTriggerCondition(executionDevices[0].id, group.id, condition.id, { dataItem: value })}
+                                              onChange={(_value: string) => updateTriggerCondition(executionDevices[0].id)}
                                               size="small"
                                               style={{ width: '100%' }}
                                             >
@@ -5947,7 +5918,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                                             <Select
                                               placeholder="操作符"
                                               value={condition.compareType}
-                                              onChange={(value: 'greater' | 'equal' | 'less' | 'notEqual') => updateTriggerCondition(executionDevices[0].id, group.id, condition.id, { compareType: value })}
+                                              onChange={(_value: 'greater' | 'equal' | 'less' | 'notEqual') => updateTriggerCondition(executionDevices[0].id)}
                                               size="small"
                                               style={{ width: '100%' }}
                                             >
@@ -5963,7 +5934,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                                             <Input
                                               placeholder="请输入条件值"
                                               value={condition.value}
-                                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateTriggerCondition(executionDevices[0].id, group.id, condition.id, { value: e.target.value })}
+                                              onChange={(_e: React.ChangeEvent<HTMLInputElement>) => updateTriggerCondition(executionDevices[0].id)}
                                               size="small"
                                             />
                                           </Col>
@@ -6109,7 +6080,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
                 <>
                   <Button 
                     icon={<ArrowLeftOutlined />}
-                    onClick={exitSubProcessMode}
+                    // onClick={exitSubProcessMode}
                     type="primary"
                     style={{ 
                       borderRadius: '6px',

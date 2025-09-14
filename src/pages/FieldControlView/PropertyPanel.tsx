@@ -15,7 +15,7 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({
   onClose,
   elementType,
   elementData,
-  onSave
+  // onSave
 }) => {
   const [form] = Form.useForm();
 

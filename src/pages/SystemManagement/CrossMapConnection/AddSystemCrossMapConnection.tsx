@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Drawer, Steps, Form, Input, Select, Button, message, Row, Col, Tooltip, Modal, Card } from 'antd';
-import { ArrowLeftOutlined, UndoOutlined, RedoOutlined, ZoomInOutlined, ZoomOutOutlined, HomeOutlined } from '@ant-design/icons';
+import { Drawer, Form, Input, Select, Button, message, Row, Col, Tooltip, Modal, Card } from 'antd';
+import { UndoOutlined, RedoOutlined, ZoomInOutlined, ZoomOutOutlined, HomeOutlined } from '@ant-design/icons';
 
 // 地图选择卡片悬停效果样式
 const mapSelectionCardStyle = `
@@ -27,7 +27,6 @@ if (typeof document !== 'undefined') {
 }
 
 const { Option } = Select;
-const { Step } = Steps;
 const { TextArea } = Input;
 
 interface AddCrossMapConnectionProps {
@@ -104,9 +103,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
   // 地图列表弹窗状态
   const [mapListModalVisible, setMapListModalVisible] = useState(false);
   
-  // 调试状态
-  const [debugTimestamp, setDebugTimestamp] = useState(new Date().toLocaleTimeString());
-  const [basicInfoData, setBasicInfoData] = useState<any>(null);
+  // 调试状态已移除
   
   // 地图卡片相关状态
   const [mapCards, setMapCards] = useState<any[]>([]);
@@ -754,7 +751,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     });
 
     // 绘制已完成的连接线
-    connections.forEach((connection, index) => {
+    connections.forEach((connection, _index) => {
       const startCard = mapCards.find(card => card.id === connection.startCard);
       const endCard = mapCards.find(card => card.id === connection.endCard);
       
@@ -1709,11 +1706,10 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
   // 重置表单和状态
   useEffect(() => {
     if (visible) {
-      const timestamp = new Date().toLocaleTimeString();
+      // // // const timestamp = new Date().toLocaleTimeString();
       // 组件加载
       
       setCurrentStep(0);
-      setDebugTimestamp(timestamp);
       
       const initialState = {
         offsetX: 0,
@@ -1842,18 +1838,16 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
   }, [mapCards, visible, currentStep]);
 
   const handleNext = async () => {
-    const timestamp = new Date().toLocaleTimeString();
+    // const timestamp = new Date().toLocaleTimeString();
     // 点击下一步按钮
     
     if (currentStep === 0) {
       try {
         await form.validateFields(['connectionName', 'connectionType']);
-        const formData = form.getFieldsValue();
+        // const formData = form.getFieldsValue();
         // 表单验证成功
         
-        setBasicInfoData(formData);
         setCurrentStep(1);
-        setDebugTimestamp(timestamp);
         
         // 切换到步骤1
       } catch (error) {
@@ -1875,7 +1869,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     }
   };
 
-  const handleFinish = async (values: any) => {
+  const handleFinish = async (_values: any) => {
     try {
       // 验证所有表单字段（包括第一步的基本信息）
       const allValues = await form.validateFields(['connectionName', 'connectionType', 'remark']);
@@ -2172,7 +2166,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
                    />
                  }
                  onClick={() => {
-                   const timestamp = new Date().toLocaleTimeString();
+                   // const timestamp = new Date().toLocaleTimeString();
                    // 地图卡片点击
                    
                    if (selectedMapPosition) {
@@ -2203,7 +2197,6 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
                    }
                    
                    setMapListModalVisible(false);
-                   setDebugTimestamp(timestamp);
                    
                    // 地图选择弹窗已关闭
                  }}

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Card, Button, Space, Typography, Divider } from 'antd';
+import { Button, Space, Typography } from 'antd';
 import { CloseOutlined, DragOutlined, ExpandOutlined, CompressOutlined } from '@ant-design/icons';
 import SubCanvas from './SubCanvas';
 
@@ -34,7 +34,7 @@ interface SubProcessData {
 }
 
 // 节点类型
-type NodeType = 'start' | 'end' | 'process' | 'businessProcess';
+type NodeType = 'start' | 'end' | 'stage' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
 
 // 流程节点接口
 interface FlowNode {
@@ -90,7 +90,7 @@ const IndependentSubCanvas: React.FC<IndependentSubCanvasProps> = ({
   parentNodeId,
   parentNodeName,
   initialPosition = { x: 100, y: 100 },
-  readonly = false
+
 }) => {
   const [position, setPosition] = useState(initialPosition);
   const [size, setSize] = useState({ width: 800, height: 600 });
@@ -103,7 +103,7 @@ const IndependentSubCanvas: React.FC<IndependentSubCanvasProps> = ({
   // 自动调整大小基于内容
   const calculateAutoSize = () => {
     const nodeCount = subProcessData.nodes?.length || 0;
-    const connectionCount = subProcessData.connections?.length || 0;
+
     
     // 基于节点数量计算最小尺寸
     const minWidth = Math.max(600, Math.min(1200, nodeCount * 150 + 200));

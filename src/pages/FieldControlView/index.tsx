@@ -8,12 +8,7 @@ import {
   EyeOutlined,
   HomeOutlined,
   CarOutlined,
-  ThunderboltOutlined,
-  ExclamationCircleOutlined,
   PauseCircleOutlined,
-  WarningOutlined,
-  StopOutlined,
-  BugOutlined,
   AndroidOutlined,
   PlayCircleOutlined,
   CloseCircleOutlined,
@@ -51,7 +46,7 @@ interface Task {
   id: string;
   name: string;
   robotId: string | null;
-  status: string; // pending: 待执行, executing: 执行中, paused: 已暂停, completed: 已完成, cancelled: 已取消
+  status: 'pending' | 'executing' | 'paused' | 'completed' | 'cancelled' | 'error'; // pending: 待执行, executing: 执行中, paused: 已暂停, completed: 已完成, cancelled: 已取消, error: 错误
   priority: string;
   startPoint: string;
   endPoint: string;
@@ -231,11 +226,10 @@ const FieldControlView: React.FC = () => {
   // 暂停的机器人列表
   const [pausedRobots, setPausedRobots] = useState<Set<string>>(new Set());
   
-
-  
-  // 选中状态管理
-  const [selectedLines, setSelectedLines] = useState<string[]>([]);
-  const [selectedAreas, setSelectedAreas] = useState<string[]>([]);
+  // 属性面板状态
+  const [propertyPanelVisible, setPropertyPanelVisible] = useState(false);
+  const [propertyElementType, setPropertyElementType] = useState<'point' | 'line' | 'area' | null>(null);
+  const [propertyElementData, setPropertyElementData] = useState<any>(null);
   
 
   
@@ -275,7 +269,7 @@ const FieldControlView: React.FC = () => {
   };
   
   // 属性面板处理函数
-  const handlePropertySave = (data: any) => {
+  const handlePropertySave = () => {
     // 处理属性保存逻辑
     setPropertyPanelVisible(false);
   };
@@ -349,35 +343,7 @@ const FieldControlView: React.FC = () => {
   // 获取当前地图的路径点序列
   const pathSequence = getPathSequence(selectedMap);
   
-  // 属性面板状态管理
-  const [propertyPanelVisible, setPropertyPanelVisible] = useState(false);
-  const [propertyElementType, setPropertyElementType] = useState<'point' | 'line' | 'area' | null>(null);
-  const [propertyElementData, setPropertyElementData] = useState<any>(null);
-
-  // 点类型定义
-  interface MapPoint {
-    id: string;
-    name: string;
-    x: number;
-    y: number;
-    type: '节点' | '站点' | '充电点' | '停靠点' | '临停点' | '归位点' | '电梯点' | '自动门' | '切换点';
-    direction?: number; // 方向角度 (-180 到 180)
-    description?: string;
-  }
-
-  // 线条类型定义
-  interface MapLine {
-    id: string;
-    name: string;
-    startPointId: string;
-    endPointId: string;
-    type: 'single-line' | 'double-line' | 'single-bezier' | 'double-bezier';
-    color: string;
-    controlPoints?: {
-      cp1?: { x: number; y: number };
-      cp2?: { x: number; y: number };
-    }
-  }
+  // 属性面板状态管理已在上方声明
 
   // 区域类型定义
   interface MapArea {
@@ -705,26 +671,8 @@ const FieldControlView: React.FC = () => {
   const pathLines = currentMapData.lines;
   const mapAreas = currentMapData.areas;
 
-  // 获取点的颜色（与地图管理保持一致）
-  const getPointColor = (type: string) => {
-    const colorMap: Record<string, string> = {
-      '节点': '#1890ff',      // 蓝色
-      '站点': '#1890ff',      // 蓝色（与连线颜色一致）
-      '充电点': '#52c41a',    // 绿色
-      '停靠点': '#faad14',    // 橙色
-      '临停点': '#ff7875',    // 红色（带方向）
-      '归位点': '#9254de',    // 紫色（带方向）
-      '电梯点': '#13c2c2',    // 青色
-      '自动门': '#722ed1',    // 深紫色
-      '切换点': '#d4b106',    // 金黄色
-      '其他': '#8c8c8c'       // 灰色
-    };
-    return colorMap[type] || '#8c8c8c';
-  };
 
-  // 选中状态检查函数
 
-  
   // 根据区域类型和速度获取颜色
   const getAreaColors = (area: MapArea) => {
     if (area.type === '禁行区域') {
@@ -1580,7 +1528,6 @@ const FieldControlView: React.FC = () => {
         
         // 更新进度 - 使用优化的速度让机器人移动更平滑
         // 根据机器人类型和路径类型设置不同的速度
-        const baseSpeed = 0.008; // 降低基础速度，提高平滑度
         const robotTypeSpeed = {
           'AGV': 0.015,  // 适中的AGV速度，确保平滑移动
           'AMR': 0.015,  // AMR速度与AGV保持一致
@@ -1921,22 +1868,7 @@ const FieldControlView: React.FC = () => {
     });
     
     if (clickedPoint) {
-      // 切换点的选中状态
-      if (event.ctrlKey || event.metaKey) {
-        // 多选模式
-        setSelectedLines(prev => 
-          prev.includes(clickedPoint.id) 
-            ? prev.filter(id => id !== clickedPoint.id)
-            : [...prev, clickedPoint.id]
-        );
-      } else {
-        // 单选模式
-        setSelectedLines(prev => 
-          prev.includes(clickedPoint.id) ? [] : [clickedPoint.id]
-        );
-        setSelectedLines([]);
-        setSelectedAreas([]);
-      }
+      // 点击了路径点，但暂时不处理选中状态
       setSelectedRobot(null);
       return;
     }
@@ -1982,22 +1914,7 @@ const FieldControlView: React.FC = () => {
     });
     
     if (clickedLine) {
-      // 切换线条的选中状态
-      if (event.ctrlKey || event.metaKey) {
-        // 多选模式
-        setSelectedLines(prev => 
-          prev.includes(clickedLine.id) 
-            ? prev.filter(id => id !== clickedLine.id)
-            : [...prev, clickedLine.id]
-        );
-      } else {
-        // 单选模式
-        setSelectedLines(prev => 
-          prev.includes(clickedLine.id) ? [] : [clickedLine.id]
-        );
-        setSelectedLines([]);
-        setSelectedAreas([]);
-      }
+      // 点击了路径线，但暂时不处理选中状态
       setSelectedRobot(null);
       return;
     }
@@ -2016,31 +1933,13 @@ const FieldControlView: React.FC = () => {
     });
     
     if (clickedArea) {
-      // 切换区域的选中状态
-      if (event.ctrlKey || event.metaKey) {
-        // 多选模式
-        setSelectedAreas(prev => 
-          prev.includes(clickedArea.id) 
-            ? prev.filter(id => id !== clickedArea.id)
-            : [...prev, clickedArea.id]
-        );
-      } else {
-        // 单选模式
-        setSelectedAreas(prev => 
-          prev.includes(clickedArea.id) ? [] : [clickedArea.id]
-        );
-        setSelectedLines([]);
-        setSelectedLines([]);
-      }
+      // 点击了区域，但暂时不处理选中状态
       setSelectedRobot(null);
       return;
     }
     
     // 点击空白区域，清除所有选中状态
     setSelectedRobot(null);
-    setSelectedLines([]);
-    setSelectedLines([]);
-    setSelectedAreas([]);
   };
   
   // 处理鼠标滚轮缩放
@@ -2429,8 +2328,11 @@ const FieldControlView: React.FC = () => {
   };
 
   const handleTaskDiagnose = (taskId: string) => {
-    
-    // 这里可以添加实际的诊断任务逻辑，比如打开诊断弹窗
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      message.info(`正在诊断任务「${task.name}」...`);
+      // 这里可以添加实际的诊断任务逻辑，比如打开诊断弹窗
+    }
   };
 
   // 删除任务处理函数

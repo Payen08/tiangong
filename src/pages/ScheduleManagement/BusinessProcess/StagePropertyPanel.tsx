@@ -12,10 +12,10 @@ import {
   Space,
   Divider,
   message,
-  Tooltip
+
 } from 'antd';
 import {
-  CloseOutlined,
+
   PlusOutlined,
   DeleteOutlined,
   SettingOutlined
@@ -409,7 +409,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
   };
 
   // 渲染设备需求表单
-  const renderDeviceRequirement = (requirement: DeviceRequirement, index: number): JSX.Element => (
+  const renderDeviceRequirement = (requirement: DeviceRequirement, _index: number): JSX.Element => (
     <Card
       key={requirement.id}
       size="small"

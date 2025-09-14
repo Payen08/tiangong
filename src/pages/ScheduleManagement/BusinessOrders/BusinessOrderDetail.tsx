@@ -5,7 +5,6 @@ import {
   Tag,
   Space,
   Typography,
-  Divider,
   Timeline,
   Card,
   Collapse,
@@ -176,7 +175,7 @@ const BusinessOrderDetail: React.FC<BusinessOrderDetailProps> = ({
       dataIndex: 'taskName',
       key: 'taskName',
       width: 150,
-      render: (text: string, record: WaybillTask) => (
+      render: (text: string, _record: WaybillTask) => (
         <Space>
           <CarOutlined style={{ color: '#1890ff' }} />
           <span style={{ fontWeight: 500 }}>{text}</span>
@@ -235,7 +234,7 @@ const BusinessOrderDetail: React.FC<BusinessOrderDetailProps> = ({
       title: '操作',
       key: 'action',
       width: 120,
-      render: (_: any, record: WaybillTask) => (
+      render: (_: any, _record: WaybillTask) => (
         <Space size={4}>
           <Button
             type="link"

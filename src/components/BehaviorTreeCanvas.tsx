@@ -5,14 +5,7 @@ import {
   ZoomOutOutlined, 
   HomeOutlined,
   UndoOutlined,
-  RedoOutlined,
-  FlagOutlined,
-  SettingOutlined,
-  OrderedListOutlined,
-  BranchesOutlined,
-  QuestionCircleOutlined,
-  SwapOutlined,
-  NodeIndexOutlined
+  RedoOutlined
 } from '@ant-design/icons';
 
 // 统一的节点类型定义（与AddBehaviorTree.tsx保持一致）
@@ -135,9 +128,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   });
   
   // 拖拽相关状态
-  const [isDraggingNode, setIsDraggingNode] = useState(false);
-  const [draggedNode, setDraggedNode] = useState<FlowNode | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  // const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   
   // 连线相关状态
   const [isDraggingConnection, setIsDraggingConnection] = useState(false);
@@ -147,7 +138,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   
   // 选择状态
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
+  const [hoveredConnection, /* setHoveredConnection */] = useState<string | null>(null);
   
   // 异常详情显示状态
   const [errorDetailVisible, setErrorDetailVisible] = useState(false);
@@ -692,7 +683,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   const drawNode = useCallback((ctx: CanvasRenderingContext2D, node: FlowNode) => {
     const { x, y, width, height, type, label } = node;
     const status = node.behaviorTreeData?.status;
-    const isSelected = selectedNode === node.id;
+    // const isSelected = selectedNode === node.id;
     const config = getNodeConfig(type);
     const isError = status === 'failure';
     
@@ -748,7 +739,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     ctx.fillStyle = type === 'start' ? '#ffffff' : '#333333';
     ctx.font = '16px Arial';
     ctx.textAlign = 'left';
-    const maxWidth = width - 45;
+    // const maxWidth = width - 45;
     const text = label.length > 10 ? label.substring(0, 10) + '...' : label;
     ctx.fillText(text, x + 35, y + height / 2 + 5);
     

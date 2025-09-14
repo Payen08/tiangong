@@ -11,12 +11,12 @@ interface AddCrossMapConnectionProps {
 }
 
 const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({ 
-  visible = false,
+  // visible = false,
   onClose, 
-  onSave,
-  onConnectionCreated, 
-  editingConnection,
-  editData 
+  // onSave,
+  // onConnectionCreated, 
+  // editingConnection,
+  // editData 
 }) => {
   const [currentStep, setCurrentStep] = useState(0);
 

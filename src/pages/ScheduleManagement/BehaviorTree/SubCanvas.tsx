@@ -17,8 +17,7 @@ import {
   HomeOutlined,
   PlusOutlined,
   ApiOutlined,
-  BranchesOutlined,
-  ClockCircleOutlined,
+
   SettingOutlined,
   DeleteOutlined,
   CloseOutlined,
@@ -26,7 +25,7 @@ import {
 } from '@ant-design/icons';
 
 const { TextArea } = Input;
-const { Option } = Select;
+
 
 // 子画布视图配置接口
 interface SubCanvasViewConfig {
@@ -124,7 +123,6 @@ const SubCanvas: React.FC<SubCanvasProps> = ({
   onClose,
   subProcessData,
   onSave,
-  parentNodeId,
   parentNodeName,
 }) => {
   // 画布引用
@@ -770,7 +768,7 @@ const SubCanvas: React.FC<SubCanvasProps> = ({
       }
     };
     
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = () => {
       if (contextMenu?.visible) {
         setContextMenu(null);
       }

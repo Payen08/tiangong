@@ -7,11 +7,9 @@ import {
   Button,
   Row,
   Col,
-  Steps,
   message,
   Tooltip,
   Card,
-  Space,
   Radio,
   Tabs,
 } from 'antd';
@@ -27,19 +25,13 @@ import {
   PlayCircleOutlined,
   StopOutlined,
   PlusOutlined,
-  ApiOutlined,
-  BranchesOutlined,
   ClockCircleOutlined,
   SettingOutlined,
-  CloseOutlined,
-  SearchOutlined,
-  SelectOutlined,
   SortAscendingOutlined,
   DeleteOutlined
 } from '@ant-design/icons';
 // SubCanvas和IndependentSubCanvas导入已移除 - 阶段节点功能已移除
 
-const { TextArea } = Input;
 const { Option } = Select;
 
 // 触发条件接口
@@ -71,13 +63,6 @@ interface ExecutionDevice {
 }
 
 // 业务流程接口
-interface BusinessProcessData {
-  businessName: string;
-  identifier: string;
-  status: 'enabled' | 'disabled' | 'obsolete';
-  executionDevices?: ExecutionDevice[];
-}
-
 interface AddBusinessProcessProps {
   visible: boolean;
   onClose: () => void;
@@ -258,7 +243,6 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const [subCanvasDragOffset, setSubCanvasDragOffset] = useState({ x: 0, y: 0 });
 
   const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [insertingConnectionId, setInsertingConnectionId] = useState<string | null>(null);
   
   // 连接点交互状态
@@ -270,15 +254,13 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   
   // 子画布状态管理
   const [subCanvases, setSubCanvases] = useState<SubCanvas[]>([]);
-  const [selectedSubCanvas, setSelectedSubCanvas] = useState<string | null>(null);
   
   // 子流程编辑状态
-  const [editingSubProcess, setEditingSubProcess] = useState<string | null>(null); // 当前编辑的子流程节点ID
+  const editingSubProcess = null; // 当前编辑的子流程节点ID (已禁用)
   
   // 右键菜单状态已移除
   
   // 独立子画布窗口管理
-  const [openSubCanvasWindows, setOpenSubCanvasWindows] = useState<Map<string, { nodeId: string; position: { x: number; y: number } }>>(new Map());
   
   // 添加节点面板状态
   const [showNodePanel, setShowNodePanel] = useState(false);
@@ -342,30 +324,9 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     return deviceMap[deviceType] || [];
   };
   
-  // 根据设备ID获取设备中文名称
-  const getDeviceNameById = (deviceId: string): string => {
-    const allDeviceTypes = ['sensor', 'actuator', 'controller', 'monitor'];
-    for (const deviceType of allDeviceTypes) {
-      const options = getDeviceOptions(deviceType);
-      const device = options.find(option => option.value === deviceId);
-      if (device) {
-        return device.label;
-      }
-    }
-    return deviceId; // 如果找不到，返回原始ID
-  };
+
   
-  // 添加执行设备
-  const addExecutionDevice = () => {
-    const newDevice: ExecutionDevice = {
-      id: `device_${Date.now()}`,
-      deviceType: 'sensor',
-      devices: [],
-      triggerType: 'general',
-      conditionType: 'none'
-    };
-    setExecutionDevices(prev => [...prev, newDevice]);
-  };
+
   
   // 更新执行设备
   const updateExecutionDevice = (deviceId: string, updates: Partial<ExecutionDevice>) => {
@@ -375,9 +336,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   };
   
   // 删除执行设备
-  const removeExecutionDevice = (deviceId: string) => {
-    setExecutionDevices(prev => prev.filter(device => device.id !== deviceId));
-  };
+
   
   // 数据源选项
   const dataSourceOptions = [
@@ -493,12 +452,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   };
 
   // 处理阶段节点点击事件
-  const handleStageNodeClick = useCallback((node: FlowNode) => {
-    if (node.type === 'stage') {
-      setSelectedStageNode(node);
-      setStagePropertyPanelVisible(true);
-    }
-  }, []);
+
 
   // 保存阶段节点属性
   const handleSaveStageNode = useCallback((updatedNode: FlowNode) => {
@@ -529,156 +483,21 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   }, []);
   
   // 阶段节点已移除
-  const checkSubCanvasDoubleClick = useCallback((x: number, y: number, node: FlowNode): boolean => {
-    return false;
-  }, []);
-  
-  // 阶段节点已移除
-  const checkOpenSubCanvasButtonClick = useCallback((x: number, y: number, node: FlowNode): boolean => {
-    return false;
-  }, []);
+
 
   // 创建默认子流程数据
-  const createDefaultSubProcess = useCallback((stageName: string): SubProcessData => {
-    const currentTime = new Date().toISOString();
-    return {
-      nodes: [
-        {
-          id: `sub_start_${Date.now()}`,
-          type: 'start' as NodeType,
-          x: 50,
-          y: 30,
-          width: 80,
-          height: 40,
-          label: '开始'
-        },
-        {
-          id: `sub_end_${Date.now() + 1}`,
-          type: 'end' as NodeType,
-          x: 200,
-          y: 30,
-          width: 80,
-          height: 40,
-          label: '结束'
-        }
-      ],
-      connections: [],
-      viewConfig: {
-        scale: 1.0,
-        offsetX: 0,
-        offsetY: 0,
-        gridSize: 20,
-        showGrid: true
-      },
-      metadata: {
-        name: `${stageName}子流程`,
-        description: `${stageName}的内部流程`,
-        version: '1.0.0',
-        createdAt: currentTime,
-        updatedAt: currentTime,
-        author: 'system'
-      },
-      settings: {
-        autoLayout: true,
-        snapToGrid: true,
-        allowCrossConnections: true,
-        maxNodes: 50
-      }
-    };
-  }, []);
+
   
   // 进入子流程编辑模式 - 阶段节点已移除
-  const enterSubProcessMode = useCallback((nodeId: string) => {
-    return; // 阶段节点已移除
-  }, []);
-  
-  // 退出子流程编辑模式
-  const exitSubProcessMode = useCallback(() => {
-    setEditingSubProcess(null);
-    message.info('已退出子流程编辑模式');
-  }, []);
-
-  // 打开独立子画布窗口 - 阶段节点已移除
-  const openIndependentSubCanvas = useCallback((nodeId: string) => {
-    return; // 阶段节点已移除
-  }, []);
-
   // 关闭独立子画布窗口
-  const closeIndependentSubCanvas = useCallback((nodeId: string) => {
-    setOpenSubCanvasWindows(prev => {
-      const newMap = new Map(prev);
-      newMap.delete(nodeId);
-      return newMap;
-    });
-    message.info('子画布窗口已关闭');
-  }, []);
 
-  // 更新子流程数据
-  const updateSubProcess = useCallback((nodeId: string, updatedData: SubProcessData) => {
-    setNodes(prev => prev.map(node => 
-      node.id === nodeId 
-        ? { ...node, subProcess: updatedData }
-        : node
-    ));
-  }, []);
 
-  // 更新子流程数据（支持部分更新）
-  const updateSubProcessPartial = useCallback((nodeId: string, updates: Partial<SubProcessData>) => {
-    setNodes(prevNodes => 
-      prevNodes.map(node => {
-        if (node.id === nodeId && node.subProcess) {
-          const updatedSubProcess = {
-            ...node.subProcess,
-            ...updates,
-            metadata: {
-              ...node.subProcess.metadata,
-              ...updates.metadata,
-              updatedAt: new Date().toISOString()
-            }
-          };
-          
-          return { 
-            ...node, 
-            subProcess: updatedSubProcess
-          };
-        }
-        return node;
-      })
-    );
-  }, []);
 
-  // 验证子流程数据完整性
-  const validateSubProcess = useCallback((subProcess: SubProcessData): boolean => {
-    // 检查基本结构
-    if (!subProcess.nodes || !subProcess.connections || !subProcess.viewConfig || !subProcess.metadata || !subProcess.settings) {
-      return false;
-    }
-    
-    // 检查节点数量限制
-    if (subProcess.nodes.length > subProcess.settings.maxNodes) {
-      return false;
-    }
-    
-    // 检查是否有开始和结束节点
-    const hasStart = subProcess.nodes.some(node => node.type === 'start');
-    const hasEnd = subProcess.nodes.some(node => node.type === 'end');
-    
-    return hasStart && hasEnd;
-  }, []);
 
-  // 获取子流程统计信息
-  const getSubProcessStats = useCallback((subProcess: SubProcessData) => {
-    const nodeCount = subProcess.nodes.length;
-    const connectionCount = subProcess.connections.length;
-    const processNodeCount = 0; // 阶段节点已移除
-    
-    return {
-      totalNodes: nodeCount,
-      processNodes: processNodeCount,
-      connections: connectionCount,
-      complexity: processNodeCount > 5 ? 'high' : processNodeCount > 2 ? 'medium' : 'low'
-    };
-  }, []);
+
+
+
+
   
   // 自动布局算法 - 检测并解决节点重叠
   const autoLayoutNodes = useCallback((newNodes: FlowNode[]) => {
@@ -1355,7 +1174,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     };
   };
 
-  const handleFinish = async (values: any) => {
+  const handleFinish = async () => {
     try {
       setLoading(true);
       
@@ -1469,7 +1288,6 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       const subConnections = parentNode.subProcess.connections;
 
       // 构建节点连接关系图
-      const nodeMap = new Map(subNodes.map(node => [node.id, node]));
       const adjacencyList = new Map<string, string[]>();
       const inDegree = new Map<string, number>();
 
@@ -1605,7 +1423,6 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     } else {
       // 主流程编辑模式：对主流程节点进行排序
       // 构建节点连接关系图
-      const nodeMap = new Map(nodes.map(node => [node.id, node]));
       const adjacencyList = new Map<string, string[]>();
       const inDegree = new Map<string, number>();
 
@@ -1874,7 +1691,6 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     // 如果是阶段节点，创建一个包含卡片和设置图标的连续悬停区域
     if (node.type === 'stage') {
       const iconSize = 24;
-      const iconX = node.x + node.width - iconSize;
       const iconY = node.y - iconSize - 8; // 在卡片上方外部
       
       // 创建一个连续的矩形区域，包含卡片和设置图标
@@ -2305,7 +2121,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       setBusinessProcessPropertyPanelVisible(false);
       setSelectedBusinessProcessNode(null);
     }
-  }, [canvasState.isSpacePressed, getCanvasCoordinates, findAddButtonAtPosition, findNodeAtPosition, findSubCanvasAtPosition, findConnectionAtPosition, checkOpenSubCanvasButtonClick, openIndependentSubCanvas]);
+  }, [canvasState.isSpacePressed, getCanvasCoordinates, findAddButtonAtPosition, findNodeAtPosition, findSubCanvasAtPosition, findConnectionAtPosition]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
@@ -2449,7 +2265,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       const triggerHover = findTriggerConditionAtPosition(canvasPos.x, canvasPos.y);
       setHoveredTriggerCondition(triggerHover);
       
-      setMousePosition({ x: canvasPos.x, y: canvasPos.y });
+
     }
   }, [isDraggingConnection, isDraggingNode, draggedNode, dragOffset, isDraggingSubCanvas, draggedSubCanvas, subCanvasDragOffset, canvasState.isDragging, canvasState.isSpacePressed, canvasState.lastMouseX, canvasState.lastMouseY, getCanvasCoordinates, findConnectionPointAtPosition, findConnectionAtPosition, findNodeAtPosition, findSubCanvasLineAtPosition, findDemandDeviceAtPosition, findTriggerConditionAtPosition]);
 
@@ -2595,8 +2411,6 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const handleMouseLeave = useCallback(() => {
     setHoveredConnection(null);
     setHoveredConnectionPoint(null);
-    
-    setMousePosition({ x: 0, y: 0 });
   }, []);
 
   // 右键菜单事件处理已移除
@@ -3609,7 +3423,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     ctx.save();
     
     const { x, y, width, height, title } = subCanvas;
-    const isSelected = selectedSubCanvas === subCanvas.id;
+    const isSelected = false;
     const padding = 10; // 内边距
     
     // 绘制投影（与开始节点一致）
@@ -3861,7 +3675,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     }
 
     ctx.restore();
-  }, [canvasState, selectedSubCanvas, hoveredConnectionPoint, hoveredSubCanvasLine]);
+  }, [canvasState, hoveredConnectionPoint, hoveredSubCanvasLine]);
 
   // 绘制悬停提示的函数
   const drawTooltip = useCallback((ctx: CanvasRenderingContext2D, text: string, x: number, y: number) => {
@@ -4034,9 +3848,6 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         e.preventDefault();
         // 删除选中的节点或连线
         if (selectedNode && selectedNode !== 'start-node' && selectedNode !== 'end-node') {
-          // 查找要删除的节点
-          const nodeToDelete = nodes.find(node => node.id === selectedNode);
-          
           // 阶段节点删除逻辑已移除
           message.success('节点删除成功');
           
@@ -4173,7 +3984,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
                           label: '执行设备配置',
                           children: (
                             <div>
-                              {executionDevices.map((device, index) => (
+                              {executionDevices.map((device, _index) => (
                                 <Card
                                   key={device.id}
                                   size="small"
@@ -4558,7 +4369,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
                 <>
                   <Button 
                     icon={<ArrowLeftOutlined />}
-                    onClick={exitSubProcessMode}
+                    onClick={() => {}}
                     type="primary"
                     style={{ 
                       borderRadius: '6px',

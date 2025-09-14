@@ -5,7 +5,6 @@ import {
   Tag,
   Space,
   Typography,
-  Divider,
   Timeline,
   Card,
   Row,
@@ -15,7 +14,6 @@ import {
 } from 'antd';
 import {
   ClockCircleOutlined,
-  UserOutlined,
   SettingOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
@@ -24,7 +22,7 @@ import {
   PauseCircleOutlined,
 } from '@ant-design/icons';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 // 运单任务数据类型
 interface WaybillTask {

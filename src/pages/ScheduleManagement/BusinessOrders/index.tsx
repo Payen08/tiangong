@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   Table,
@@ -28,7 +28,6 @@ import { useResponsive } from '@/hooks/useResponsive';
 import WaybillTaskDetail from './WaybillTaskDetail';
 import TaskDetail from '@/pages/DispatchManagement/TaskManagement/TaskDetail';
 
-const { Search } = Input;
 const { Option } = Select;
 const { confirm } = Modal;
 
@@ -434,19 +433,7 @@ const BusinessOrders: React.FC = () => {
     setSelectedTaskForDetail(null);
   };
 
-  // 启动运单任务
-  const handleStartWaybillTask = (task: WaybillTask, businessOrder: BusinessOrderRecord) => {
-    confirm({
-      title: '确认启动运单任务',
-      content: `确定要启动运单任务 "${task.taskName}" 吗？`,
-      icon: <ExclamationCircleOutlined />,
-      onOk() {
-        message.success(`运单任务 "${task.taskName}" 启动成功`);
-        // 这里可以添加实际的启动逻辑
-    
-      },
-    });
-  };
+
 
   // 暂停运单任务
   const handlePauseWaybillTask = (task: WaybillTask, businessOrder: BusinessOrderRecord) => {
@@ -494,20 +481,7 @@ const BusinessOrders: React.FC = () => {
     });
   };
 
-  // 停止运单任务
-  const handleStopWaybillTask = (task: WaybillTask, businessOrder: BusinessOrderRecord) => {
-    confirm({
-      title: '确认停止运单任务',
-      content: `确定要停止运单任务 "${task.taskName}" 吗？停止后任务将无法继续执行。`,
-      icon: <ExclamationCircleOutlined />,
-      okType: 'danger',
-      onOk() {
-        message.success(`运单任务 "${task.taskName}" 停止成功`);
-        // 这里可以添加实际的停止逻辑
-    
-      },
-    });
-  };
+
 
   // 关闭运单任务
   const handleCloseWaybillTask = (task: WaybillTask, businessOrder: BusinessOrderRecord) => {
@@ -559,9 +533,7 @@ const BusinessOrders: React.FC = () => {
     const pendingTasks = waybillTasks.filter(task => task.status === '待执行');
     const executingTasks = waybillTasks.filter(task => task.status === '执行中');
     const completedTasks = waybillTasks.filter(task => task.status === '已完成');
-    const pausedTasks = waybillTasks.filter(task => task.status === '已暂停');
-    const suspendedTasks = waybillTasks.filter(task => task.status === '已挂起');
-    const abnormalTasks = waybillTasks.filter(task => task.status === '异常');
+
     
     const currentTime = new Date().toLocaleString('zh-CN', {
       year: 'numeric',
@@ -681,7 +653,7 @@ const BusinessOrders: React.FC = () => {
   };
 
   // 诊断运单任务
-  const handleDiagnoseWaybillTask = (task: WaybillTask, businessOrder: BusinessOrderRecord) => {
+  const handleDiagnoseWaybillTask = (task: WaybillTask) => {
     message.info(`正在诊断运单任务 "${task.taskName}"...`);
     // 这里可以添加实际的诊断逻辑
 
@@ -940,7 +912,7 @@ const BusinessOrders: React.FC = () => {
                 type="link"
                 size="small"
                 style={{ padding: '0 4px', color: '#1890ff' }}
-                onClick={() => handleDiagnoseWaybillTask(task, record)}
+                onClick={() => handleDiagnoseWaybillTask(task)}
               >
                 诊断
               </Button>
@@ -980,7 +952,7 @@ const BusinessOrders: React.FC = () => {
         
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {waybillTasks.map((task, index) => (
+            {waybillTasks.map((task) => (
               <div key={task.id} style={{ 
                 display: 'flex', 
                 alignItems: 'center', 

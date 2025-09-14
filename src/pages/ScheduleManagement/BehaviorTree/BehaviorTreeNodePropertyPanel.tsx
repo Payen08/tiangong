@@ -8,12 +8,11 @@ import {
   Space,
   message,
   InputNumber,
-  Switch,
-  Divider,
+
   Tabs,
   Tag,
   Radio,
-  Tooltip
+
 } from 'antd';
 import {
   SettingOutlined,

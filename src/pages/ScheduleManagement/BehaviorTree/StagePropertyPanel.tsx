@@ -12,10 +12,10 @@ import {
   Space,
   Divider,
   message,
-  Tooltip
+
 } from 'antd';
 import {
-  CloseOutlined,
+
   PlusOutlined,
   DeleteOutlined,
   SettingOutlined,
@@ -29,9 +29,11 @@ import {
 const { Option } = Select;
 const { TabPane } = Tabs;
 
+type NodeType = 'start' | 'end' | 'stage' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
+
 interface FlowNode {
   id: string;
-  type: 'start' | 'end' | 'stage' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
+  type: NodeType;
   label: string;
   customName?: string;
   x: number;
@@ -424,7 +426,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
   };
 
   // 渲染设备需求表单
-  const renderDeviceRequirement = (requirement: DeviceRequirement, index: number): JSX.Element => (
+  const renderDeviceRequirement = (requirement: DeviceRequirement): JSX.Element => (
     <Card
       key={requirement.id}
       size="small"
@@ -765,8 +767,8 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
       <Tabs activeKey={activeTab} onChange={setActiveTab}>
         <TabPane tab="阶段设备" key="devices">
           <div style={{ marginBottom: 16 }}>
-            {deviceRequirements.map((requirement, index) => 
-              renderDeviceRequirement(requirement, index)
+            {deviceRequirements.map((requirement) => 
+              renderDeviceRequirement(requirement)
             )}
           </div>
 

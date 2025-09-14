@@ -11,16 +11,17 @@ import {
   message
 } from 'antd';
 import {
-  CloseOutlined,
   SettingOutlined,
   EyeOutlined
 } from '@ant-design/icons';
 
 const { Option } = Select;
 
+type NodeType = 'start' | 'end' | 'stage' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
+
 interface FlowNode {
   id: string;
-  type: 'start' | 'end' | 'stage' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
+  type: NodeType;
   label: string;
   customName?: string;
   x: number;
@@ -155,25 +156,7 @@ const BusinessProcessPropertyPanel: React.FC<BusinessProcessPropertyPanelProps> 
     });
   };
 
-  // 获取状态标签颜色
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'enabled': return '#52c41a';
-      case 'disabled': return '#faad14';
-      case 'obsolete': return '#ff4d4f';
-      default: return '#d9d9d9';
-    }
-  };
 
-  // 获取状态文本
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'enabled': return '启用';
-      case 'disabled': return '停用';
-      case 'obsolete': return '废弃';
-      default: return '未知';
-    }
-  };
 
 
 

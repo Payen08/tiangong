@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import AddActionSequence from './AddActionSequence-original';
-import AddActionSequenceNew from './AddActionSequence';
+// 移除未使用的导入: AddActionSequenceNew, useNavigate
 import { actionSequenceData, addActionSequence, updateActionSequence, deleteActionSequence, ActionSequenceRecord } from '../../../data/actionSequenceData';
 import {
   Card,
@@ -35,7 +34,7 @@ const { Option } = Select;
 const { confirm } = Modal;
 
 const ActionSequence: React.FC = () => {
-  const navigate = useNavigate();
+  // 移除未使用的变量: navigate
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);

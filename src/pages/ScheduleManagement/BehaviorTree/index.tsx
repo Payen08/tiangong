@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import AddBehaviorTree from './AddBehaviorTree';
 import { 
   behaviorTreeData, 
@@ -40,7 +39,7 @@ const { Option } = Select;
 const { confirm } = Modal;
 
 const BehaviorTree: React.FC = () => {
-  const navigate = useNavigate();
+
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
