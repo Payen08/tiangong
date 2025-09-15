@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, Progress, Table, Space, Tag, Avatar, Typography } from 'antd';
+import { Card, Row, Col, Statistic, Progress, Table, Space, Tag, Avatar } from 'antd';
 import { RobotOutlined, ThunderboltOutlined, WarningOutlined, CheckCircleOutlined, ClockCircleOutlined, ThunderboltFilled } from "@ant-design/icons";
 import type { ColumnsType } from 'antd/es/table';
 import * as echarts from 'echarts';
-import TimeRangeFilter, { TimeRangeType, getDateRangeByType, formatTimeRangeDisplay } from '@/components/TimeRangeFilter';
+import TimeRangeFilter, { TimeRangeType } from '@/components/TimeRangeFilter';
 import MetricTooltip, { getMetricDefinition } from '@/components/MetricTooltip';
 
 interface RobotData {
@@ -19,7 +19,7 @@ interface RobotData {
 }
 
 const RobotStatus: React.FC = () => {
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRangeType>('last7days');
   const [robotData, setRobotData] = useState<RobotData[]>([]);
   const [chartRef, setChartRef] = useState<HTMLDivElement | null>(null);

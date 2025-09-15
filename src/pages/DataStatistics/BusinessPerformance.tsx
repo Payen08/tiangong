@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, Progress, Table, DatePicker, Select, Space, Tag, Typography } from 'antd';
+import { Card, Row, Col, Statistic, Progress, Table, Select, Space, Tag, Typography } from 'antd';
 import { ArrowUpOutlined, ArrowDownOutlined, CheckCircleOutlined, ClockCircleOutlined, DollarOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import dayjs from 'dayjs';
-import TimeRangeFilter, { TimeRangeType, getDateRangeByType, formatTimeRangeDisplay } from '@/components/TimeRangeFilter';
+// import dayjs from 'dayjs';
+import TimeRangeFilter, { TimeRangeType, formatTimeRangeDisplay } from '@/components/TimeRangeFilter';
 import MetricTooltip, { getMetricDefinition } from '@/components/MetricTooltip';
 
-const { RangePicker } = DatePicker;
+// const { RangePicker } = DatePicker;
 const { Option } = Select;
 
 interface TaskData {
@@ -20,12 +20,12 @@ interface TaskData {
 }
 
 const BusinessPerformance: React.FC = () => {
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRangeType>('last7days');
-  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
-    dayjs().subtract(7, 'day'),
-    dayjs()
-  ]);
+  // const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
+  //   dayjs().subtract(7, 'day'),
+  //   dayjs()
+  // ]);
   const [taskData, setTaskData] = useState<TaskData[]>([]);
 
   // 模拟数据

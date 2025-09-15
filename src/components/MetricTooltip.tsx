@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tooltip, Typography, Space } from 'antd';
+import { Tooltip, Typography } from 'antd';
 import { QuestionCircleOutlined, InfoCircleOutlined } from '@ant-design/icons';
 
 const { Text } = Typography;

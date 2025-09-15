@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Statistic, Progress, Table, Space, Tag, Alert, Typography } from 'antd';
-import { ClockCircleOutlined, ApiOutlined, DatabaseOutlined, DesktopOutlined, HddOutlined, WifiOutlined, NodeIndexOutlined, ExclamationCircleOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { ClockCircleOutlined, ApiOutlined, DatabaseOutlined, NodeIndexOutlined, ExclamationCircleOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as echarts from 'echarts';
-import TimeRangeFilter, { TimeRangeType, getDateRangeByType, formatTimeRangeDisplay } from '@/components/TimeRangeFilter';
+import TimeRangeFilter, { TimeRangeType, formatTimeRangeDisplay } from '@/components/TimeRangeFilter';
 import MetricTooltip, { getMetricDefinition } from '@/components/MetricTooltip';
 
 interface SystemMetric {
@@ -29,7 +29,7 @@ interface TaskScheduleData {
 }
 
 const SchedulingSystem: React.FC = () => {
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRangeType>('last7days');
   const [scheduleData, setScheduleData] = useState<TaskScheduleData[]>([]);
   const [systemMetrics, setSystemMetrics] = useState<SystemMetric[]>([]);

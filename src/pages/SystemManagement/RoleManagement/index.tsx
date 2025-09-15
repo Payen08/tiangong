@@ -9,7 +9,7 @@ import {
   Modal,
   Form,
   message,
-  Popconfirm,
+  // Popconfirm,
   Tree,
   Select,
   Row,
@@ -22,7 +22,7 @@ import {
   EditOutlined,
   DeleteOutlined,
   SearchOutlined,
-  EyeOutlined,
+  // EyeOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -449,9 +449,9 @@ const RoleManagement: React.FC = () => {
     setIsPermissionDrawerVisible(false);
   };
 
-  const handlePermissionCancel = () => {
-    setIsPermissionDrawerVisible(false);
-  };
+  // const handlePermissionCancel = () => {
+  //   setIsPermissionDrawerVisible(false);
+  // };
 
   const handlePermissionDrawerClose = () => {
     setIsPermissionDrawerVisible(false);

@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, Table, Space, Tag, Select, Switch, Alert, Typography } from 'antd';
-import { EnvironmentOutlined, HeatMapOutlined, WarningOutlined, CarOutlined, AimOutlined, FireOutlined, CalendarOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Statistic, Table, Space, Tag, Select, Alert, Typography } from 'antd';
+import { HeatMapOutlined, WarningOutlined, CarOutlined, AimOutlined, FireOutlined, CalendarOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as echarts from 'echarts';
-import TimeRangeFilter, { TimeRangeType, getDateRangeByType, formatTimeRangeDisplay } from '@/components/TimeRangeFilter';
+import { TimeRangeType, formatTimeRangeDisplay } from '@/components/TimeRangeFilter';
 import MetricTooltip, { getMetricDefinition } from '@/components/MetricTooltip';
 
 interface HeatmapPoint {
@@ -45,13 +45,13 @@ interface FaultLocation {
 }
 
 const SpatialHeatmap: React.FC = () => {
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRangeType>('last7days');
-  const [trafficData, setTrafficData] = useState<TrafficData[]>([]);
+  const [, setTrafficData] = useState<TrafficData[]>([]);
   const [taskPoints, setTaskPoints] = useState<TaskPoint[]>([]);
   const [faultLocations, setFaultLocations] = useState<FaultLocation[]>([]);
   const [selectedView, setSelectedView] = useState<'traffic' | 'task' | 'fault'>('traffic');
-  const [showRealTime, setShowRealTime] = useState(true);
+  // const [, setShowRealTime] = useState(true);
   const [trafficChartRef, setTrafficChartRef] = useState<HTMLDivElement | null>(null);
   const [taskChartRef, setTaskChartRef] = useState<HTMLDivElement | null>(null);
   const [faultChartRef, setFaultChartRef] = useState<HTMLDivElement | null>(null);
@@ -506,22 +506,12 @@ const SpatialHeatmap: React.FC = () => {
   const totalTrafficPoints = 156; // 模拟总流量点
   const highTrafficAreas = 8; // 模拟高流量区域
   const congestionPoints = 3; // 模拟拥堵点
-  const totalTaskPoints = taskPoints.length;
   const coreWorkAreas = taskPoints.filter(point => point.taskCount > 40).length;
-  const avgTaskDensity = taskPoints.reduce((sum, point) => sum + point.taskCount, 0) / taskPoints.length;
   const totalFaultPoints = faultLocations.length;
   const highRiskAreas = faultLocations.filter(fault => fault.severity === 'high').length;
   const avgFaultFrequency = faultLocations.reduce((sum, fault) => sum + fault.faultCount, 0) / faultLocations.length;
 
-  const getCongestionTag = (level: string) => {
-    const levelMap: Record<string, { color: string; text: string }> = {
-      'low': { color: 'success', text: '畅通' },
-      'medium': { color: 'warning', text: '缓慢' },
-      'high': { color: 'error', text: '拥堵' }
-    };
-    const config = levelMap[level] || { color: 'default', text: '未知' };
-    return <Tag color={config.color}>{config.text}</Tag>;
-  };
+  // getCongestionTag function removed as it's not used
 
   const getTaskTypeTag = (type: string) => {
     const typeMap: Record<string, { color: string; text: string }> = {

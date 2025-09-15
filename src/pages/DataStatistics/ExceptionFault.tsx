@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Statistic, Table, Space, Tag, Alert, Progress, List, Avatar, Typography } from 'antd';
-import { WarningOutlined, BugOutlined, WifiOutlined, EnvironmentOutlined, ToolOutlined, UserOutlined, ClockCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { WarningOutlined, BugOutlined, ToolOutlined, UserOutlined, ClockCircleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import * as echarts from 'echarts';
-import TimeRangeFilter, { TimeRangeType, getDateRangeByType, formatTimeRangeDisplay } from '@/components/TimeRangeFilter';
+import TimeRangeFilter, { TimeRangeType, formatTimeRangeDisplay } from '@/components/TimeRangeFilter';
 import MetricTooltip, { getMetricDefinition } from '@/components/MetricTooltip';
 
 interface FaultData {
@@ -35,7 +35,7 @@ interface InterventionData {
 }
 
 const ExceptionFault: React.FC = () => {
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [timeRange, setTimeRange] = useState<TimeRangeType>('last7days');
   const [faultData, setFaultData] = useState<FaultData[]>([]);
   const [interventionData, setInterventionData] = useState<InterventionData[]>([]);
