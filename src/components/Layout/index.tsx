@@ -30,6 +30,7 @@ import {
   ApiOutlined,
   ExceptionOutlined,
   HeatMapOutlined,
+  BuildOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useAppStore } from '@/store';
@@ -51,10 +52,12 @@ const Layout: React.FC = () => {
     }
   }, [isAuthenticated, navigate]);
 
-  // 判断当前路径是否为场控视图
+  // 判断当前路径设置对应的标签页
   useEffect(() => {
     if (location.pathname === '/field-control') {
       setActiveTab('field-control');
+    } else if (location.pathname === '/digital-twin') {
+      setActiveTab('digital-twin');
     } else {
       setActiveTab('basic-info');
     }
@@ -245,6 +248,8 @@ const Layout: React.FC = () => {
     setActiveTab(key);
     if (key === 'field-control') {
       navigate('/field-control');
+    } else if (key === 'digital-twin') {
+      navigate('/digital-twin');
     } else {
       navigate('/');
     }
@@ -264,6 +269,11 @@ const Layout: React.FC = () => {
       key: 'field-control',
       label: '场控视图',
       icon: <MonitorOutlined />,
+    },
+    {
+      key: 'digital-twin',
+      label: '数字孪生',
+      icon: <BuildOutlined />,
     },
   ];
 

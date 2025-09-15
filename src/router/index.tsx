@@ -26,6 +26,7 @@ import RobotStatus from '@/pages/DataStatistics/RobotStatus';
 import SchedulingSystem from '@/pages/DataStatistics/SchedulingSystem';
 import ExceptionFault from '@/pages/DataStatistics/ExceptionFault';
 import SpatialHeatmap from '@/pages/DataStatistics/SpatialHeatmap';
+import DigitalTwin from '@/pages/DigitalTwin';
 
 
 
@@ -46,6 +47,10 @@ export const router = createBrowserRouter([
       {
         path: 'field-control',
         element: <div />, // 占位符，实际由Layout组件处理
+      },
+      {
+        path: 'digital-twin',
+        element: <DigitalTwin />,
       },
       {
         path: 'scene',
