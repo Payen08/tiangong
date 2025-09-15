@@ -24,6 +24,12 @@ import {
   PartitionOutlined,
   AuditOutlined,
   CloudUploadOutlined,
+  BarChartOutlined,
+  DashboardOutlined,
+  RobotOutlined,
+  ApiOutlined,
+  ExceptionOutlined,
+  HeatMapOutlined,
 } from '@ant-design/icons';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useAppStore } from '@/store';
@@ -146,6 +152,38 @@ const Layout: React.FC = () => {
           key: '/dispatch/auto-charging',
           icon: <ThunderboltOutlined />,
           label: '自动充电',
+        },
+      ],
+    },
+    {
+      key: 'data-statistics',
+      icon: <BarChartOutlined />,
+      label: '数据统计',
+      children: [
+        {
+          key: '/data-statistics/business-performance',
+          icon: <DashboardOutlined />,
+          label: '业务与效能维度',
+        },
+        {
+          key: '/data-statistics/robot-status',
+          icon: <RobotOutlined />,
+          label: '机器人状态维度',
+        },
+        {
+          key: '/data-statistics/scheduling-system',
+          icon: <ApiOutlined />,
+          label: '调度系统维度',
+        },
+        {
+          key: '/data-statistics/exception-fault',
+          icon: <ExceptionOutlined />,
+          label: '异常与故障维度',
+        },
+        {
+          key: '/data-statistics/spatial-heatmap',
+          icon: <HeatMapOutlined />,
+          label: '空间与热力图维度',
         },
       ],
     },

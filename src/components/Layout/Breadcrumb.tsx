@@ -1,6 +1,6 @@
 import React from 'react';
 import { Breadcrumb as AntBreadcrumb } from 'antd';
-import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined, ClusterOutlined, MonitorOutlined, ControlOutlined, FileTextOutlined, ThunderboltOutlined, PartitionOutlined, AuditOutlined, CloudUploadOutlined } from '@ant-design/icons';
+import { HomeOutlined, UserOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, AppstoreOutlined, SettingOutlined, EnvironmentOutlined, NodeIndexOutlined, ShareAltOutlined, ScheduleOutlined, ApartmentOutlined, ClusterOutlined, MonitorOutlined, ControlOutlined, FileTextOutlined, ThunderboltOutlined, PartitionOutlined, AuditOutlined, CloudUploadOutlined, BarChartOutlined, DashboardOutlined, RobotOutlined, ApiOutlined, ExceptionOutlined, HeatMapOutlined } from '@ant-design/icons';
 import { useLocation, Link } from 'react-router-dom';
 
 const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
@@ -27,6 +27,12 @@ const routeMap: Record<string, { title: string; icon?: React.ReactNode }> = {
   '/schedule/business-orders': { title: '业务订单', icon: <FileTextOutlined /> },
   '/schedule/behavior-tree': { title: '行为树管理', icon: <PartitionOutlined /> },
   '/schedule/action-sequence': { title: '动作序列', icon: <ThunderboltOutlined /> },
+  '/data-statistics': { title: '数据统计', icon: <BarChartOutlined /> },
+  '/data-statistics/business-performance': { title: '业务与效能维度', icon: <DashboardOutlined /> },
+  '/data-statistics/robot-status': { title: '机器人状态维度', icon: <RobotOutlined /> },
+  '/data-statistics/scheduling-system': { title: '调度系统维度', icon: <ApiOutlined /> },
+  '/data-statistics/exception-fault': { title: '异常与故障维度', icon: <ExceptionOutlined /> },
+  '/data-statistics/spatial-heatmap': { title: '空间与热力图维度', icon: <HeatMapOutlined /> },
   '/admin': { title: '系统管理', icon: <SettingOutlined /> },
   '/admin/logs': { title: '系统日志', icon: <AuditOutlined /> },
   '/admin/upgrade': { title: '系统升级', icon: <CloudUploadOutlined /> },

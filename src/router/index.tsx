@@ -6,7 +6,7 @@ import UserManagement from '@/pages/SystemManagement/UserManagement';
 import RoleManagement from '@/pages/SystemManagement/RoleManagement';
 import PermissionManagement from '@/pages/SystemManagement/PermissionManagement';
 import SystemLogs from '@/pages/SystemManagement/SystemLogs';
-import SystemUpgrade from '@/pages/SystemManagement/SystemUpgrade';
+// import SystemUpgrade from '@/pages/SystemManagement/SystemUpgrade';
 import ProductManagement from '@/pages/ProductManagement/index';
 import AddProduct from '@/pages/ProductManagement/AddProduct';
 import DeviceManagement from '@/pages/DeviceManagement/index';
@@ -21,6 +21,11 @@ import ActionSequence from '@/pages/ScheduleManagement/ActionSequence';
 import TaskManagement from '@/pages/DispatchManagement/TaskManagement';
 import IdleDockingManagement from '@/pages/DispatchManagement/IdleDockingManagement';
 import AutoChargingManagement from '@/pages/DispatchManagement/AutoChargingManagement';
+import BusinessPerformance from '@/pages/DataStatistics/BusinessPerformance';
+import RobotStatus from '@/pages/DataStatistics/RobotStatus';
+import SchedulingSystem from '@/pages/DataStatistics/SchedulingSystem';
+import ExceptionFault from '@/pages/DataStatistics/ExceptionFault';
+import SpatialHeatmap from '@/pages/DataStatistics/SpatialHeatmap';
 
 
 
@@ -132,16 +137,41 @@ export const router = createBrowserRouter([
         ],
       },
       {
+        path: 'data-statistics',
+        children: [
+          {
+            path: 'business-performance',
+            element: <BusinessPerformance />,
+          },
+          {
+            path: 'robot-status',
+            element: <RobotStatus />,
+          },
+          {
+            path: 'scheduling-system',
+            element: <SchedulingSystem />,
+          },
+          {
+            path: 'exception-fault',
+            element: <ExceptionFault />,
+          },
+          {
+            path: 'spatial-heatmap',
+            element: <SpatialHeatmap />,
+          },
+        ],
+      },
+      {
         path: 'admin',
         children: [
           {
             path: 'logs',
             element: <SystemLogs />,
           },
-          {
-            path: 'upgrade',
-            element: <SystemUpgrade />,
-          },
+          // {
+        //   path: 'upgrade',
+        //   element: <SystemUpgrade />,
+        // },
         ],
       },
     ],
