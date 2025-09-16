@@ -39,6 +39,7 @@ import {
   BorderOutlined,
 } from '@ant-design/icons';
 import ThreeScene, { ThreeSceneRef } from '@/components/ThreeScene';
+import FloorSelector from '@/components/FloorSelector';
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -69,11 +70,7 @@ interface Task {
   targetDevice?: string;
 }
 
-// 地图类型定义
-interface MapInfo {
-  id: string;
-  name: string;
-}
+
 
 // 楼层数据接口
 interface FloorData {
@@ -298,16 +295,12 @@ const mockTasks: Task[] = [
 ];
 
 // 模拟地图数据
-const mockMaps: MapInfo[] = [
-  { id: 'map1', name: '一楼地图' },
-  { id: 'map2', name: '二楼地图' },
-  { id: 'map3', name: '三楼地图' },
-];
+
 
 const DigitalTwin: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
-  const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
+  const [selectedFloor, setSelectedFloor] = useState<string | null>('floor1');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [floors, setFloors] = useState<FloorData[]>([]);
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
@@ -316,7 +309,7 @@ const DigitalTwin: React.FC = () => {
   // 机器人和任务相关状态
   const [robots] = useState<Robot[]>(mockRobots);
   const [tasks] = useState<Task[]>(mockTasks);
-  const [selectedMap, setSelectedMap] = useState('map1');
+
   const [selectedRobot, setSelectedRobot] = useState<string | null>(null);
   
   // ThreeScene组件引用
@@ -390,6 +383,18 @@ const DigitalTwin: React.FC = () => {
     };
   }, []);
 
+  // 初始化3D场景到1楼视图
+  useEffect(() => {
+    if (!loading && threeSceneRef.current && selectedFloor === 'floor1') {
+      // 延迟一点时间确保3D场景完全加载
+      const timer = setTimeout(() => {
+        threeSceneRef.current?.setFloorView(1);
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [loading, selectedFloor]);
+
   // 切换全屏模式
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -412,10 +417,9 @@ const DigitalTwin: React.FC = () => {
   };
 
   // 切换到楼层视图
-  const handleFloorClick = (floorId: string) => {
+  const handleFloorChange = (floorId: string) => {
     setSelectedFloor(floorId);
     setViewMode('floor');
-    message.success(`已切换到${floors.find(f => f.id === floorId)?.name}视图`);
   };
 
   // 工具函数
@@ -472,10 +476,7 @@ const DigitalTwin: React.FC = () => {
     return isOnline ? '在线' : '离线';
   };
 
-  const getMapName = (mapId: string) => {
-    const map = mockMaps.find(m => m.id === mapId);
-    return map ? map.name : '未知地图';
-  };
+
 
   const getTaskStatusColor = (status: string) => {
     switch (status) {
@@ -922,26 +923,17 @@ const DigitalTwin: React.FC = () => {
           padding: '8px 16px'
         }}>
           <Space>
-            <Select
-              value={selectedMap}
-              onChange={setSelectedMap}
-              style={{ width: 120 }}
-              size="small"
-              placeholder="选择地图"
-              dropdownStyle={{
-                backgroundColor: 'rgba(4, 3, 28, 0.95)',
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                borderRadius: '8px'
+
+            {/* 楼层切换下拉选择器 */}
+            <FloorSelector
+              selectedFloor={selectedFloor}
+              onFloorChange={handleFloorChange}
+              threeSceneRef={threeSceneRef}
+              style={{
+                width: 120,
+                color: 'rgba(255, 255, 255, 0.7)'
               }}
-              popupClassName="custom-select-dropdown"
-            >
-              {mockMaps.map(map => (
-                <Option key={map.id} value={map.id}>
-                  {map.name}
-                </Option>
-              ))}
-            </Select>
+            />
             <Button 
               icon={<ReloadOutlined />} 
               size="small"
@@ -1032,6 +1024,7 @@ const DigitalTwin: React.FC = () => {
             >
               <span style={{ color: '#e8f4fd' }}>正视图</span>
             </Button>
+
           </Space>
         </div>
       </div>

@@ -10,6 +10,7 @@ export interface ThreeSceneRef {
   resetView: () => void;
   setTopView: () => void;
   setFrontView: () => void;
+  setFloorView: (floor: number) => void;
 }
 
 const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>((props, ref) => {
@@ -17,6 +18,7 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>((props, ref) => {
   const animationIdRef = useRef<number | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  const floorGroupsRef = useRef<THREE.Group[]>([]);
   
   // 初始相机位置
   const initialCameraPosition = { x: 50, y: 50, z: 50 };
@@ -100,74 +102,116 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>((props, ref) => {
     scene.add(directionalLight);
 
     // CNC Machine representation
-    const createCNCMachine = (position: THREE.Vector3) => {
+    const createCNCMachine = (position: THREE.Vector3, floorGroup: THREE.Group) => {
       const geometry = new THREE.BoxGeometry(5, 5, 5);
       const material = new THREE.MeshStandardMaterial({ color: 0x0077ff });
       const cube = new THREE.Mesh(geometry, material);
       cube.position.copy(position);
       cube.castShadow = true;
       cube.receiveShadow = true;
-      scene.add(cube);
+      floorGroup.add(cube);
       return cube;
     };
 
-    // 原有5个CNC设备重新排列成一行，并增加第6个设备
-    const originalRowY = 2.5; // 原有设备行高度（正方体中心点，确保底部在地面之上）
-    const spacing = 8; // 正方体间距
-    const originalStartX = -20; // 原有设备行起始X坐标（移动到原点附近）
-    const originalRowZ = 25; // 原有设备行的Z坐标位置（向前移动）
+    // 楼层配置
+    const spacing = 8; // 设备间距
+    const startX = -20; // 起始X坐标
+    const floorHeight = 25; // 楼层高度间距
+    const rowSpacing = 25; // 行间距
     
-    // 创建原有设备行（6个CNC设备）
-    for (let col = 0; col < 6; col++) {
-      const x = originalStartX + col * spacing;
-      createCNCMachine(new THREE.Vector3(x, originalRowY, originalRowZ));
-    }
-
-    // 一层楼层 - 新增一行6列的正方体（与原有设备一一对应）
-    const floorLevel1Y = 2.5; // 一层楼层高度（正方体中心点，确保底部在地面之上）
-    const newRowStartX = -20; // 新行起始X坐标（与原有行对齐，移动到原点附近）
-    const newRowZ = 0; // 新行的Z坐标位置（向前移动）
+    // 创建楼层组
+    const floor1Group = new THREE.Group();
+    const floor2Group = new THREE.Group();
+    const floor3Group = new THREE.Group();
     
-    // 创建新增一行6列的正方体
-    for (let col = 0; col < 6; col++) {
-      const x = newRowStartX + col * spacing;
-      createCNCMachine(new THREE.Vector3(x, floorLevel1Y, newRowZ));
-    }
-
-    // 再增加两行正方体，每行6个
-    // 第三行
-    const thirdRowStartX = -20; // 移动到原点附近
-    const thirdRowZ = -10; // 靠近第二行（向前移动）
-    const thirdRowY = 2.5; // 确保正方体底部在地面之上
+    floor1Group.name = 'floor1';
+    floor2Group.name = 'floor2';
+    floor3Group.name = 'floor3';
     
-    for (let col = 0; col < 6; col++) {
-      const x = thirdRowStartX + col * spacing;
-      createCNCMachine(new THREE.Vector3(x, thirdRowY, thirdRowZ));
-    }
-
-    // 第四行
-    const fourthRowStartX = -20; // 移动到原点附近
-    const fourthRowZ = -35; // 与第3行保持25单位间距（向Z轴负方向移动）
-    const fourthRowY = 2.5; // 确保正方体底部在地面之上
+    scene.add(floor1Group);
+    scene.add(floor2Group);
+    scene.add(floor3Group);
     
-    for (let col = 0; col < 6; col++) {
-      const x = fourthRowStartX + col * spacing;
-      createCNCMachine(new THREE.Vector3(x, fourthRowY, fourthRowZ));
-    }
-
-    // Ground plane - 扩大地面尺寸以容纳所有正方体
-    const planeGeometry = new THREE.PlaneGeometry(150, 150);
-    const planeMaterial = new THREE.MeshStandardMaterial({
-      color: 0x2a2a3a,
-      side: THREE.DoubleSide,
+    floorGroupsRef.current = [floor1Group, floor2Group, floor3Group];
+    
+    // 初始状态只显示一楼
+    floor1Group.visible = true;
+    floor2Group.visible = false;
+    floor3Group.visible = false;
+    
+    // 一楼场景 (Y = 2.5)
+    const floor1Y = 2.5;
+    const floor1Rows = [
+      { z: 25, label: '1-1', color: '#ff4444' },
+      { z: 0, label: '1-2', color: '#44ff44' },
+      { z: -25, label: '1-3', color: '#4444ff' },
+      { z: -50, label: '1-4', color: '#ffff44' }
+    ];
+    
+    // 创建一楼设备
+    floor1Rows.forEach(row => {
+      for (let col = 0; col < 6; col++) {
+        const x = startX + col * spacing;
+        createCNCMachine(new THREE.Vector3(x, floor1Y, row.z), floor1Group);
+      }
     });
-    const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-    plane.rotation.x = -Math.PI / 2;
-    plane.receiveShadow = true;
-    scene.add(plane);
+    
+    // 二楼场景 (Y = 27.5)
+    const floor2Y = floor1Y + floorHeight;
+    const floor2Rows = [
+      { z: 25, label: '2-1', color: '#ff8844' },
+      { z: 0, label: '2-2', color: '#88ff44' },
+      { z: -25, label: '2-3', color: '#4488ff' },
+      { z: -50, label: '2-4', color: '#ff88ff' }
+    ];
+    
+    // 创建二楼设备
+    floor2Rows.forEach(row => {
+      for (let col = 0; col < 6; col++) {
+        const x = startX + col * spacing;
+        createCNCMachine(new THREE.Vector3(x, floor2Y, row.z), floor2Group);
+      }
+    });
+    
+    // 三楼场景 (Y = 52.5)
+    const floor3Y = floor2Y + floorHeight;
+    const floor3Rows = [
+      { z: 25, label: '3-1', color: '#ffaa44' },
+      { z: 0, label: '3-2', color: '#aaff44' },
+      { z: -25, label: '3-3', color: '#44aaff' },
+      { z: -50, label: '3-4', color: '#aa44ff' }
+    ];
+    
+    // 创建三楼设备
+    floor3Rows.forEach(row => {
+      for (let col = 0; col < 6; col++) {
+        const x = startX + col * spacing;
+        createCNCMachine(new THREE.Vector3(x, floor3Y, row.z), floor3Group);
+      }
+    });
+
+    // 为每个楼层创建地面
+    const createFloorPlane = (y: number, floorGroup: THREE.Group) => {
+      const planeGeometry = new THREE.PlaneGeometry(150, 150);
+      const planeMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2a2a3a,
+        side: THREE.DoubleSide,
+      });
+      const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+      plane.rotation.x = -Math.PI / 2;
+      plane.position.y = y;
+      plane.receiveShadow = true;
+      floorGroup.add(plane);
+      return plane;
+    };
+    
+    // 创建各楼层地面
+    createFloorPlane(0, floor1Group);
+    createFloorPlane(floor2Y - 2.5, floor2Group);
+    createFloorPlane(floor3Y - 2.5, floor3Group);
 
     // 创建行标签函数
-    const createRowLabel = (text: string, position: THREE.Vector3, color: string = '#ffffff') => {
+    const createRowLabel = (text: string, position: THREE.Vector3, floorGroup: THREE.Group, color: string = '#ffffff') => {
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d')!;
       canvas.width = 128;
@@ -191,22 +235,30 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>((props, ref) => {
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.position.copy(position);
       sprite.scale.set(8, 8, 1); // 调整标签大小
-      scene.add(sprite);
+      floorGroup.add(sprite);
       return sprite;
     };
 
-    // 为每行添加地面标签（位于行的首端）
-    // 第1行标签（Z=25）
-    createRowLabel('1', new THREE.Vector3(-25, 0.1, originalRowZ), '#ff4444');
+    // 为每个楼层的每行添加地面标签
+    // 一楼标签 - 贴近地面
+    floor1Rows.forEach(row => {
+      createRowLabel(row.label, new THREE.Vector3(-25, 0.1, row.z), floor1Group, row.color);
+    });
     
-    // 第2行标签（Z=0）
-    createRowLabel('2', new THREE.Vector3(-25, 0.1, newRowZ), '#44ff44');
+    // 二楼标签 - 贴近二楼地面
+    floor2Rows.forEach(row => {
+      createRowLabel(row.label, new THREE.Vector3(-25, (floor2Y - 2.5) + 0.1, row.z), floor2Group, row.color);
+    });
     
-    // 第3行标签（Z=-25）
-    createRowLabel('3', new THREE.Vector3(-25, 0.1, thirdRowZ), '#4444ff');
+    // 三楼标签 - 贴近三楼地面
+    floor3Rows.forEach(row => {
+      createRowLabel(row.label, new THREE.Vector3(-25, (floor3Y - 2.5) + 0.1, row.z), floor3Group, row.color);
+    });
     
-    // 第4行标签（Z=-50）
-    createRowLabel('4', new THREE.Vector3(-25, 0.1, fourthRowZ), '#ffff44');
+    // 创建楼层标识
+    createRowLabel('1F', new THREE.Vector3(-35, floor1Y + 10, 0), floor1Group, '#ffffff');
+    createRowLabel('2F', new THREE.Vector3(-35, floor2Y + 10, 0), floor2Group, '#ffffff');
+    createRowLabel('3F', new THREE.Vector3(-35, floor3Y + 10, 0), floor3Group, '#ffffff');
 
     // Animation loop
     const animate = () => {
@@ -282,11 +334,36 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>((props, ref) => {
     }
   };
 
+  // 切换到指定楼层视图
+  const setFloorView = (floor: number) => {
+    if (cameraRef.current && controlsRef.current) {
+      const floorHeight = 25;
+      const baseY = 2.5;
+      const targetY = baseY + (floor - 1) * floorHeight;
+      
+      // 隐藏所有楼层
+      floorGroupsRef.current.forEach(group => {
+        group.visible = false;
+      });
+      
+      // 显示指定楼层
+      if (floor >= 1 && floor <= 3) {
+        floorGroupsRef.current[floor - 1].visible = true;
+      }
+      
+      // 设置相机位置，稍微偏上一些以便观察楼层
+      cameraRef.current.position.set(0, targetY + 15, 80);
+      controlsRef.current.target.set(0, targetY, 0);
+      controlsRef.current.update();
+    }
+  };
+
   // 暴露方法给父组件
   useImperativeHandle(ref, () => ({
     resetView,
     setTopView,
-    setFrontView
+    setFrontView,
+    setFloorView
   }), []);
 
 
