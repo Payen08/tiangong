@@ -64,29 +64,29 @@ body {
   color: #e8f4fd !important;
 }
 
-/* Select输入框样式 */
-.ant-select-selector {
+/* 数字孪生页面Select输入框样式 */
+.digital-twin-page .ant-select-selector {
   color: #e8f4fd !important;
   background-color: rgba(4, 3, 28, 0.2) !important;
   border: 1px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 8px !important;
 }
 
-.ant-select-selector:hover {
+.digital-twin-page .ant-select-selector:hover {
   border-color: rgba(24, 144, 255, 0.5) !important;
   box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1) !important;
 }
 
-.ant-select-selector:focus {
+.digital-twin-page .ant-select-selector:focus {
   border-color: #1890ff !important;
   box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
 }
 
-.ant-select-selection-item {
+.digital-twin-page .ant-select-selection-item {
   color: #e8f4fd !important;
 }
 
-.ant-select-selection-search-input {
+.digital-twin-page .ant-select-selection-search-input {
   color: #e8f4fd !important;
 }
 

@@ -156,6 +156,28 @@ const mockRobots: Robot[] = [
     mapId: 'map3',
     isOnline: true,
   },
+  {
+    id: 'AGV003',
+    name: 'AGV-003',
+    type: 'AGV',
+    status: 'error',
+    battery: 15,
+    position: { x: 150, y: 180 },
+    currentTask: null,
+    mapId: 'map1',
+    isOnline: false,
+  },
+  {
+    id: 'MCR003',
+    name: 'MCR-003',
+    type: 'MCR',
+    status: 'idle',
+    battery: 88,
+    position: { x: 500, y: 350 },
+    currentTask: null,
+    mapId: 'map2',
+    isOnline: false,
+  },
 ];
 
 // 模拟任务数据
@@ -203,6 +225,72 @@ const mockTasks: Task[] = [
     endPoint: '',
     targetDevice: 'CNC-004',
     progress: 45,
+  },
+  {
+    id: 'TASK005',
+    name: '运输任务-005',
+    robotId: null,
+    status: 'pending',
+    priority: 'medium',
+    startPoint: '',
+    endPoint: '',
+    targetDevice: 'CNC-005',
+    progress: 0,
+  },
+  {
+    id: 'TASK006',
+    name: '巡检任务-003',
+    robotId: null,
+    status: 'pending',
+    priority: 'low',
+    startPoint: '',
+    endPoint: '',
+    targetDevice: 'CNC-006',
+    progress: 0,
+  },
+  {
+    id: 'TASK007',
+    name: '运输任务-006',
+    robotId: 'MCR001',
+    status: 'completed',
+    priority: 'high',
+    startPoint: '',
+    endPoint: '',
+    targetDevice: 'CNC-007',
+    progress: 100,
+  },
+  {
+    id: 'TASK008',
+    name: '运输任务-007',
+    robotId: 'AGV002',
+    status: 'completed',
+    priority: 'medium',
+    startPoint: '',
+    endPoint: '',
+    targetDevice: 'CNC-008',
+    progress: 100,
+  },
+  {
+    id: 'TASK009',
+    name: '运输任务-008',
+    robotId: null,
+    status: 'cancelled',
+    priority: 'low',
+    startPoint: '',
+    endPoint: '',
+    targetDevice: 'CNC-009',
+    progress: 0,
+  },
+  {
+    id: 'TASK010',
+    name: '运输任务-009',
+    robotId: 'AMR001',
+    status: 'executing',
+    priority: 'high',
+    startPoint: '',
+    endPoint: '',
+    targetDevice: 'CNC-010',
+    progress: 80,
   },
 ];
 
@@ -489,9 +577,9 @@ const DigitalTwin: React.FC = () => {
   const toggleLeftPanel = () => setLeftPanelVisible(!leftPanelVisible);
   const toggleRightPanel = () => setRightPanelVisible(!rightPanelVisible);
   const toggleAllPanels = () => {
-    const nextState = !(leftPanelVisible && rightPanelVisible);
-    setLeftPanelVisible(nextState);
-    setRightPanelVisible(nextState);
+    const newVisible = !(leftPanelVisible && rightPanelVisible);
+    setLeftPanelVisible(newVisible);
+    setRightPanelVisible(newVisible);
   };
 
   const allPanelsVisible = leftPanelVisible && rightPanelVisible;
@@ -526,31 +614,26 @@ const DigitalTwin: React.FC = () => {
           position: 'absolute',
           top: '20px',
           left: '20px',
-          width: '280px',
-          height: 'calc(100% - 40px)',
+          width: '320px',
+          maxHeight: 'calc(100% - 40px)',
           background: 'rgba(4, 3, 28, 0.01)',
-          backdropFilter: 'blur(20px)',
+          backdropFilter: 'blur(5px)',
           borderRadius: '12px',
           border: '1px solid rgba(255, 255, 255, 0.15)',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
           zIndex: 10,
-          overflow: 'hidden'
+          padding: '16px',
+          overflowY: 'auto'
         }}>
           <div style={{
-            padding: '12px',
-            borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
-            background: 'rgba(4, 3, 28, 0.015)'
+            display: 'flex',
+            alignItems: 'center',
+            marginBottom: '16px',
+            gap: '8px'
           }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '8px'
-            }}>
-              <Space>
-                <RobotOutlined style={{ color: '#1890ff' }} />
-                <Text style={{ fontWeight: 'bold', color: '#e8f4fd' }}>机器人列表</Text>
-              </Space>
+            <RobotOutlined style={{ color: '#1890ff' }} />
+            <Text style={{ fontWeight: 'bold', color: '#e8f4fd', fontSize: '14px' }}>机器人统计</Text>
+            <div style={{ marginLeft: 'auto' }}>
               <Button 
                 icon={<EyeInvisibleOutlined />} 
                 size="small" 
@@ -564,137 +647,180 @@ const DigitalTwin: React.FC = () => {
                 }}
               />
             </div>
-
           </div>
           <div style={{ 
             padding: '12px',
             height: 'calc(100% - 57px)',
             overflow: 'auto'
           }}>
-            <List
-              dataSource={robots.filter(robot => robot.mapId === selectedMap)}
-              renderItem={(robot: Robot) => (
-                <List.Item
-                  style={{
-                    padding: '12px',
-                    cursor: 'pointer',
-                    backgroundColor: selectedRobot === robot.id ? 'rgba(24, 144, 255, 0.1)' : 'transparent',
-                    border: selectedRobot === robot.id ? '1px solid #1890ff' : 'none',
-                    borderTop: selectedRobot === robot.id ? '1px solid #1890ff' : 'none',
-                    borderLeft: selectedRobot === robot.id ? '1px solid #1890ff' : 'none',
-                    borderRight: selectedRobot === robot.id ? '1px solid #1890ff' : 'none',
-                    borderBottom: selectedRobot === robot.id ? '1px solid #1890ff' : '1px solid rgba(0, 0, 0, 0.1)',
-                    borderRadius: '8px',
-                    marginBottom: '8px',
-                    opacity: robot.mapId === selectedMap ? 1 : 0.7,
-                  }}
-                  onClick={() => handleRobotClick(robot)}
-                >
-                  <div style={{ width: '100%' }}>
-                    {/* 机器人名称和图标行 - 水平对齐 */}
-                    <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      marginBottom: '8px',
-                      gap: '8px'
-                    }}>
-                      <Text strong style={{ fontSize: '14px', flex: 1, color: '#e8f4fd' }}>{robot.name}</Text>
-                      <Avatar
-                        icon={getRobotTypeIcon(robot.type)}
-                        size={20}
-                        style={{
-                          backgroundColor: getStatusAvatarColor(robot.status),
-                          fontSize: '12px'
-                        }}
-                      />
-                    </div>
-                    
-                    {/* 地图信息 */}
-                    <div style={{ marginBottom: '4px' }}>
-                      <Text style={{ fontSize: '12px', color: '#b8d4f0' }}>
-                        {getMapName(robot.mapId)}
-                      </Text>
-                    </div>
-                    
-                    {/* 状态和在线状态行 */}
-                    <div style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      marginBottom: '4px',
-                      gap: '8px',
-                      flexWrap: 'wrap'
-                    }}>
-                      {robot.status === 'move_stopped' ? (
-                          <Tag 
-                           size="small"
-                           style={{
-                             backgroundColor: 'rgba(255, 193, 7, 0.15)',
-                             color: 'rgba(255, 193, 7, 0.9)',
-                             border: '1px solid rgba(255, 193, 7, 0.3)',
-                             borderRadius: '4px'
-                           }}
-                         >
-                           停止
-                         </Tag>
-                      ) : (
-                        <Tag 
-                          size="small"
-                          style={{
-                            backgroundColor: robot.status === 'running' 
-                              ? 'rgba(82, 196, 26, 0.15)' 
-                              : robot.status === 'idle' 
-                              ? 'rgba(24, 144, 255, 0.15)' 
-                              : 'rgba(255, 77, 79, 0.15)',
-                            color: robot.status === 'running' 
-                              ? 'rgba(82, 196, 26, 0.9)' 
-                              : robot.status === 'idle' 
-                              ? 'rgba(24, 144, 255, 0.9)' 
-                              : 'rgba(255, 77, 79, 0.9)',
-                            border: robot.status === 'running' 
-                              ? '1px solid rgba(82, 196, 26, 0.3)' 
-                              : robot.status === 'idle' 
-                              ? '1px solid rgba(24, 144, 255, 0.3)' 
-                              : '1px solid rgba(255, 77, 79, 0.3)',
-                            borderRadius: '4px'
-                          }}
-                        >
-                          {getStatusText(robot.status)}
-                        </Tag>
-                      )}
-                      <Tag 
-                        size="small"
-                        style={{
-                          backgroundColor: robot.isOnline 
-                            ? 'rgba(82, 196, 26, 0.15)' 
-                            : 'rgba(255, 77, 79, 0.15)',
-                          color: robot.isOnline 
-                            ? 'rgba(82, 196, 26, 0.9)' 
-                            : 'rgba(255, 77, 79, 0.9)',
-                          border: robot.isOnline 
-                            ? '1px solid rgba(82, 196, 26, 0.3)' 
-                            : '1px solid rgba(255, 77, 79, 0.3)',
-                          borderRadius: '4px'
-                        }}
-                      >
-                        {getOnlineStatusText(robot.isOnline)}
-                      </Tag>
-                    </div>
-                    
-                    {/* 电量信息独占一行，左对齐 */}
-                    <div style={{ marginBottom: '4px' }}>
-                      <Text style={{ fontSize: '12px', color: '#595959' }}>电量: {robot.battery}%</Text>
-                    </div>
-                    
-                    {/* 当前任务 */}
-                    {robot.currentTask && (
-                      <Text style={{ fontSize: '11px', color: '#595959' }}>
-                        任务: {robot.currentTask}
-                      </Text>
-                    )}
+            {/* 机器人群组概览 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '12px'
+              }}>
+                <Text style={{ fontSize: '14px', fontWeight: 500, color: '#e8f4fd' }}>机器人群组概览</Text>
+                <Text style={{ fontSize: '12px', color: '#b8d4f0' }}>今日数据</Text>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{
+                  background: 'rgba(24, 144, 255, 0.15)',
+                  border: '1px solid rgba(24, 144, 255, 0.3)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '20px', fontWeight: 600, color: '#1890ff', marginBottom: '4px' }}>
+                    {mockRobots.length}
                   </div>
-                </List.Item>
-              )}
-            />
+                  <div style={{ fontSize: '12px', color: '#b8d4f0' }}>总机器人</div>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(82, 196, 26, 0.15)',
+                  border: '1px solid rgba(82, 196, 26, 0.3)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '20px', fontWeight: 600, color: '#52c41a', marginBottom: '4px' }}>
+                    {mockRobots.filter(r => r.isOnline).length}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#b8d4f0' }}>在线机器人</div>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(255, 77, 79, 0.15)',
+                  border: '1px solid rgba(255, 77, 79, 0.3)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '20px', fontWeight: 600, color: '#ff4d4f', marginBottom: '4px' }}>
+                    {mockRobots.filter(r => !r.isOnline).length}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#b8d4f0' }}>离线机器人</div>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(250, 173, 20, 0.15)',
+                  border: '1px solid rgba(250, 173, 20, 0.3)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '20px', fontWeight: 600, color: '#faad14', marginBottom: '4px' }}>
+                    {mockRobots.filter(r => r.status === 'error' || r.status === 'move_stopped').length}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#b8d4f0' }}>故障设备</div>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(135, 208, 104, 0.15)',
+                  border: '1px solid rgba(135, 208, 104, 0.3)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '20px', fontWeight: 600, color: '#87d068', marginBottom: '4px' }}>
+                    {mockRobots.filter(r => r.status === 'running').length}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#b8d4f0' }}>运行中</div>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(114, 46, 209, 0.15)',
+                  border: '1px solid rgba(114, 46, 209, 0.3)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '20px', fontWeight: 600, color: '#722ed1', marginBottom: '4px' }}>
+                    {Math.round((mockRobots.filter(r => r.status === 'error' || r.status === 'move_stopped').length / mockRobots.length) * 100)}%
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#b8d4f0' }}>故障率</div>
+                </div>
+              </div>
+            </div>
+            
+            {/* 机器人类型分布 */}
+            <div style={{ marginBottom: '16px' }}>
+              <Text style={{ fontSize: '14px', fontWeight: 500, color: '#e8f4fd', marginBottom: '12px', display: 'block' }}>机器人类型分布</Text>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {['AGV', 'MCR', 'AMR'].map(type => {
+                  const count = mockRobots.filter(r => r.type === type).length;
+                  const percentage = Math.round((count / mockRobots.length) * 100);
+                  return (
+                    <div key={type} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '8px 12px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      borderRadius: '4px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {getRobotTypeIcon(type)}
+                        <Text style={{ fontSize: '13px', color: '#e8f4fd' }}>{type}</Text>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{
+                          width: '60px',
+                          height: '4px',
+                          background: 'rgba(255, 255, 255, 0.1)',
+                          borderRadius: '2px',
+                          overflow: 'hidden'
+                        }}>
+                          <div style={{
+                            width: `${percentage}%`,
+                            height: '100%',
+                            background: type === 'AGV' ? '#1890ff' : type === 'MCR' ? '#52c41a' : '#faad14',
+                            borderRadius: '2px'
+                          }} />
+                        </div>
+                        <Text style={{ fontSize: '12px', color: '#b8d4f0', minWidth: '30px' }}>{count}台</Text>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* 设备性能统计 */}
+            <div>
+              <Text style={{ fontSize: '14px', fontWeight: 500, color: '#e8f4fd', marginBottom: '12px', display: 'block' }}>设备性能统计</Text>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '18px', fontWeight: 600, color: '#1890ff', marginBottom: '4px' }}>
+                    {Math.round(mockRobots.reduce((sum, r) => sum + r.battery, 0) / mockRobots.length)}%
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#b8d4f0' }}>平均电量</div>
+                </div>
+                
+                <div style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '18px', fontWeight: 600, color: '#52c41a', marginBottom: '4px' }}>
+                    {Math.round((mockRobots.filter(r => r.isOnline && r.status === 'running').length / mockRobots.length) * 100)}%
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#b8d4f0' }}>设备利用率</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -713,7 +839,7 @@ const DigitalTwin: React.FC = () => {
         </div>
 
         {/* 中间悬浮控制栏 */}
-        <div style={{
+        <div className="digital-twin-page" style={{
           position: 'absolute',
           top: '20px',
           left: leftPanelVisible && rightPanelVisible ? 'calc(240px + (100vw - 480px) / 2)' :
@@ -734,13 +860,7 @@ const DigitalTwin: React.FC = () => {
             <Select
               value={selectedMap}
               onChange={setSelectedMap}
-              style={{ 
-                width: 120,
-                backgroundColor: 'rgba(4, 3, 28, 0.2)',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                borderRadius: '4px',
-                color: '#e8f4fd'
-              }}
+              style={{ width: 120 }}
               size="small"
               placeholder="选择地图"
               dropdownStyle={{
@@ -785,6 +905,34 @@ const DigitalTwin: React.FC = () => {
               <span style={{ color: '#e8f4fd' }}>重置视图</span>
             </Button>
             <Button 
+              icon={leftPanelVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+              size="small"
+              type="text"
+              onClick={() => setLeftPanelVisible(!leftPanelVisible)}
+              style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: 'none',
+                borderRadius: '4px'
+              }}
+            >
+              <span style={{ color: '#e8f4fd' }}>{leftPanelVisible ? '隐藏左侧' : '显示左侧'}</span>
+            </Button>
+            <Button 
+              icon={rightPanelVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+              size="small"
+              type="text"
+              onClick={() => setRightPanelVisible(!rightPanelVisible)}
+              style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: 'none',
+                borderRadius: '4px'
+              }}
+            >
+              <span style={{ color: '#e8f4fd' }}>{rightPanelVisible ? '隐藏右侧' : '显示右侧'}</span>
+            </Button>
+            <Button 
               icon={allPanelsVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
               size="small"
               type="text"
@@ -796,7 +944,7 @@ const DigitalTwin: React.FC = () => {
                 borderRadius: '4px'
               }}
             >
-              <span style={{ color: '#e8f4fd' }}>{allPanelsVisible ? '隐藏面板' : '显示面板'}</span>
+              <span style={{ color: '#e8f4fd' }}>{allPanelsVisible ? '隐藏全部' : '显示全部'}</span>
             </Button>
           </Space>
         </div>
@@ -808,31 +956,26 @@ const DigitalTwin: React.FC = () => {
           position: 'absolute',
           top: '20px',
           right: '20px',
-          width: '280px',
-          height: 'calc(100% - 40px)',
+          width: '320px',
+          maxHeight: 'calc(100% - 40px)',
           background: 'rgba(4, 3, 28, 0.01)',
-          backdropFilter: 'blur(20px)',
+          backdropFilter: 'blur(5px)',
           borderRadius: '12px',
           border: '1px solid rgba(255, 255, 255, 0.15)',
           boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
           zIndex: 10,
-          overflow: 'hidden'
+          padding: '16px',
+          overflowY: 'auto'
         }}>
           <div style={{
-            padding: '12px',
-            borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
-            background: 'rgba(4, 3, 28, 0.01)'
+            display: 'flex',
+            alignItems: 'center',
+            marginBottom: '16px',
+            gap: '8px'
           }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '8px'
-            }}>
-              <Space>
-                <ScheduleOutlined style={{ color: '#1890ff' }} />
-                <Text style={{ fontWeight: 'bold', color: '#e8f4fd' }}>运单任务</Text>
-              </Space>
+            <BuildOutlined style={{ color: '#1890ff' }} />
+            <Text style={{ fontWeight: 'bold', color: '#e8f4fd', fontSize: '14px' }}>业务统计</Text>
+            <div style={{ marginLeft: 'auto' }}>
               <Button 
                 icon={<EyeInvisibleOutlined />} 
                 size="small" 
@@ -846,90 +989,103 @@ const DigitalTwin: React.FC = () => {
                 }}
               />
             </div>
+          </div>
+          {/* 任务执行统计概览 */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '12px'
+            }}>
+              <Text style={{ fontSize: '14px', fontWeight: 500, color: '#e8f4fd' }}>任务执行统计</Text>
+              <Text style={{ fontSize: '12px', color: '#b8d4f0' }}>实时数据</Text>
+            </div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+              <div style={{
+                background: 'rgba(24, 144, 255, 0.15)',
+                border: '1px solid rgba(24, 144, 255, 0.3)',
+                borderRadius: '6px',
+                padding: '12px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '20px', fontWeight: 600, color: '#1890ff', marginBottom: '4px' }}>
+                  {mockTasks.filter(t => t.status === 'executing').length}
+                </div>
+                <div style={{ fontSize: '12px', color: '#b8d4f0' }}>正在执行</div>
+              </div>
+              
+              <div style={{
+                background: 'rgba(250, 173, 20, 0.15)',
+                border: '1px solid rgba(250, 173, 20, 0.3)',
+                borderRadius: '6px',
+                padding: '12px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '20px', fontWeight: 600, color: '#faad14', marginBottom: '4px' }}>
+                  {mockTasks.filter(t => t.status === 'pending').length}
+                </div>
+                <div style={{ fontSize: '12px', color: '#b8d4f0' }}>待执行</div>
+              </div>
+              
+              <div style={{
+                background: 'rgba(250, 173, 20, 0.15)',
+                border: '1px solid rgba(250, 173, 20, 0.3)',
+                borderRadius: '6px',
+                padding: '12px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '20px', fontWeight: 600, color: '#faad14', marginBottom: '4px' }}>
+                  {mockTasks.filter(t => t.status === 'paused').length}
+                </div>
+                <div style={{ fontSize: '12px', color: '#b8d4f0' }}>已挂起</div>
+              </div>
+              
+              <div style={{
+                background: 'rgba(114, 46, 209, 0.15)',
+                border: '1px solid rgba(114, 46, 209, 0.3)',
+                borderRadius: '6px',
+                padding: '12px',
+                textAlign: 'center'
+              }}>
+                <div style={{ fontSize: '20px', fontWeight: 600, color: '#722ed1', marginBottom: '4px' }}>
+                  {mockTasks.filter(t => t.robotId === null).length}
+                </div>
+                <div style={{ fontSize: '12px', color: '#b8d4f0' }}>待分配</div>
+              </div>
+            </div>
+          </div>
 
+          {/* 业务效能指标 */}
+          <div style={{ marginBottom: '16px' }}>
+            <Text style={{ fontSize: '14px', fontWeight: 500, color: '#e8f4fd', marginBottom: '12px', display: 'block' }}>业务效能指标</Text>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {[
+                { label: '任务完成率', value: `${Math.round((mockTasks.filter(t => t.status === 'completed').length / mockTasks.length) * 100)}%`, color: '#52c41a' },
+                { label: '平均响应时间', value: '3.2min', color: '#1890ff' },
+                { label: '平均任务完成时间', value: '12.5min', color: '#13c2c2' },
+                { label: '异常任务率', value: `${Math.round((mockTasks.filter(t => t.status === 'error').length / mockTasks.length) * 100)}%`, color: '#ff4d4f' },
+                { label: '今日订单量', value: '156', color: '#722ed1' },
+                { label: '今日完成订单量', value: `${mockTasks.filter(t => t.status === 'completed').length}`, color: '#52c41a' }
+              ].map((item, index) => (
+                <div key={index} style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center'
+                }}>
+                  <Text style={{ fontSize: '13px', color: '#e8f4fd' }}>{item.label}</Text>
+                  <Text style={{ fontSize: '14px', fontWeight: 600, color: item.color }}>{item.value}</Text>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ 
-            padding: '12px',
-            height: 'calc(100% - 57px)',
-            overflow: 'auto'
-          }}>
-            <List
-              dataSource={tasks}
-              renderItem={(task: Task) => (
-                <List.Item 
-                  style={{ 
-                    padding: '12px',
-                    borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
-                    marginBottom: '8px'
-                  }}
-                >
-                  <List.Item.Meta
-                    title={
-                      <Space>
-                        <Text strong style={{ color: '#e8f4fd' }}>{task.name}</Text>
-                        <Tag 
-                          style={{
-                            backgroundColor: task.priority === 'high' 
-                              ? 'rgba(255, 77, 79, 0.15)' 
-                              : task.priority === 'medium' 
-                              ? 'rgba(255, 193, 7, 0.15)' 
-                              : 'rgba(82, 196, 26, 0.15)',
-                            color: task.priority === 'high' 
-                              ? 'rgba(255, 77, 79, 0.9)' 
-                              : task.priority === 'medium' 
-                              ? 'rgba(255, 193, 7, 0.9)' 
-                              : 'rgba(82, 196, 26, 0.9)',
-                            border: task.priority === 'high' 
-                              ? '1px solid rgba(255, 77, 79, 0.3)' 
-                              : task.priority === 'medium' 
-                              ? '1px solid rgba(255, 193, 7, 0.3)' 
-                              : '1px solid rgba(82, 196, 26, 0.3)',
-                            borderRadius: '4px'
-                          }}
-                        >
-                          {task.priority === 'high' ? '高' : task.priority === 'medium' ? '中' : '低'}
-                        </Tag>
-                      </Space>
-                    }
-                    description={
-                      <div>
-                        <div style={{ marginBottom: '6px' }}>
-                          <Tag 
-                            style={{
-                              backgroundColor: 'rgba(24, 144, 255, 0.15)',
-                              color: 'rgba(24, 144, 255, 0.9)',
-                              border: '1px solid rgba(24, 144, 255, 0.3)',
-                              borderRadius: '4px'
-                            }}
-                          >
-                            {getTaskStatusText(task.status)}
-                          </Tag>
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#b8d4f0' }}>
-                          {task.targetDevice && (
-                            <div style={{ marginBottom: '2px' }}>目标设备: {task.targetDevice}</div>
-                          )}
-                          {task.robotId && (
-                            <div style={{ marginBottom: '2px' }}>执行机器人: {robots.find(r => r.id === task.robotId)?.name}</div>
-                          )}
-                          {task.status === 'executing' && (
-                            <div style={{ marginBottom: '6px' }}>进度: {Math.round(task.progress)}%</div>
-                          )}
-                          {getTaskActions(task).length > 0 && (
-                            <div style={{ marginTop: '8px' }}>
-                              <Space size={4}>
-                                {getTaskActions(task)}
-                              </Space>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    }
-                  />
-                </List.Item>
-              )}
-            />
-          </div>
+
+
         </div>
       )}
 
