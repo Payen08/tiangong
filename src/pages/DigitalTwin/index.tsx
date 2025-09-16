@@ -1,26 +1,76 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Card,
-  Row,
-  Col,
   Button,
-  Space,
   Typography,
-  Select,
   message,
   Spin,
-  Alert,
+  Card,
+  List,
+  Input,
+  Tooltip,
+  Space,
+  Avatar,
+  Tag,
+  Select,
 } from 'antd';
+
+
 import {
   FullscreenOutlined,
   FullscreenExitOutlined,
   ReloadOutlined,
   EyeOutlined,
+  MenuUnfoldOutlined,
+  MenuFoldOutlined,
+  VideoCameraOutlined,
+  InfoCircleOutlined,
   BuildOutlined,
+  RobotOutlined,
+  ScheduleOutlined,
+  EyeInvisibleOutlined,
+  CarOutlined,
+  AndroidOutlined,
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+  CloseCircleOutlined,
+  StopOutlined,
 } from '@ant-design/icons';
+import ThreeScene from '@/components/ThreeScene';
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 const { Option } = Select;
+
+// 机器人类型定义
+interface Robot {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  battery: number;
+  position: { x: number; y: number };
+  currentTask: string | null;
+  mapId: string;
+  isOnline: boolean;
+}
+
+// 任务类型定义
+interface Task {
+  id: string;
+  name: string;
+  robotId: string | null;
+  status: 'pending' | 'executing' | 'paused' | 'completed' | 'cancelled' | 'error';
+  priority: string;
+  startPoint: string;
+  endPoint: string;
+  progress: number;
+  targetDevice?: string;
+}
+
+// 地图类型定义
+interface MapInfo {
+  id: string;
+  name: string;
+}
 
 // 楼层数据接口
 interface FloorData {
@@ -35,8 +85,133 @@ interface FloorData {
   robotCount: number;
 }
 
-// 3D视图模式
+// 视图模式类型
 type ViewMode = 'overview' | 'floor';
+
+// 模拟机器人数据
+const mockRobots: Robot[] = [
+  {
+    id: 'AGV001',
+    name: 'AGV-001',
+    type: 'AGV',
+    status: 'running',
+    battery: 85,
+    position: { x: 80, y: 120 },
+    currentTask: '运输任务-001',
+    mapId: 'map1',
+    isOnline: true,
+  },
+  {
+    id: 'MCR001',
+    name: 'MCR-001',
+    type: 'MCR',
+    status: 'running',
+    battery: 92,
+    position: { x: 720, y: 200 },
+    currentTask: '运输任务-002',
+    mapId: 'map1',
+    isOnline: true,
+  },
+  {
+    id: 'AMR001',
+    name: 'AMR-001',
+    type: 'AMR',
+    status: 'running',
+    battery: 45,
+    position: { x: 50, y: 100 },
+    currentTask: '巡检任务-001',
+    mapId: 'map2',
+    isOnline: true,
+  },
+  {
+    id: 'AGV002',
+    name: 'AGV-002',
+    type: 'AGV',
+    status: 'running',
+    battery: 78,
+    position: { x: 280, y: 260 },
+    currentTask: '运输任务-003',
+    mapId: 'map1',
+    isOnline: true,
+  },
+  {
+    id: 'MCR002',
+    name: 'MCR-002',
+    type: 'MCR',
+    status: 'running',
+    battery: 23,
+    position: { x: 300, y: 300 },
+    currentTask: '运输任务-004',
+    mapId: 'map2',
+    isOnline: true,
+  },
+  {
+    id: 'AMR002',
+    name: 'AMR-002',
+    type: 'AMR',
+    status: 'move_stopped',
+    battery: 67,
+    position: { x: 400, y: 400 },
+    currentTask: '巡检任务-002',
+    mapId: 'map3',
+    isOnline: true,
+  },
+];
+
+// 模拟任务数据
+const mockTasks: Task[] = [
+  {
+    id: 'TASK001',
+    name: '运输任务-001',
+    robotId: 'AGV001',
+    status: 'executing',
+    priority: 'high',
+    startPoint: '',
+    endPoint: '',
+    targetDevice: 'CNC-001',
+    progress: 65,
+  },
+  {
+    id: 'TASK002',
+    name: '运输任务-002',
+    robotId: 'AGV001',
+    status: 'error',
+    priority: 'medium',
+    startPoint: '',
+    endPoint: '',
+    targetDevice: 'CNC-002',
+    progress: 45,
+  },
+  {
+    id: 'TASK003',
+    name: '运输任务-003',
+    robotId: 'AMR002',
+    status: 'paused',
+    priority: 'low',
+    startPoint: '',
+    endPoint: '',
+    targetDevice: 'CNC-003',
+    progress: 30,
+  },
+  {
+    id: 'TASK004',
+    name: '运输任务-004',
+    robotId: 'MCR002',
+    status: 'error',
+    priority: 'high',
+    startPoint: '',
+    endPoint: '',
+    targetDevice: 'CNC-004',
+    progress: 45,
+  },
+];
+
+// 模拟地图数据
+const mockMaps: MapInfo[] = [
+  { id: 'map1', name: '一楼地图' },
+  { id: 'map2', name: '二楼地图' },
+  { id: 'map3', name: '三楼地图' },
+];
 
 const DigitalTwin: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -44,8 +219,16 @@ const DigitalTwin: React.FC = () => {
   const [selectedFloor, setSelectedFloor] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [floors, setFloors] = useState<FloorData[]>([]);
+  const [leftPanelVisible, setLeftPanelVisible] = useState(true);
+  const [rightPanelVisible, setRightPanelVisible] = useState(true);
+  
+  // 机器人和任务相关状态
+  const [robots] = useState<Robot[]>(mockRobots);
+  const [tasks] = useState<Task[]>(mockTasks);
+  const [selectedMap, setSelectedMap] = useState('map1');
+  const [selectedRobot, setSelectedRobot] = useState<string | null>(null);
 
-  // 模拟楼层数据（基于地图管理的数据）
+  // 模拟楼层数据
   useEffect(() => {
     const mockFloors: FloorData[] = [
       {
@@ -91,12 +274,13 @@ const DigitalTwin: React.FC = () => {
 
   // 切换全屏模式
   const toggleFullscreen = () => {
-    if (!isFullscreen) {
+    if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen?.();
+      setIsFullscreen(true);
     } else {
       document.exitFullscreen?.();
+      setIsFullscreen(false);
     }
-    setIsFullscreen(!isFullscreen);
   };
 
   // 切换到楼层视图
@@ -105,6 +289,185 @@ const DigitalTwin: React.FC = () => {
     setViewMode('floor');
     message.success(`已切换到${floors.find(f => f.id === floorId)?.name}视图`);
   };
+
+  // 工具函数
+  const getRobotTypeIcon = (type: string) => {
+    switch (type) {
+      case 'AGV': return <CarOutlined />;
+      case 'MCR': return <AndroidOutlined />;
+      case 'AMR': return <RobotOutlined />;
+      default: return <RobotOutlined />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'running': return 'green';
+      case 'idle': return 'blue';
+      case 'charging': return 'orange';
+      case 'error': return 'red';
+      case 'offline': return 'gray';
+      case 'move_stopped': return 'volcano';
+      default: return 'default';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'running': return '运行中';
+      case 'idle': return '空闲';
+      case 'charging': return '充电中';
+      case 'error': return '故障';
+      case 'offline': return '离线';
+      case 'move_stopped': return '移动停止';
+      default: return '未知';
+    }
+  };
+
+  const getStatusAvatarColor = (status: string) => {
+    switch (status) {
+      case 'running': return '#52c41a';
+      case 'idle': return '#1890ff';
+      case 'charging': return '#fa8c16';
+      case 'error': return '#ff4d4f';
+      case 'offline': return '#8c8c8c';
+      case 'move_stopped': return '#fa541c';
+      default: return '#d9d9d9';
+    }
+  };
+
+  const getOnlineStatusColor = (isOnline: boolean) => {
+    return isOnline ? 'green' : 'red';
+  };
+
+  const getOnlineStatusText = (isOnline: boolean) => {
+    return isOnline ? '在线' : '离线';
+  };
+
+  const getMapName = (mapId: string) => {
+    const map = mockMaps.find(m => m.id === mapId);
+    return map ? map.name : '未知地图';
+  };
+
+  const getTaskStatusColor = (status: string) => {
+    switch (status) {
+      case 'executing': return 'blue';
+      case 'pending': return 'orange';
+      case 'paused': return 'volcano';
+      case 'completed': return 'green';
+      case 'cancelled': return 'gray';
+      case 'error': return 'red';
+      default: return 'default';
+    }
+  };
+
+  const getTaskStatusText = (status: string) => {
+    switch (status) {
+      case 'executing': return '执行中';
+      case 'pending': return '待执行';
+      case 'paused': return '已暂停';
+      case 'completed': return '已完成';
+      case 'cancelled': return '已取消';
+      case 'error': return '错误';
+      default: return '未知';
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'red';
+      case 'medium': return 'orange';
+      case 'low': return 'blue';
+      default: return 'default';
+    }
+  };
+
+
+
+  const handleRobotClick = (robot: Robot) => {
+    setSelectedRobot(robot.id);
+    message.info(`选中机器人: ${robot.name}`);
+  };
+
+  const getTaskActions = (task: Task) => {
+    const actions = [];
+    
+    if (task.status === 'pending') {
+      actions.push(
+        <Button 
+          key="start" 
+          size="small" 
+          icon={<PlayCircleOutlined />}
+          style={{
+            backgroundColor: 'rgba(82, 196, 26, 0.15)',
+            color: 'rgba(82, 196, 26, 0.9)',
+            border: '1px solid rgba(82, 196, 26, 0.3)',
+            borderRadius: '4px'
+          }}
+        >
+          开始
+        </Button>
+      );
+    }
+    
+    if (task.status === 'executing') {
+      actions.push(
+        <Button 
+          key="pause" 
+          size="small" 
+          icon={<PauseCircleOutlined />}
+          style={{
+            backgroundColor: 'rgba(255, 193, 7, 0.15)',
+            color: 'rgba(255, 193, 7, 0.9)',
+            border: '1px solid rgba(255, 193, 7, 0.3)',
+            borderRadius: '4px'
+          }}
+        >
+          暂停
+        </Button>
+      );
+    }
+    
+    if (task.status === 'paused') {
+      actions.push(
+        <Button 
+          key="resume" 
+          size="small" 
+          icon={<PlayCircleOutlined />}
+          style={{
+            backgroundColor: 'rgba(24, 144, 255, 0.15)',
+            color: 'rgba(24, 144, 255, 0.9)',
+            border: '1px solid rgba(24, 144, 255, 0.3)',
+            borderRadius: '4px'
+          }}
+        >
+          继续
+        </Button>
+      );
+    }
+    
+    if (['pending', 'executing', 'paused'].includes(task.status)) {
+       actions.push(
+         <Button 
+           key="cancel" 
+           size="small" 
+           icon={<StopOutlined />}
+           style={{
+             backgroundColor: 'rgba(255, 77, 79, 0.15)',
+             color: 'rgba(255, 77, 79, 0.9)',
+             border: '1px solid rgba(255, 77, 79, 0.3)',
+             borderRadius: '4px'
+           }}
+         >
+           取消
+         </Button>
+       );
+     }
+    
+    return actions;
+  };
+
+
 
   // 返回全场景视图
   const handleBackToOverview = () => {
@@ -122,210 +485,491 @@ const DigitalTwin: React.FC = () => {
     }, 1000);
   };
 
-  // 获取当前楼层信息
-  const getCurrentFloor = () => {
-    return floors.find(f => f.id === selectedFloor);
+  // 新增面板控制函数
+  const toggleLeftPanel = () => setLeftPanelVisible(!leftPanelVisible);
+  const toggleRightPanel = () => setRightPanelVisible(!rightPanelVisible);
+  const toggleAllPanels = () => {
+    const nextState = !(leftPanelVisible && rightPanelVisible);
+    setLeftPanelVisible(nextState);
+    setRightPanelVisible(nextState);
   };
+
+  const allPanelsVisible = leftPanelVisible && rightPanelVisible;
 
   if (loading) {
     return (
-      <div style={{ 
-        background: 'transparent',
-        height: 'calc(100vh - 112px)',
+      <div style={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        height: 'calc(100vh - 112px)'
       }}>
-        <Spin size="large" tip="正在加载3D场景..." />
+        <Spin size="large" tip="正在加载3D数字孪生场景..." />
       </div>
     );
   }
 
   return (
-    <div style={{ background: 'transparent', height: 'calc(100vh - 112px)' }}>
-      {/* 控制面板 */}
-      <Card 
-        style={{ 
-          marginBottom: '16px',
-          background: '#ffffff',
-          borderRadius: '8px',
-          boxShadow: '0 1px 4px rgba(0,21,41,.08)'
-        }}
-        bodyStyle={{ padding: '12px 16px' }}
-      >
-        <Row justify="space-between" align="middle">
-          <Col>
-            <Space size="large">
-              <div>
-                <Text strong style={{ fontSize: '16px', color: '#1890ff' }}>
-                  数字孪生 3D 视图
-                </Text>
-                <div style={{ marginTop: '4px' }}>
-                  <Text type="secondary" style={{ fontSize: '12px' }}>
-                    {viewMode === 'overview' ? '全场景立体视图' : `当前楼层: ${getCurrentFloor()?.name}`}
-                  </Text>
-                </div>
-              </div>
-              
-              {viewMode === 'floor' && (
-                <Button 
-                  type="primary" 
-                  ghost 
-                  icon={<EyeOutlined />}
-                  onClick={handleBackToOverview}
-                >
-                  返回全场景
-                </Button>
-              )}
-            </Space>
-          </Col>
-          
-          <Col>
-            <Space>
-              <Select
-                placeholder="选择楼层"
-                style={{ width: 150 }}
-                value={selectedFloor}
-                onChange={(value: string) => handleFloorClick(value)}
-              >
-                {floors.map(floor => (
-                  <Option key={floor.id} value={floor.id}>
-                    {floor.name}
-                  </Option>
-                ))}
-              </Select>
-              
-              <Button 
-                icon={<ReloadOutlined />} 
-                onClick={handleRefresh}
-                title="刷新视图"
-              />
-              
-              <Button 
-                icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
-                onClick={toggleFullscreen}
-                title={isFullscreen ? '退出全屏' : '全屏显示'}
-              />
-            </Space>
-          </Col>
-        </Row>
-      </Card>
-
-      {/* 3D视图主体 */}
-      <Card 
-        style={{ 
-          height: 'calc(100% - 80px)',
-          background: '#ffffff',
-          borderRadius: '8px',
-          boxShadow: '0 1px 4px rgba(0,21,41,.08)'
-        }}
-        bodyStyle={{ 
-          padding: 0,
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column'
-        }}
-      >
-        {/* 3D场景容器 */}
-        <div 
-          style={{
-            flex: 1,
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: '8px',
-            overflow: 'hidden'
-          }}
-        >
-          {/* 模拟3D视图内容 */}
-          <div style={{ textAlign: 'center', color: 'white' }}>
-            <BuildOutlined style={{ fontSize: '120px', marginBottom: '24px', opacity: 0.8 }} />
-            <Title level={2} style={{ color: 'white', marginBottom: '16px' }}>
-              {viewMode === 'overview' ? '全场景 3D 视图' : `${getCurrentFloor()?.name} 3D 视图`}
-            </Title>
-            <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: '16px' }}>
-              {viewMode === 'overview' 
-                ? `共 ${floors.length} 个楼层 • ${floors.reduce((sum, f) => sum + f.deviceCount, 0)} 个设备 • ${floors.reduce((sum, f) => sum + f.robotCount, 0)} 个机器人`
-                : `${getCurrentFloor()?.deviceCount} 个设备 • ${getCurrentFloor()?.robotCount} 个机器人`
-              }
-            </Text>
-          </div>
-
-          {/* 楼层快速切换按钮（仅在全场景模式显示） */}
-          {viewMode === 'overview' && (
-            <div style={{
-              position: 'absolute',
-              right: '24px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px'
-            }}>
-              {floors.map(floor => (
-                <Button
-                  key={floor.id}
-                  type="primary"
-                  ghost
-                  style={{
-                    borderColor: 'rgba(255,255,255,0.6)',
-                    color: 'white',
-                    background: 'rgba(255,255,255,0.1)',
-                    backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    minWidth: '100px'
-                  }}
-                  onClick={() => handleFloorClick(floor.id)}
-                >
-                  {floor.name}
-                </Button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* 底部信息栏 */}
+    <div style={{ 
+      position: 'fixed',
+      top: '64px',
+      left: 0,
+      width: '100vw',
+      height: 'calc(100vh - 64px)',
+      background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 25%, #60a5fa 50%, #3b82f6 75%, #1e3a8a 100%)',
+      overflow: 'hidden',
+      zIndex: 1
+    }}>
+      {/* 左侧机器人列表面板 - 悬浮显示 */}
+      {leftPanelVisible && (
         <div style={{
-          padding: '12px 16px',
-          background: '#f8f9fa',
-          borderTop: '1px solid #e9ecef',
-          borderRadius: '0 0 8px 8px'
+          position: 'absolute',
+          top: '20px',
+          left: '20px',
+          width: '280px',
+          height: 'calc(100% - 40px)',
+          background: 'rgba(4, 3, 28, 0.01)',
+          backdropFilter: 'blur(20px)',
+          borderRadius: '12px',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          zIndex: 10,
+          overflow: 'hidden'
         }}>
-          <Row justify="space-between" align="middle">
-            <Col>
+          <div style={{
+            padding: '12px',
+            borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
+            background: 'rgba(4, 3, 28, 0.015)'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '8px'
+            }}>
               <Space>
-                <Text type="secondary" style={{ fontSize: '12px' }}>
-                  视图模式: {viewMode === 'overview' ? '全场景' : '单楼层'}
-                </Text>
-                <Text type="secondary" style={{ fontSize: '12px' }}>•</Text>
-                <Text type="secondary" style={{ fontSize: '12px' }}>
-                  实时更新: 已启用
-                </Text>
+                <RobotOutlined style={{ color: '#1890ff' }} />
+                <Text style={{ fontWeight: 'bold', color: '#e8f4fd' }}>机器人列表</Text>
               </Space>
-            </Col>
-            <Col>
-              <Text type="secondary" style={{ fontSize: '12px' }}>
-                最后更新: {new Date().toLocaleTimeString()}
-              </Text>
-            </Col>
-          </Row>
-        </div>
-      </Card>
+              <Button 
+                icon={<EyeInvisibleOutlined />} 
+                size="small" 
+                type="text"
+                onClick={toggleLeftPanel}
+                style={{
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  border: 'none',
+                  borderRadius: '4px'
+                }}
+              />
+            </div>
 
-      {/* 提示信息 */}
-      {viewMode === 'overview' && (
-        <Alert
-          message="提示"
-          description="点击右侧楼层按钮或使用顶部下拉菜单可以切换到具体楼层视图。在楼层视图中可以查看该楼层的详细3D模型和设备分布。"
-          type="info"
-          showIcon
-          style={{ 
-            marginTop: '16px',
-            background: '#f6ffed',
-            border: '1px solid #b7eb8f'
+          </div>
+          <div style={{ 
+            padding: '12px',
+            height: 'calc(100% - 57px)',
+            overflow: 'auto'
+          }}>
+            <List
+              dataSource={robots.filter(robot => robot.mapId === selectedMap)}
+              renderItem={(robot: Robot) => (
+                <List.Item
+                  style={{
+                    padding: '12px',
+                    cursor: 'pointer',
+                    backgroundColor: selectedRobot === robot.id ? 'rgba(24, 144, 255, 0.1)' : 'transparent',
+                    border: selectedRobot === robot.id ? '1px solid #1890ff' : 'none',
+                    borderTop: selectedRobot === robot.id ? '1px solid #1890ff' : 'none',
+                    borderLeft: selectedRobot === robot.id ? '1px solid #1890ff' : 'none',
+                    borderRight: selectedRobot === robot.id ? '1px solid #1890ff' : 'none',
+                    borderBottom: selectedRobot === robot.id ? '1px solid #1890ff' : '1px solid rgba(0, 0, 0, 0.1)',
+                    borderRadius: '8px',
+                    marginBottom: '8px',
+                    opacity: robot.mapId === selectedMap ? 1 : 0.7,
+                  }}
+                  onClick={() => handleRobotClick(robot)}
+                >
+                  <div style={{ width: '100%' }}>
+                    {/* 机器人名称和图标行 - 水平对齐 */}
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      marginBottom: '8px',
+                      gap: '8px'
+                    }}>
+                      <Text strong style={{ fontSize: '14px', flex: 1, color: '#e8f4fd' }}>{robot.name}</Text>
+                      <Avatar
+                        icon={getRobotTypeIcon(robot.type)}
+                        size={20}
+                        style={{
+                          backgroundColor: getStatusAvatarColor(robot.status),
+                          fontSize: '12px'
+                        }}
+                      />
+                    </div>
+                    
+                    {/* 地图信息 */}
+                    <div style={{ marginBottom: '4px' }}>
+                      <Text style={{ fontSize: '12px', color: '#b8d4f0' }}>
+                        {getMapName(robot.mapId)}
+                      </Text>
+                    </div>
+                    
+                    {/* 状态和在线状态行 */}
+                    <div style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      marginBottom: '4px',
+                      gap: '8px',
+                      flexWrap: 'wrap'
+                    }}>
+                      {robot.status === 'move_stopped' ? (
+                          <Tag 
+                           size="small"
+                           style={{
+                             backgroundColor: 'rgba(255, 193, 7, 0.15)',
+                             color: 'rgba(255, 193, 7, 0.9)',
+                             border: '1px solid rgba(255, 193, 7, 0.3)',
+                             borderRadius: '4px'
+                           }}
+                         >
+                           停止
+                         </Tag>
+                      ) : (
+                        <Tag 
+                          size="small"
+                          style={{
+                            backgroundColor: robot.status === 'running' 
+                              ? 'rgba(82, 196, 26, 0.15)' 
+                              : robot.status === 'idle' 
+                              ? 'rgba(24, 144, 255, 0.15)' 
+                              : 'rgba(255, 77, 79, 0.15)',
+                            color: robot.status === 'running' 
+                              ? 'rgba(82, 196, 26, 0.9)' 
+                              : robot.status === 'idle' 
+                              ? 'rgba(24, 144, 255, 0.9)' 
+                              : 'rgba(255, 77, 79, 0.9)',
+                            border: robot.status === 'running' 
+                              ? '1px solid rgba(82, 196, 26, 0.3)' 
+                              : robot.status === 'idle' 
+                              ? '1px solid rgba(24, 144, 255, 0.3)' 
+                              : '1px solid rgba(255, 77, 79, 0.3)',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          {getStatusText(robot.status)}
+                        </Tag>
+                      )}
+                      <Tag 
+                        size="small"
+                        style={{
+                          backgroundColor: robot.isOnline 
+                            ? 'rgba(82, 196, 26, 0.15)' 
+                            : 'rgba(255, 77, 79, 0.15)',
+                          color: robot.isOnline 
+                            ? 'rgba(82, 196, 26, 0.9)' 
+                            : 'rgba(255, 77, 79, 0.9)',
+                          border: robot.isOnline 
+                            ? '1px solid rgba(82, 196, 26, 0.3)' 
+                            : '1px solid rgba(255, 77, 79, 0.3)',
+                          borderRadius: '4px'
+                        }}
+                      >
+                        {getOnlineStatusText(robot.isOnline)}
+                      </Tag>
+                    </div>
+                    
+                    {/* 电量信息独占一行，左对齐 */}
+                    <div style={{ marginBottom: '4px' }}>
+                      <Text style={{ fontSize: '12px', color: '#595959' }}>电量: {robot.battery}%</Text>
+                    </div>
+                    
+                    {/* 当前任务 */}
+                    {robot.currentTask && (
+                      <Text style={{ fontSize: '11px', color: '#595959' }}>
+                        任务: {robot.currentTask}
+                      </Text>
+                    )}
+                  </div>
+                </List.Item>
+              )}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 中间内容区 */}
+      <div style={{ 
+        position: 'absolute',
+        top: '0',
+        left: '0',
+        right: '0',
+        bottom: '0',
+        overflow: 'hidden'
+      }}>
+        <div style={{ width: '100%', height: '100%' }}>
+          <ThreeScene />
+        </div>
+
+        {/* 中间悬浮控制栏 */}
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          left: leftPanelVisible && rightPanelVisible ? 'calc(240px + (100vw - 480px) / 2)' :
+                leftPanelVisible ? 'calc(240px + (100vw - 240px) / 2)' :
+                rightPanelVisible ? 'calc((100vw - 240px) / 2)' : '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(4, 3, 28, 0.2)',
+          borderRadius: '12px',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          zIndex: 10,
+          display: 'flex',
+          alignItems: 'center',
+          padding: '8px 16px'
+        }}>
+          <Space>
+            <Select
+              value={selectedMap}
+              onChange={setSelectedMap}
+              style={{ 
+                width: 120,
+                backgroundColor: 'rgba(4, 3, 28, 0.2)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '4px',
+                color: '#e8f4fd'
+              }}
+              size="small"
+              placeholder="选择地图"
+              dropdownStyle={{
+                backgroundColor: 'rgba(4, 3, 28, 0.95)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255, 255, 255, 0.15)',
+                borderRadius: '8px'
+              }}
+              popupClassName="custom-select-dropdown"
+            >
+              {mockMaps.map(map => (
+                <Option key={map.id} value={map.id}>
+                  {map.name}
+                </Option>
+              ))}
+            </Select>
+            <Button 
+              icon={<ReloadOutlined />} 
+              size="small"
+              type="text"
+              style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: 'none',
+                borderRadius: '4px'
+              }}
+            >
+              <span style={{ color: '#e8f4fd' }}>刷新</span>
+            </Button>
+            <Button 
+              icon={<EyeOutlined />} 
+              size="small"
+              type="text"
+              onClick={handleBackToOverview}
+              style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: 'none',
+                borderRadius: '4px'
+              }}
+            >
+              <span style={{ color: '#e8f4fd' }}>重置视图</span>
+            </Button>
+            <Button 
+              icon={allPanelsVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+              size="small"
+              type="text"
+              onClick={toggleAllPanels}
+              style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: 'none',
+                borderRadius: '4px'
+              }}
+            >
+              <span style={{ color: '#e8f4fd' }}>{allPanelsVisible ? '隐藏面板' : '显示面板'}</span>
+            </Button>
+          </Space>
+        </div>
+      </div>
+
+      {/* 右侧运单任务面板 - 悬浮显示 */}
+      {rightPanelVisible && (
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          right: '20px',
+          width: '280px',
+          height: 'calc(100% - 40px)',
+          background: 'rgba(4, 3, 28, 0.01)',
+          backdropFilter: 'blur(20px)',
+          borderRadius: '12px',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          zIndex: 10,
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            padding: '12px',
+            borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
+            background: 'rgba(4, 3, 28, 0.01)'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '8px'
+            }}>
+              <Space>
+                <ScheduleOutlined style={{ color: '#1890ff' }} />
+                <Text style={{ fontWeight: 'bold', color: '#e8f4fd' }}>运单任务</Text>
+              </Space>
+              <Button 
+                icon={<EyeInvisibleOutlined />} 
+                size="small" 
+                type="text"
+                onClick={toggleRightPanel}
+                style={{
+                  color: 'rgba(255, 255, 255, 0.7)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  border: 'none',
+                  borderRadius: '4px'
+                }}
+              />
+            </div>
+
+          </div>
+          <div style={{ 
+            padding: '12px',
+            height: 'calc(100% - 57px)',
+            overflow: 'auto'
+          }}>
+            <List
+              dataSource={tasks}
+              renderItem={(task: Task) => (
+                <List.Item 
+                  style={{ 
+                    padding: '12px',
+                    borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
+                    marginBottom: '8px'
+                  }}
+                >
+                  <List.Item.Meta
+                    title={
+                      <Space>
+                        <Text strong style={{ color: '#e8f4fd' }}>{task.name}</Text>
+                        <Tag 
+                          style={{
+                            backgroundColor: task.priority === 'high' 
+                              ? 'rgba(255, 77, 79, 0.15)' 
+                              : task.priority === 'medium' 
+                              ? 'rgba(255, 193, 7, 0.15)' 
+                              : 'rgba(82, 196, 26, 0.15)',
+                            color: task.priority === 'high' 
+                              ? 'rgba(255, 77, 79, 0.9)' 
+                              : task.priority === 'medium' 
+                              ? 'rgba(255, 193, 7, 0.9)' 
+                              : 'rgba(82, 196, 26, 0.9)',
+                            border: task.priority === 'high' 
+                              ? '1px solid rgba(255, 77, 79, 0.3)' 
+                              : task.priority === 'medium' 
+                              ? '1px solid rgba(255, 193, 7, 0.3)' 
+                              : '1px solid rgba(82, 196, 26, 0.3)',
+                            borderRadius: '4px'
+                          }}
+                        >
+                          {task.priority === 'high' ? '高' : task.priority === 'medium' ? '中' : '低'}
+                        </Tag>
+                      </Space>
+                    }
+                    description={
+                      <div>
+                        <div style={{ marginBottom: '6px' }}>
+                          <Tag 
+                            style={{
+                              backgroundColor: 'rgba(24, 144, 255, 0.15)',
+                              color: 'rgba(24, 144, 255, 0.9)',
+                              border: '1px solid rgba(24, 144, 255, 0.3)',
+                              borderRadius: '4px'
+                            }}
+                          >
+                            {getTaskStatusText(task.status)}
+                          </Tag>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#b8d4f0' }}>
+                          {task.targetDevice && (
+                            <div style={{ marginBottom: '2px' }}>目标设备: {task.targetDevice}</div>
+                          )}
+                          {task.robotId && (
+                            <div style={{ marginBottom: '2px' }}>执行机器人: {robots.find(r => r.id === task.robotId)?.name}</div>
+                          )}
+                          {task.status === 'executing' && (
+                            <div style={{ marginBottom: '6px' }}>进度: {Math.round(task.progress)}%</div>
+                          )}
+                          {getTaskActions(task).length > 0 && (
+                            <div style={{ marginTop: '8px' }}>
+                              <Space size={4}>
+                                {getTaskActions(task)}
+                              </Space>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 左侧面板切换按钮（当面板隐藏时显示） */}
+      {!leftPanelVisible && (
+        <Button
+          icon={<RobotOutlined />}
+          style={{
+            position: 'absolute',
+            top: '20px',
+            left: '10px',
+            zIndex: 5,
+            background: 'rgba(4, 3, 28, 0.2)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(20px)',
+            color: '#e8f4fd',
+            borderRadius: '8px'
           }}
+          onClick={toggleLeftPanel}
+        />
+      )}
+
+      {/* 右侧面板切换按钮（当面板隐藏时显示） */}
+      {!rightPanelVisible && (
+        <Button
+          icon={<ScheduleOutlined />}
+          style={{
+            position: 'absolute',
+            top: '20px',
+            right: '10px',
+            zIndex: 5,
+            background: 'rgba(4, 3, 28, 0.2)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+            backdropFilter: 'blur(20px)',
+            color: '#e8f4fd',
+            borderRadius: '8px'
+          }}
+          onClick={toggleRightPanel}
         />
       )}
     </div>

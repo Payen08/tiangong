@@ -48,6 +48,64 @@ body {
 }
 
 /* 响应式分页器容器 */
+
+/* 自定义Select组件深色主题样式 */
+.custom-select-dropdown .ant-select-item {
+  color: #e8f4fd !important;
+}
+
+.custom-select-dropdown .ant-select-item-option-selected {
+  background-color: rgba(24, 144, 255, 0.2) !important;
+  color: #e8f4fd !important;
+}
+
+.custom-select-dropdown .ant-select-item-option:hover {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #e8f4fd !important;
+}
+
+/* Select输入框样式 */
+.ant-select-selector {
+  color: #e8f4fd !important;
+  background-color: rgba(4, 3, 28, 0.2) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 8px !important;
+}
+
+.ant-select-selector:hover {
+  border-color: rgba(24, 144, 255, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1) !important;
+}
+
+.ant-select-selector:focus {
+  border-color: #1890ff !important;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
+}
+
+.ant-select-selection-item {
+  color: #e8f4fd !important;
+}
+
+.ant-select-selection-search-input {
+  color: #e8f4fd !important;
+}
+
+/* 深色主题按钮样式 */
+.ant-btn[style*="rgba(4, 3, 28, 0.2)"] {
+  transition: all 0.3s ease !important;
+}
+
+.ant-btn[style*="rgba(4, 3, 28, 0.2)"]:hover {
+  background: rgba(4, 3, 28, 0.3) !important;
+  border-color: rgba(24, 144, 255, 0.5) !important;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.1) !important;
+}
+
+.ant-btn[style*="rgba(4, 3, 28, 0.2)"]:focus {
+  background: rgba(4, 3, 28, 0.3) !important;
+  border-color: #1890ff !important;
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
+}
 @media (max-width: 768px) {
   .mobile-pagination {
     flex-wrap: wrap;

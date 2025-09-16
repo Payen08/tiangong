@@ -327,6 +327,38 @@ const Layout: React.FC = () => {
     );
   }
 
+  // 数字孪生模式 - 移除左侧菜单栏和面包屑，保留顶部Header
+  if (activeTab === 'digital-twin' && location.pathname === '/digital-twin') {
+    return (
+      <AntLayout className="h-screen">
+        <Header className="bg-white px-4 flex items-center justify-between border-b border-gray-200">
+          <div className="flex items-center gap-4">
+            <h1 className="font-bold text-lg text-blue-600">管理系统</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <Tabs
+              activeKey={activeTab}
+              onChange={handleTabChange}
+              items={tabItems}
+              size="small"
+              tabBarStyle={{
+                marginBottom: 0,
+                border: 'none'
+              }}
+            />
+            <span className="text-gray-600">欢迎，{user?.name}</span>
+            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+              <Avatar icon={<UserOutlined />} className="cursor-pointer" />
+            </Dropdown>
+          </div>
+        </Header>
+        <Content className="bg-gray-50 overflow-hidden" style={{ height: 'calc(100vh - 64px)' }}>
+          <Outlet />
+        </Content>
+      </AntLayout>
+    );
+  }
+
   return (
     <AntLayout className="h-screen">
       <Sider
