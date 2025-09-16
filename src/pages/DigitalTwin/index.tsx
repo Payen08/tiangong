@@ -34,8 +34,11 @@ import {
   PauseCircleOutlined,
   CloseCircleOutlined,
   StopOutlined,
+  HomeOutlined,
+  VerticalAlignTopOutlined,
+  BorderOutlined,
 } from '@ant-design/icons';
-import ThreeScene from '@/components/ThreeScene';
+import ThreeScene, { ThreeSceneRef } from '@/components/ThreeScene';
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -315,6 +318,9 @@ const DigitalTwin: React.FC = () => {
   const [tasks] = useState<Task[]>(mockTasks);
   const [selectedMap, setSelectedMap] = useState('map1');
   const [selectedRobot, setSelectedRobot] = useState<string | null>(null);
+  
+  // ThreeScene组件引用
+  const threeSceneRef = React.useRef<ThreeSceneRef>(null);
 
   // 模拟楼层数据
   useEffect(() => {
@@ -343,21 +349,45 @@ const DigitalTwin: React.FC = () => {
       },
       {
         id: 'floor_3',
-        name: '地下停车场',
-        level: -1,
+        name: '三楼生产区',
+        level: 3,
         mapId: '3',
-        mapName: '停车场平面图',
+        mapName: '三楼平面图',
         thumbnail: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
         status: 'active',
-        deviceCount: 8,
-        robotCount: 1,
+        deviceCount: 18,
+        robotCount: 4,
       },
     ];
     
-    setTimeout(() => {
-      setFloors(mockFloors);
+    setFloors(mockFloors);
+    
+    // 模拟加载延迟
+    const timer = setTimeout(() => {
       setLoading(false);
     }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, []);
+
+  // 监听全屏状态变化
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!document.fullscreenElement;
+      setIsFullscreen(isCurrentlyFullscreen);
+      
+      // 控制导航栏显示
+      const header = document.querySelector('.ant-layout-header');
+      if (header) {
+        (header as HTMLElement).style.display = isCurrentlyFullscreen ? 'none' : 'flex';
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
   }, []);
 
   // 切换全屏模式
@@ -365,9 +395,19 @@ const DigitalTwin: React.FC = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen?.();
       setIsFullscreen(true);
+      // 隐藏导航栏
+      const header = document.querySelector('.ant-layout-header');
+      if (header) {
+        (header as HTMLElement).style.display = 'none';
+      }
     } else {
       document.exitFullscreen?.();
       setIsFullscreen(false);
+      // 显示导航栏
+      const header = document.querySelector('.ant-layout-header');
+      if (header) {
+        (header as HTMLElement).style.display = 'flex';
+      }
     }
   };
 
@@ -557,11 +597,14 @@ const DigitalTwin: React.FC = () => {
 
 
 
-  // 返回全场景视图
+  // 返回全场景视图（重置视图）
   const handleBackToOverview = () => {
     setViewMode('overview');
     setSelectedFloor(null);
-    message.info('已切换到全场景视图');
+    if (threeSceneRef.current && threeSceneRef.current.resetView) {
+      threeSceneRef.current.resetView();
+    }
+    message.success('已重置到初始3D视图视角');
   };
 
   // 刷新3D视图
@@ -580,6 +623,28 @@ const DigitalTwin: React.FC = () => {
     const newVisible = !(leftPanelVisible && rightPanelVisible);
     setLeftPanelVisible(newVisible);
     setRightPanelVisible(newVisible);
+  };
+  
+  // 视图控制函数
+  const handleResetView = () => {
+    if (threeSceneRef.current && threeSceneRef.current.resetView) {
+      threeSceneRef.current.resetView();
+      message.success('已重置到初始3D视角');
+    }
+  };
+  
+  const handleTopView = () => {
+    if (threeSceneRef.current && threeSceneRef.current.setTopView) {
+      threeSceneRef.current.setTopView();
+      message.success('已切换到顶视图');
+    }
+  };
+  
+  const handleFrontView = () => {
+    if (threeSceneRef.current && threeSceneRef.current.setFrontView) {
+      threeSceneRef.current.setFrontView();
+      message.success('已切换到正视图');
+    }
   };
 
   const allPanelsVisible = leftPanelVisible && rightPanelVisible;
@@ -600,10 +665,10 @@ const DigitalTwin: React.FC = () => {
   return (
     <div style={{ 
       position: 'fixed',
-      top: '64px',
+      top: isFullscreen ? '0' : '64px',
       left: 0,
       width: '100vw',
-      height: 'calc(100vh - 64px)',
+      height: isFullscreen ? '100vh' : 'calc(100vh - 64px)',
       background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 25%, #60a5fa 50%, #3b82f6 75%, #1e3a8a 100%)',
       overflow: 'hidden',
       zIndex: 1
@@ -835,7 +900,7 @@ const DigitalTwin: React.FC = () => {
         overflow: 'hidden'
       }}>
         <div style={{ width: '100%', height: '100%' }}>
-          <ThreeScene />
+          <ThreeScene ref={threeSceneRef} />
         </div>
 
         {/* 中间悬浮控制栏 */}
@@ -904,34 +969,7 @@ const DigitalTwin: React.FC = () => {
             >
               <span style={{ color: '#e8f4fd' }}>重置视图</span>
             </Button>
-            <Button 
-              icon={leftPanelVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-              size="small"
-              type="text"
-              onClick={() => setLeftPanelVisible(!leftPanelVisible)}
-              style={{
-                color: 'rgba(255, 255, 255, 0.7)',
-                backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                border: 'none',
-                borderRadius: '4px'
-              }}
-            >
-              <span style={{ color: '#e8f4fd' }}>{leftPanelVisible ? '隐藏左侧' : '显示左侧'}</span>
-            </Button>
-            <Button 
-              icon={rightPanelVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-              size="small"
-              type="text"
-              onClick={() => setRightPanelVisible(!rightPanelVisible)}
-              style={{
-                color: 'rgba(255, 255, 255, 0.7)',
-                backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                border: 'none',
-                borderRadius: '4px'
-              }}
-            >
-              <span style={{ color: '#e8f4fd' }}>{rightPanelVisible ? '隐藏右侧' : '显示右侧'}</span>
-            </Button>
+
             <Button 
               icon={allPanelsVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
               size="small"
@@ -945,6 +983,54 @@ const DigitalTwin: React.FC = () => {
               }}
             >
               <span style={{ color: '#e8f4fd' }}>{allPanelsVisible ? '隐藏全部' : '显示全部'}</span>
+            </Button>
+            
+            {/* 全屏按钮 - 紧邻隐藏全部按钮 */}
+            <Button
+              icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+              size="small"
+              type="text"
+              onClick={toggleFullscreen}
+              style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: 'none',
+                borderRadius: '4px'
+              }}
+            >
+              <span style={{ color: '#e8f4fd' }}>{isFullscreen ? '退出全屏' : '全屏'}</span>
+            </Button>
+            
+            <Button
+              icon={<VerticalAlignTopOutlined />}
+              size="small"
+              type="text"
+              onClick={handleTopView}
+              style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: 'none',
+                borderRadius: '4px'
+              }}
+              title="顶视图"
+            >
+              <span style={{ color: '#e8f4fd' }}>顶视图</span>
+            </Button>
+            
+            <Button
+              icon={<BorderOutlined />}
+              size="small"
+              type="text"
+              onClick={handleFrontView}
+              style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: 'none',
+                borderRadius: '4px'
+              }}
+              title="正视图"
+            >
+              <span style={{ color: '#e8f4fd' }}>正视图</span>
             </Button>
           </Space>
         </div>
@@ -1128,6 +1214,8 @@ const DigitalTwin: React.FC = () => {
           onClick={toggleRightPanel}
         />
       )}
+
+
     </div>
   );
 };

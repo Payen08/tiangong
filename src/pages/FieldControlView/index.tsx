@@ -13,6 +13,8 @@ import {
   PlayCircleOutlined,
   CloseCircleOutlined,
   ToolOutlined,
+  FullscreenOutlined,
+  FullscreenExitOutlined,
 } from '@ant-design/icons';
 import PropertyPanel from './PropertyPanel';
 
@@ -230,6 +232,7 @@ const FieldControlView: React.FC = () => {
   const [propertyPanelVisible, setPropertyPanelVisible] = useState(false);
   const [propertyElementType, setPropertyElementType] = useState<'point' | 'line' | 'area' | null>(null);
   const [propertyElementData, setPropertyElementData] = useState<any>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
 
   
@@ -245,6 +248,27 @@ const FieldControlView: React.FC = () => {
   const handleRobotClick = (robot: Robot) => {
     setSelectedRobot(robot.id);
     centerOnRobot(robot.id);
+  };
+
+  // 切换全屏模式
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.();
+      setIsFullscreen(true);
+      // 隐藏导航栏
+      const header = document.querySelector('.ant-layout-header');
+      if (header) {
+        (header as HTMLElement).style.display = 'none';
+      }
+    } else {
+      document.exitFullscreen?.();
+      setIsFullscreen(false);
+      // 显示导航栏
+      const header = document.querySelector('.ant-layout-header');
+      if (header) {
+        (header as HTMLElement).style.display = 'flex';
+      }
+    }
   };
   
   // 居中显示选中的机器人
@@ -273,6 +297,26 @@ const FieldControlView: React.FC = () => {
     // 处理属性保存逻辑
     setPropertyPanelVisible(false);
   };
+  
+  // 监听全屏状态变化
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!document.fullscreenElement;
+      setIsFullscreen(isCurrentlyFullscreen);
+      
+      // 根据全屏状态控制导航栏显示
+      const header = document.querySelector('.ant-layout-header');
+      if (header) {
+        (header as HTMLElement).style.display = isCurrentlyFullscreen ? 'none' : 'flex';
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
   
   const handlePropertyPanelClose = () => {
     setPropertyPanelVisible(false);
@@ -2777,6 +2821,16 @@ const FieldControlView: React.FC = () => {
           >
             {allPanelsVisible ? '隐藏面板' : '显示面板'}
           </Button>
+          
+          {/* 全屏按钮 - 紧邻隐藏面板按钮 */}
+          <Button
+            icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+            size="small"
+            type="text"
+            onClick={toggleFullscreen}
+          >
+            {isFullscreen ? '退出全屏' : '全屏'}
+          </Button>
         </Space>
       </div>
 
@@ -3062,6 +3116,8 @@ const FieldControlView: React.FC = () => {
           onClick={toggleRightPanel}
         />
       )}
+
+
       
       {/* 属性面板 */}
       <PropertyPanel
