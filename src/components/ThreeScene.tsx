@@ -116,6 +116,147 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>((props, ref) => {
       return cube;
     };
 
+    // CRM Mobile Robot representation - 立体圆角矩形
+    const createCRMRobot = (position: THREE.Vector3, floorGroup: THREE.Group, direction: number = 0) => {
+      // 创建机器人主体组
+      const robotGroup = new THREE.Group();
+      robotGroup.position.copy(position);
+      robotGroup.rotation.y = direction; // 设置机器人朝向
+      
+      // 创建圆角矩形几何体（使用BoxGeometry作为基础）
+      const bodyGeometry = new THREE.BoxGeometry(3, 1.5, 5); // 宽3，高1.5，长5
+      const bodyMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x00cc88, // 青绿色，与其他设备区分
+        metalness: 0.2,
+        roughness: 0.3,
+        transparent: true,
+        opacity: 0.9
+      });
+      const robotBody = new THREE.Mesh(bodyGeometry, bodyMaterial);
+      robotBody.position.set(0, 0.75, 0); // 机器人主体高度
+      robotBody.castShadow = true;
+      robotBody.receiveShadow = true;
+      robotGroup.add(robotBody);
+
+      // 添加机器人主体的描边效果
+      const bodyEdgesGeometry = new THREE.EdgesGeometry(bodyGeometry);
+      const bodyEdgesMaterial = new THREE.LineBasicMaterial({ 
+        color: 0x00ff99, // 亮青绿色描边
+        linewidth: 2
+      });
+      const bodyEdges = new THREE.LineSegments(bodyEdgesGeometry, bodyEdgesMaterial);
+      bodyEdges.position.set(0, 0.75, 0);
+      robotGroup.add(bodyEdges);
+
+      // 创建车头方向指示器（简洁的前端面板）
+      const frontPanelGeometry = new THREE.BoxGeometry(2.8, 1.3, 0.2); // 稍小的前面板
+      const frontPanelMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x0099ff, // 蓝色前面板，表示车头方向
+        metalness: 0.4,
+        roughness: 0.2,
+        transparent: true,
+        opacity: 0.95
+      });
+      const frontPanel = new THREE.Mesh(frontPanelGeometry, frontPanelMaterial);
+      frontPanel.position.set(0, 0.75, 2.4); // 位于机器人前方
+      frontPanel.castShadow = true;
+      frontPanel.receiveShadow = true;
+      robotGroup.add(frontPanel);
+
+      // 添加前面板的发光边框效果
+      const frontPanelEdgesGeometry = new THREE.EdgesGeometry(frontPanelGeometry);
+      const frontPanelEdgesMaterial = new THREE.LineBasicMaterial({ 
+        color: 0x00ddff, // 亮蓝色边框
+        linewidth: 3
+      });
+      const frontPanelEdges = new THREE.LineSegments(frontPanelEdgesGeometry, frontPanelEdgesMaterial);
+      frontPanelEdges.position.set(0, 0.75, 2.4);
+      robotGroup.add(frontPanelEdges);
+
+      // 添加车轮（4个小圆柱体）
+      const wheelGeometry = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16);
+      const wheelMaterial = new THREE.MeshStandardMaterial({ 
+        color: 0x333333, // 深灰色车轮
+        metalness: 0.8,
+        roughness: 0.2
+      });
+      
+      // 四个车轮位置
+      const wheelPositions = [
+        { x: -1.2, z: 1.8 },  // 左前轮
+        { x: 1.2, z: 1.8 },   // 右前轮
+        { x: -1.2, z: -1.8 }, // 左后轮
+        { x: 1.2, z: -1.8 }   // 右后轮
+      ];
+      
+      wheelPositions.forEach(pos => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        wheel.position.set(pos.x, 0.3, pos.z);
+        wheel.rotation.z = Math.PI / 2; // 旋转车轮使其水平
+        wheel.castShadow = true;
+        wheel.receiveShadow = true;
+        robotGroup.add(wheel);
+      });
+
+      // 添加CRM标识标签
+      const createCRMLabel = () => {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d')!;
+        canvas.width = 120;
+        canvas.height = 60;
+        
+        // 清除画布
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 绘制背景
+        context.fillStyle = 'rgba(0, 204, 136, 0.9)'; // 与机器人主体颜色一致
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // 绘制边框
+        context.strokeStyle = '#00ff99';
+        context.lineWidth = 2;
+        context.strokeRect(0, 0, canvas.width, canvas.height);
+        
+        // 绘制文字
+        context.fillStyle = '#ffffff';
+        context.font = 'bold 16px Arial';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        context.fillText('CRM', canvas.width / 2, canvas.height / 2);
+        
+        // 创建纹理和Sprite
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+        const spriteMaterial = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          alphaTest: 0.01,
+          depthTest: false,
+          depthWrite: false
+        });
+        
+        const labelSprite = new THREE.Sprite(spriteMaterial);
+        labelSprite.position.set(0, 3, 0); // 在机器人上方
+        labelSprite.scale.set(2, 1, 1);
+        labelSprite.name = 'crmLabel';
+        labelSprite.renderOrder = 1000;
+        
+        return labelSprite;
+      };
+
+      // 添加标签到机器人组
+      const label = createCRMLabel();
+      robotGroup.add(label);
+
+      // 设置机器人组名称
+      robotGroup.name = 'crmRobot';
+      
+      // 将机器人组添加到楼层组
+      floorGroup.add(robotGroup);
+      
+      return robotGroup;
+    };
+
     // Elevator representation - 电梯长方体
     const createElevator = (position: THREE.Vector3, height: number, floorGroup: THREE.Group) => {
       const geometry = new THREE.BoxGeometry(6, height, 4); // 长方体：宽6，高度可变，深4
@@ -190,6 +331,383 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>((props, ref) => {
 
     // 创建一楼电梯 - 位于场景右侧，Y轴向上移动7.5个单位
      createElevator(new THREE.Vector3(60, floor1Y + 7.5, 0), 20, floor1Group);
+
+    // 创建一楼CRM移动机器人 - 停靠在电梯停靠点，车头朝向电梯
+    const crmRobot = createCRMRobot(
+      new THREE.Vector3(45, 0, 10), // 电梯停靠点位置，Y=0贴地面
+      floor1Group,
+      Math.PI / 2 // 车头朝向电梯方向（向右转90度）
+    );
+
+    // CRM机器人移动系统
+    interface PathSegment {
+      id: string;
+      startPoint: THREE.Vector3;
+      endPoint: THREE.Vector3;
+      line: THREE.Line;
+      isOccupied: boolean;
+      originalColor: number;
+    }
+
+    interface StationNode {
+      id: string;
+      position: THREE.Vector3;
+      label: string;
+      connections: string[]; // 连接的路径段ID
+    }
+
+    // 路径段数据存储
+    const pathSegments: PathSegment[] = [];
+    const stationNodes: StationNode[] = [];
+    let pathSegmentIdCounter = 0;
+
+    // 创建路径段的辅助函数
+    const createPathSegment = (startPoint: THREE.Vector3, endPoint: THREE.Vector3, line: THREE.Line): PathSegment => {
+      const segment: PathSegment = {
+        id: `path_${pathSegmentIdCounter++}`,
+        startPoint: startPoint.clone(),
+        endPoint: endPoint.clone(),
+        line: line,
+        isOccupied: false,
+        originalColor: 0x00ff88 // 绿色
+      };
+      pathSegments.push(segment);
+      return segment;
+    };
+
+    // 创建站点节点的辅助函数
+    const createStationNode = (id: string, position: THREE.Vector3, label: string): StationNode => {
+      const node: StationNode = {
+        id,
+        position: position.clone(),
+        label,
+        connections: []
+      };
+      stationNodes.push(node);
+      return node;
+    };
+
+    // 初始化站点和路径数据
+    const initializePathNetwork = () => {
+      const equipmentCols = [-20, -12, -4, 4, 12, 20];
+      const equipmentRows = [25, 0, -25, -50];
+      const rowLabels = ['1-1', '1-2', '1-3', '1-4'];
+      const nodeY = 0.1;
+
+      // 创建所有站点节点
+      equipmentRows.forEach((z, rowIndex) => {
+        equipmentCols.forEach((x, colIndex) => {
+          const rowLabel = rowLabels[rowIndex];
+          const colLabel = (colIndex + 1).toString();
+          
+          // 前侧站点
+          if (z !== 25 && z !== -25) {
+            const frontId = `${rowLabel}-${colLabel}F`;
+            createStationNode(frontId, new THREE.Vector3(x, nodeY, z + 5), frontId);
+          }
+          
+          // 后侧站点
+          if (z !== 0 && z !== -50) {
+            const backId = `${rowLabel}-${colLabel}B`;
+            createStationNode(backId, new THREE.Vector3(x, nodeY, z - 5), backId);
+          }
+        });
+      });
+
+      // 创建特殊站点
+      createStationNode('elevator_station', new THREE.Vector3(45, nodeY, 0), '电梯站点');
+      createStationNode('elevator_stop', new THREE.Vector3(45, nodeY, 10), '电梯停靠点');
+      createStationNode('elevator_bottom', new THREE.Vector3(45, nodeY, -10), '电梯下方停靠点');
+      createStationNode('transfer_1', new THREE.Vector3(20, nodeY, 12.5), '中转站点');
+      createStationNode('transfer_2', new THREE.Vector3(20, nodeY, -37.5), '中转站点2');
+      createStationNode('elevator_inside', new THREE.Vector3(60, nodeY, 0), '电梯内站点');
+    };
+
+    // 路径占用管理
+    const occupyPath = (pathId: string) => {
+      const segment = pathSegments.find(p => p.id === pathId);
+      if (segment && !segment.isOccupied) {
+        segment.isOccupied = true;
+        // 将路径颜色变为红色
+        (segment.line.material as THREE.LineBasicMaterial).color.setHex(0xff0000);
+        return true;
+      }
+      return false;
+    };
+
+    const releasePath = (pathId: string) => {
+      const segment = pathSegments.find(p => p.id === pathId);
+      if (segment && segment.isOccupied) {
+        segment.isOccupied = false;
+        // 恢复原始颜色
+        (segment.line.material as THREE.LineBasicMaterial).color.setHex(segment.originalColor);
+        return true;
+      }
+      return false;
+    };
+
+    // 寻找两点间的路径段
+    const findPathSegment = (startPos: THREE.Vector3, endPos: THREE.Vector3): PathSegment | null => {
+      return pathSegments.find(segment => {
+        const threshold = 0.1;
+        return (
+          (segment.startPoint.distanceTo(startPos) < threshold && segment.endPoint.distanceTo(endPos) < threshold) ||
+          (segment.startPoint.distanceTo(endPos) < threshold && segment.endPoint.distanceTo(startPos) < threshold)
+        );
+      }) || null;
+    };
+
+    // 申请路径资源
+    const requestPathResource = (startStation: StationNode, endStation: StationNode): boolean => {
+      const pathSegment = findPathSegment(startStation.position, endStation.position);
+      if (pathSegment) {
+        return occupyPath(pathSegment.id);
+      }
+      return false;
+    };
+
+    // 释放路径资源
+    const releasePathResource = (startStation: StationNode, endStation: StationNode): boolean => {
+      const pathSegment = findPathSegment(startStation.position, endStation.position);
+      if (pathSegment) {
+        return releasePath(pathSegment.id);
+      }
+      return false;
+    };
+
+    // 随机选择目标站点
+    const getRandomTargetStation = (currentStationId: string): StationNode | null => {
+      const availableStations = stationNodes.filter(node => node.id !== currentStationId);
+      if (availableStations.length === 0) return null;
+      
+      const randomIndex = Math.floor(Math.random() * availableStations.length);
+      return availableStations[randomIndex];
+    };
+
+    // 构建站点连接关系
+     const buildStationConnections = () => {
+       stationNodes.forEach(station => {
+         station.connections = [];
+         pathSegments.forEach(segment => {
+           const threshold = 0.1;
+           if (segment.startPoint.distanceTo(station.position) < threshold) {
+             // 找到以此站点为起点的路径段
+             const connectedStation = stationNodes.find(s => 
+               segment.endPoint.distanceTo(s.position) < threshold
+             );
+             if (connectedStation) {
+               station.connections.push(segment.id);
+             }
+           } else if (segment.endPoint.distanceTo(station.position) < threshold) {
+             // 找到以此站点为终点的路径段
+             const connectedStation = stationNodes.find(s => 
+               segment.startPoint.distanceTo(s.position) < threshold
+             );
+             if (connectedStation) {
+               station.connections.push(segment.id);
+             }
+           }
+         });
+       });
+     };
+
+     // 获取站点的邻接站点
+     const getNeighborStations = (stationId: string): StationNode[] => {
+       const station = stationNodes.find(s => s.id === stationId);
+       if (!station) return [];
+
+       const neighbors: StationNode[] = [];
+       const threshold = 0.1;
+
+       station.connections.forEach(pathId => {
+         const segment = pathSegments.find(p => p.id === pathId);
+         if (!segment) return;
+
+         // 找到路径段连接的另一个站点
+         if (segment.startPoint.distanceTo(station.position) < threshold) {
+           const neighbor = stationNodes.find(s => 
+             segment.endPoint.distanceTo(s.position) < threshold
+           );
+           if (neighbor && !neighbors.find(n => n.id === neighbor.id)) {
+             neighbors.push(neighbor);
+           }
+         } else if (segment.endPoint.distanceTo(station.position) < threshold) {
+           const neighbor = stationNodes.find(s => 
+             segment.startPoint.distanceTo(s.position) < threshold
+           );
+           if (neighbor && !neighbors.find(n => n.id === neighbor.id)) {
+             neighbors.push(neighbor);
+           }
+         }
+       });
+
+       return neighbors;
+     };
+
+     // 使用BFS算法进行路径规划
+     const planPath = (startStation: StationNode, targetStation: StationNode): StationNode[] => {
+       if (startStation.id === targetStation.id) return [startStation];
+
+       const visited = new Set<string>();
+       const queue: { station: StationNode; path: StationNode[] }[] = [];
+       
+       queue.push({ station: startStation, path: [startStation] });
+       visited.add(startStation.id);
+
+       while (queue.length > 0) {
+         const { station: currentStation, path } = queue.shift()!;
+
+         // 检查是否到达目标
+         if (currentStation.id === targetStation.id) {
+           return path;
+         }
+
+         // 探索邻接站点
+         const neighbors = getNeighborStations(currentStation.id);
+         for (const neighbor of neighbors) {
+           if (!visited.has(neighbor.id)) {
+             visited.add(neighbor.id);
+             queue.push({
+               station: neighbor,
+               path: [...path, neighbor]
+             });
+           }
+         }
+       }
+
+       // 如果找不到路径，返回直接连接
+       console.warn(`无法找到从 ${startStation.label} 到 ${targetStation.label} 的路径，使用直接连接`);
+       return [startStation, targetStation];
+     };
+
+    // CRM机器人移动状态
+    interface RobotMovementState {
+      isMoving: boolean;
+      currentStation: string;
+      targetStation: string | null;
+      currentPath: StationNode[];
+      currentPathIndex: number;
+      occupiedPaths: string[];
+      animationProgress: number;
+    }
+
+    const robotState: RobotMovementState = {
+      isMoving: false,
+      currentStation: 'elevator_stop',
+      targetStation: null,
+      currentPath: [],
+      currentPathIndex: 0,
+      occupiedPaths: [],
+      animationProgress: 0
+    };
+
+    // 机器人移动动画
+    const animateRobotMovement = () => {
+      if (!robotState.isMoving || robotState.currentPath.length < 2) return;
+
+      const currentNode = robotState.currentPath[robotState.currentPathIndex];
+      const nextNode = robotState.currentPath[robotState.currentPathIndex + 1];
+      
+      if (!currentNode || !nextNode) {
+        // 到达目标，停止移动
+        robotState.isMoving = false;
+        robotState.currentStation = robotState.targetStation || robotState.currentStation;
+        robotState.targetStation = null;
+        
+        // 释放所有占用的路径
+        robotState.occupiedPaths.forEach(pathId => releasePath(pathId));
+        robotState.occupiedPaths = [];
+        
+        // 3秒后开始下一次移动
+        setTimeout(() => startRandomMovement(), 3000);
+        return;
+      }
+
+      // 更新动画进度，使用缓动函数使移动更平滑
+      robotState.animationProgress += 0.01; // 移动速度
+      
+      // 使用缓动函数使移动更平滑
+      const easeInOutQuad = (t: number) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      const smoothProgress = easeInOutQuad(robotState.animationProgress);
+
+      if (robotState.animationProgress >= 1.0) {
+        // 到达下一个节点
+        robotState.animationProgress = 0;
+        robotState.currentPathIndex++;
+        
+        // 释放前一条路径，申请下一条路径
+        if (robotState.occupiedPaths.length > 0) {
+          const pathToRelease = robotState.occupiedPaths.shift();
+          if (pathToRelease) releasePath(pathToRelease);
+        }
+        
+        // 申请下下一条路径（提前2条路径）
+        if (robotState.currentPathIndex + 1 < robotState.currentPath.length) {
+          const nextNextNode = robotState.currentPath[robotState.currentPathIndex + 1];
+          const pathSegment = findPathSegment(nextNode.position, nextNextNode.position);
+          if (pathSegment && occupyPath(pathSegment.id)) {
+            robotState.occupiedPaths.push(pathSegment.id);
+          }
+        }
+      }
+
+      // 计算当前位置，使用平滑进度
+      const startPos = currentNode.position;
+      const endPos = nextNode.position;
+      const currentPos = new THREE.Vector3().lerpVectors(startPos, endPos, smoothProgress);
+      
+      // 更新机器人位置
+      if (crmRobot) {
+        crmRobot.position.copy(currentPos);
+        
+        // 计算朝向，使用原始进度避免朝向抖动
+        const direction = new THREE.Vector3().subVectors(endPos, startPos).normalize();
+        if (direction.length() > 0) {
+          const angle = Math.atan2(direction.x, direction.z);
+          crmRobot.rotation.y = angle;
+        }
+      }
+    };
+
+    // 开始随机移动
+    const startRandomMovement = () => {
+      if (robotState.isMoving) return;
+
+      const currentStation = stationNodes.find(node => node.id === robotState.currentStation);
+      if (!currentStation) return;
+
+      const targetStation = getRandomTargetStation(robotState.currentStation);
+      if (!targetStation) return;
+
+      console.log(`CRM机器人开始移动：从 ${currentStation.label} 到 ${targetStation.label}`);
+
+      // 规划路径
+      const path = planPath(currentStation, targetStation);
+      if (path.length < 2) return;
+
+      // 申请前两条路径
+      const occupiedPaths: string[] = [];
+      for (let i = 0; i < Math.min(2, path.length - 1); i++) {
+        const pathSegment = findPathSegment(path[i].position, path[i + 1].position);
+        if (pathSegment && occupyPath(pathSegment.id)) {
+          occupiedPaths.push(pathSegment.id);
+        }
+      }
+
+      // 设置移动状态
+      robotState.isMoving = true;
+      robotState.targetStation = targetStation.id;
+      robotState.currentPath = path;
+      robotState.currentPathIndex = 0;
+      robotState.occupiedPaths = occupiedPaths;
+      robotState.animationProgress = 0;
+    };
+
+    // 初始化路径网络
+     initializePathNetwork();
+     
+     // 构建站点连接关系
+     buildStationConnections();
 
     // 创建一楼拓扑路径站点
     const createTopologyNode = (position: THREE.Vector3, group: THREE.Group, label?: string) => {
@@ -285,6 +803,10 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>((props, ref) => {
       const line = new THREE.Line(geometry, material);
       line.name = 'topologyConnection';
       group.add(line);
+      
+      // 将路径段注册到移动系统中
+      createPathSegment(startPoint, endPoint, line);
+      
       return line;
     };
 
@@ -618,9 +1140,18 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>((props, ref) => {
     const animate = () => {
       animationIdRef.current = requestAnimationFrame(animate);
       controls.update();
+      
+      // 更新机器人移动动画
+      animateRobotMovement();
+      
       renderer.render(scene, camera);
     };
     animate();
+
+    // 启动机器人移动系统（延迟3秒后开始）
+    setTimeout(() => {
+      startRandomMovement();
+    }, 3000);
 
     // Handle resize
     const handleResize = () => {
