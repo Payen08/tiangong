@@ -25,6 +25,7 @@ interface FloorSelectorProps {
 
 // 默认楼层数据
 const defaultFloors: FloorOption[] = [
+  { id: 'all', name: '全部楼层', level: 0 }, // 新增全部楼层选项
   { id: 'floor1', name: '一楼地图', level: 1 },
   { id: 'floor2', name: '二楼地图', level: 2 },
   { id: 'floor3', name: '三楼地图', level: 3 },
@@ -45,14 +46,18 @@ const FloorSelector: React.FC<FloorSelectorProps> = ({
   const handleFloorChange = (floorId: string) => {
     const floor = floors.find(f => f.id === floorId);
     if (floor && threeSceneRef.current) {
-      // 调用3D场景切换方法
-      threeSceneRef.current.setFloorView(floor.level);
+      if (floor.id === 'all') {
+        // 显示全部楼层
+        threeSceneRef.current.setAllFloorsView();
+        message.success('已切换到全部楼层视图');
+      } else {
+        // 显示单个楼层
+        threeSceneRef.current.setFloorView(floor.level);
+        message.success(`已切换到${floor.name}视图`);
+      }
       
       // 调用父组件的回调函数
       onFloorChange(floorId);
-      
-      // 显示成功消息
-      message.success(`已切换到${floor.name}视图`);
     }
   };
 

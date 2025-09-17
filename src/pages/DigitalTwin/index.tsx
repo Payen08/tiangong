@@ -300,7 +300,7 @@ const mockTasks: Task[] = [
 const DigitalTwin: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
-  const [selectedFloor, setSelectedFloor] = useState<string | null>('floor1');
+  const [selectedFloor, setSelectedFloor] = useState<string | null>('all');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [floors, setFloors] = useState<FloorData[]>([]);
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
@@ -425,10 +425,10 @@ const DigitalTwin: React.FC = () => {
   // 工具函数
   const getRobotTypeIcon = (type: string) => {
     switch (type) {
-      case 'AGV': return <CarOutlined />;
-      case 'MCR': return <AndroidOutlined />;
-      case 'AMR': return <RobotOutlined />;
-      default: return <RobotOutlined />;
+      case 'AGV': return <CarOutlined style={{ color: '#1890ff', fontSize: '16px' }} />; // 蓝色
+      case 'MCR': return <AndroidOutlined style={{ color: '#52c41a', fontSize: '16px' }} />; // 绿色
+      case 'AMR': return <RobotOutlined style={{ color: '#fa8c16', fontSize: '16px' }} />; // 橙色
+      default: return <RobotOutlined style={{ color: '#8c8c8c', fontSize: '16px' }} />; // 灰色
     }
   };
 
@@ -601,9 +601,10 @@ const DigitalTwin: React.FC = () => {
   // 返回全场景视图（重置视图）
   const handleBackToOverview = () => {
     setViewMode('overview');
-    setSelectedFloor(null);
-    if (threeSceneRef.current && threeSceneRef.current.resetView) {
-      threeSceneRef.current.resetView();
+    // 重置视图时设置为全部楼层
+    setSelectedFloor('all');
+    if (threeSceneRef.current && threeSceneRef.current.setAllFloorsView) {
+      threeSceneRef.current.setAllFloorsView();
     }
     message.success('已重置到初始3D视图视角');
   };
@@ -844,7 +845,7 @@ const DigitalTwin: React.FC = () => {
                           <div style={{
                             width: `${percentage}%`,
                             height: '100%',
-                            background: type === 'AGV' ? '#1890ff' : type === 'MCR' ? '#52c41a' : '#faad14',
+                            background: type === 'AGV' ? '#1890ff' : type === 'MCR' ? '#52c41a' : '#fa8c16',
                             borderRadius: '2px'
                           }} />
                         </div>
