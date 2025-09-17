@@ -298,7 +298,7 @@ const mockTasks: Task[] = [
 
 
 const DigitalTwin: React.FC = () => {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // 页面加载状态
   const [viewMode, setViewMode] = useState<ViewMode>('overview');
   const [selectedFloor, setSelectedFloor] = useState<string | null>('all');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -358,7 +358,7 @@ const DigitalTwin: React.FC = () => {
     // 模拟加载延迟
     const timer = setTimeout(() => {
       setLoading(false);
-    }, 1000);
+    }, 100);
     
     return () => clearTimeout(timer);
   }, []);
