@@ -51,6 +51,7 @@ import {
   RightOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
+  CloseOutlined,
   LoadingOutlined,
   ReloadOutlined,
   DragOutlined,
@@ -64,6 +65,9 @@ import {
   ShareAltOutlined,
   AppstoreOutlined,
   GroupOutlined,
+  UpOutlined,
+  DownOutlined,
+  RotateRightOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -941,6 +945,396 @@ const MapManagement: React.FC = () => {
       saveToHistory();
       
     }
+  };
+
+  // 处理点位移动控制按钮
+  const handlePointMove = (direction: 'up' | 'down' | 'left' | 'right') => {
+    const moveDistance = 10; // 每次移动的像素距离
+    let deltaX = 0;
+    let deltaY = 0;
+    
+    switch (direction) {
+      case 'up':
+        deltaY = -moveDistance;
+        break;
+      case 'down':
+        deltaY = moveDistance;
+        break;
+      case 'left':
+        deltaX = -moveDistance;
+        break;
+      case 'right':
+        deltaX = moveDistance;
+        break;
+    }
+    
+    if (selectedPoints.length > 0) {
+      // 更新连接到这些点的线
+      setMapLines(prevLines => 
+        prevLines.map(line => {
+          const isStartPointSelected = selectedPoints.includes(line.startPointId);
+          const isEndPointSelected = selectedPoints.includes(line.endPointId);
+          
+          if (isStartPointSelected || isEndPointSelected) {
+            let updatedLine = { ...line };
+            
+            // 如果是贝塞尔曲线，同步更新控制点
+            if ((line.type === 'single-bezier' || line.type === 'double-bezier') && line.controlPoints) {
+              updatedLine.controlPoints = {
+                ...line.controlPoints,
+                ...(line.controlPoints.cp1 && {
+                  cp1: {
+                    x: line.controlPoints.cp1.x + deltaX,
+                    y: line.controlPoints.cp1.y + deltaY
+                  }
+                }),
+                ...(line.controlPoints.cp2 && {
+                  cp2: {
+                    x: line.controlPoints.cp2.x + deltaX,
+                    y: line.controlPoints.cp2.y + deltaY
+                  }
+                })
+              };
+            }
+            
+            return updatedLine;
+          }
+          return line;
+        })
+      );
+      
+      // 更新点位置
+      setMapPoints(prevPoints => {
+        const updatedPoints = prevPoints.map(point => {
+          if (selectedPoints.includes(point.id)) {
+            return {
+              ...point,
+              x: point.x + deltaX,
+              y: point.y + deltaY
+            };
+          }
+          return point;
+        });
+        
+        // 更新选中框位置，确保选中框跟随点移动
+        setTimeout(() => {
+          if (selectedPoints.length > 0) {
+            const selectedPointsData = updatedPoints.filter(point => selectedPoints.includes(point.id));
+            if (selectedPointsData.length > 0) {
+              // 考虑点的实际大小（半径8px）和选中时的缩放（1.2倍）
+              const pointRadius = 8 * 1.2;
+              const pointMinX = Math.min(...selectedPointsData.map(p => p.x - pointRadius));
+              const pointMaxX = Math.max(...selectedPointsData.map(p => p.x + pointRadius));
+              const pointMinY = Math.min(...selectedPointsData.map(p => p.y - pointRadius));
+              const pointMaxY = Math.max(...selectedPointsData.map(p => p.y + pointRadius));
+              
+              // 添加少量边距让框选框紧贴圆圈边缘
+              const padding = 3;
+              const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
+              const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
+              
+              setSelectionStart(newSelectionStart);
+              setSelectionEnd(newSelectionEnd);
+            }
+          }
+        }, 0);
+        
+        return updatedPoints;
+      });
+      
+      // 保存到历史记录
+      saveToHistory();
+    }
+  };
+
+  // 处理点位旋转90度
+  const handlePointRotate = () => {
+    console.log('🔄 [旋转调试] 顺时针旋转函数被调用');
+    console.log('🔄 [旋转调试] 当前选中点数量:', selectedPoints.length);
+    console.log('🔄 [旋转调试] 选中点ID列表:', selectedPoints);
+    
+    if (selectedPoints.length === 0) {
+      console.log('🔄 [旋转调试] 没有选中点，退出旋转');
+      return;
+    }
+    
+    // 计算选中点的中心点
+    const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
+    console.log('🔄 [旋转调试] 选中点数据:', selectedPointsData);
+    
+    if (selectedPointsData.length === 0) {
+      console.log('🔄 [旋转调试] 没有找到选中点数据，退出旋转');
+      return;
+    }
+    
+    const centerX = selectedPointsData.reduce((sum, point) => sum + point.x, 0) / selectedPointsData.length;
+    const centerY = selectedPointsData.reduce((sum, point) => sum + point.y, 0) / selectedPointsData.length;
+    
+    console.log('🔄 [旋转调试] 旋转中心点:', { centerX, centerY });
+    
+    // 更新点位置（绕中心点顺时针旋转90度）
+    setMapPoints(prevPoints => {
+      const updatedPoints = prevPoints.map(point => {
+        if (selectedPoints.includes(point.id)) {
+          // 计算相对于中心点的坐标
+          const relativeX = point.x - centerX;
+          const relativeY = point.y - centerY;
+          
+          // 顺时针旋转90度：(x, y) -> (y, -x)
+          const newRelativeX = relativeY;
+          const newRelativeY = -relativeX;
+          
+          // 更新点的方向角度（顺时针旋转90度）
+          const currentDirection = point.direction || 0;
+          let newDirection = currentDirection + 90;
+          
+          // 确保角度在 -180 到 180 范围内
+          if (newDirection > 180) {
+            newDirection -= 360;
+          }
+          
+          const newPoint = {
+            ...point,
+            x: centerX + newRelativeX,
+            y: centerY + newRelativeY,
+            direction: newDirection
+          };
+          
+          console.log('🔄 [旋转调试] 点旋转:', {
+            pointId: point.id,
+            原坐标: { x: point.x, y: point.y },
+            新坐标: { x: newPoint.x, y: newPoint.y },
+            原方向: currentDirection,
+            新方向: newDirection
+          });
+          
+          return newPoint;
+        }
+        return point;
+      });
+      
+      console.log('🔄 [旋转调试] 旋转完成，更新选中框位置');
+      
+      // 更新选中框位置
+      setTimeout(() => {
+        if (selectedPoints.length > 0) {
+          const rotatedSelectedPoints = updatedPoints.filter(point => selectedPoints.includes(point.id));
+          if (rotatedSelectedPoints.length > 0) {
+            const pointRadius = 8;
+            const pointMinX = Math.min(...rotatedSelectedPoints.map(p => p.x - pointRadius));
+            const pointMaxX = Math.max(...rotatedSelectedPoints.map(p => p.x + pointRadius));
+            const pointMinY = Math.min(...rotatedSelectedPoints.map(p => p.y - pointRadius));
+            const pointMaxY = Math.max(...rotatedSelectedPoints.map(p => p.y + pointRadius));
+            
+            const padding = 3;
+            const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
+            const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
+            
+            console.log('🔄 [旋转调试] 新选中框位置:', { newSelectionStart, newSelectionEnd });
+            
+            setSelectionStart(newSelectionStart);
+            setSelectionEnd(newSelectionEnd);
+          }
+        }
+      }, 0);
+      
+      return updatedPoints;
+    });
+    
+    // 更新连接到这些点的线
+    setMapLines(prevLines => 
+      prevLines.map(line => {
+        const isStartPointSelected = selectedPoints.includes(line.startPointId);
+        const isEndPointSelected = selectedPoints.includes(line.endPointId);
+        
+        if (isStartPointSelected || isEndPointSelected) {
+          let updatedLine = { ...line };
+          
+          // 如果是贝塞尔曲线，同步旋转控制点
+          if ((line.type === 'single-bezier' || line.type === 'double-bezier') && line.controlPoints) {
+            updatedLine.controlPoints = {
+              ...line.controlPoints,
+              ...(line.controlPoints.cp1 && {
+                cp1: (() => {
+                  const relativeX = line.controlPoints.cp1.x - centerX;
+                  const relativeY = line.controlPoints.cp1.y - centerY;
+                  const newRelativeX = relativeY;
+                  const newRelativeY = -relativeX;
+                  return {
+                    x: centerX + newRelativeX,
+                    y: centerY + newRelativeY
+                  };
+                })()
+              }),
+              ...(line.controlPoints.cp2 && {
+                cp2: (() => {
+                  const relativeX = line.controlPoints.cp2.x - centerX;
+                  const relativeY = line.controlPoints.cp2.y - centerY;
+                  const newRelativeX = relativeY;
+                  const newRelativeY = -relativeX;
+                  return {
+                    x: centerX + newRelativeX,
+                    y: centerY + newRelativeY
+                  };
+                })()
+              })
+            };
+          }
+          
+          return updatedLine;
+        }
+        return line;
+      })
+    );
+    
+    // 保存到历史记录
+    saveToHistory();
+  };
+
+  // 逆时针旋转90度
+  const handlePointRotateCounterClockwise = () => {
+    console.log('🔄 [旋转调试] 逆时针旋转函数被调用');
+    console.log('🔄 [旋转调试] 当前选中点数量:', selectedPoints.length);
+    console.log('🔄 [旋转调试] 选中点ID列表:', selectedPoints);
+    
+    if (selectedPoints.length === 0) {
+      console.log('🔄 [旋转调试] 没有选中点，退出旋转');
+      return;
+    }
+    
+    // 计算选中点的中心点
+    const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
+    console.log('🔄 [旋转调试] 选中点数据:', selectedPointsData);
+    
+    if (selectedPointsData.length === 0) {
+      console.log('🔄 [旋转调试] 没有找到选中点数据，退出旋转');
+      return;
+    }
+    
+    const centerX = selectedPointsData.reduce((sum, point) => sum + point.x, 0) / selectedPointsData.length;
+    const centerY = selectedPointsData.reduce((sum, point) => sum + point.y, 0) / selectedPointsData.length;
+    
+    console.log('🔄 [旋转调试] 旋转中心点:', { centerX, centerY });
+    
+    // 更新点的位置（逆时针旋转90度）
+    setMapPoints(prevPoints => {
+      const updatedPoints = prevPoints.map(point => {
+        if (selectedPoints.includes(point.id)) {
+          // 计算相对于中心点的位置
+          const relativeX = point.x - centerX;
+          const relativeY = point.y - centerY;
+          
+          // 逆时针旋转90度：(x, y) -> (-y, x)
+          const newRelativeX = -relativeY;
+          const newRelativeY = relativeX;
+          
+          // 更新direction字段：逆时针旋转90度，当前方向减90度
+          const currentDirection = point.direction || 0;
+          let newDirection = currentDirection - 90;
+          
+          // 确保角度在-180到180范围内
+          if (newDirection < -180) {
+            newDirection += 360;
+          }
+          
+          const newPoint = {
+            ...point,
+            x: centerX + newRelativeX,
+            y: centerY + newRelativeY,
+            direction: newDirection
+          };
+          
+          console.log('🔄 [旋转调试] 点坐标变换:', {
+            pointId: point.id,
+            原坐标: { x: point.x, y: point.y },
+            新坐标: { x: newPoint.x, y: newPoint.y },
+            原始方向: currentDirection,
+            新方向: newDirection
+          });
+          
+          return newPoint;
+        }
+        return point;
+      });
+      
+      // 更新选中框位置
+      setTimeout(() => {
+        console.log('🔄 [旋转调试] 逆时针旋转完成，更新选中框位置');
+        if (selectedPoints.length > 0) {
+          const rotatedSelectedPoints = updatedPoints.filter(point => selectedPoints.includes(point.id));
+          if (rotatedSelectedPoints.length > 0) {
+            const pointRadius = 8;
+            const pointMinX = Math.min(...rotatedSelectedPoints.map(p => p.x - pointRadius));
+            const pointMaxX = Math.max(...rotatedSelectedPoints.map(p => p.x + pointRadius));
+            const pointMinY = Math.min(...rotatedSelectedPoints.map(p => p.y - pointRadius));
+            const pointMaxY = Math.max(...rotatedSelectedPoints.map(p => p.y + pointRadius));
+            
+            const padding = 3;
+            const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
+            const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
+            
+            console.log('🔄 [旋转调试] 新选中框位置:', {
+              start: newSelectionStart,
+              end: newSelectionEnd
+            });
+            
+            setSelectionStart(newSelectionStart);
+            setSelectionEnd(newSelectionEnd);
+          }
+        }
+      }, 0);
+      
+      return updatedPoints;
+    });
+    
+    // 更新连接到这些点的线
+    setMapLines(prevLines => 
+      prevLines.map(line => {
+        const isStartPointSelected = selectedPoints.includes(line.startPointId);
+        const isEndPointSelected = selectedPoints.includes(line.endPointId);
+        
+        if (isStartPointSelected || isEndPointSelected) {
+          let updatedLine = { ...line };
+          
+          // 如果是贝塞尔曲线，同步旋转控制点
+          if ((line.type === 'single-bezier' || line.type === 'double-bezier') && line.controlPoints) {
+            updatedLine.controlPoints = {
+              ...line.controlPoints,
+              ...(line.controlPoints.cp1 && {
+                cp1: (() => {
+                  const relativeX = line.controlPoints.cp1.x - centerX;
+                  const relativeY = line.controlPoints.cp1.y - centerY;
+                  const newRelativeX = -relativeY;
+                  const newRelativeY = relativeX;
+                  return {
+                    x: centerX + newRelativeX,
+                    y: centerY + newRelativeY
+                  };
+                })()
+              }),
+              ...(line.controlPoints.cp2 && {
+                cp2: (() => {
+                  const relativeX = line.controlPoints.cp2.x - centerX;
+                  const relativeY = line.controlPoints.cp2.y - centerY;
+                  const newRelativeX = -relativeY;
+                  const newRelativeY = relativeX;
+                  return {
+                    x: centerX + newRelativeX,
+                    y: centerY + newRelativeY
+                  };
+                })()
+              })
+            };
+          }
+          
+          return updatedLine;
+        }
+        return line;
+      })
+    );
+    
+    // 保存到历史记录
+    saveToHistory();
   };
   
   const [, setHoveredPoint] = useState<string | null>(null); // 鼠标悬停的点ID
@@ -4662,6 +5056,12 @@ const MapManagement: React.FC = () => {
     
     if (clickedElement.closest('.map-point')) {
       console.log('🔍 [画布点击调试] 点击了地图点，忽略画布点击');
+      return;
+    }
+    
+    // 如果点击的是控制手柄按钮，不处理画布点击
+    if (clickedElement.closest('.control-handle') || clickedElement.closest('.control-button')) {
+      console.log('🔍 [画布点击调试] 点击了控制手柄，忽略画布点击');
       return;
     }
     
@@ -9872,7 +10272,215 @@ const MapManagement: React.FC = () => {
                     <div 
                       style={getSelectionBoxStyle()}
                       onMouseDown={handleSelectionMouseDown}
-                    ></div>
+                    >
+                    </div>
+                    
+                    {/* 选中点的中心控制手柄 */}
+                    {selectedPoints.length > 0 && currentMode === 'edit' && (() => {
+                      // 计算选中点的中心位置
+                      const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
+                      if (selectedPointsData.length === 0) return null;
+                      
+                      const centerX = selectedPointsData.reduce((sum, point) => sum + point.x, 0) / selectedPointsData.length;
+                      const centerY = selectedPointsData.reduce((sum, point) => sum + point.y, 0) / selectedPointsData.length;
+                      
+                      return (
+                        <div style={{
+                          position: 'absolute',
+                          left: centerX,
+                          top: centerY,
+                          transform: 'translate(-50%, -50%)',
+                          width: '120px',
+                          height: '120px',
+                          zIndex: 15,
+                          pointerEvents: 'auto'
+                        }}>
+                          {/* 上移按钮 */}
+                          <Button
+                            type="primary"
+                            shape="circle"
+                            size="small"
+                            icon={<UpOutlined />}
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handlePointMove('up');
+                            }}
+                            style={{
+                              position: 'absolute',
+                              top: '0px',
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              width: '32px',
+                              height: '32px',
+                              background: 'rgba(255, 255, 255, 0.95)',
+                              borderColor: '#d9d9d9',
+                              color: '#666',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '14px'
+                            }}
+                            title="向上移动"
+                            onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                          />
+                          
+                          {/* 下移按钮 */}
+                          <Button
+                            type="primary"
+                            shape="circle"
+                            size="small"
+                            icon={<DownOutlined />}
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handlePointMove('down');
+                            }}
+                            style={{
+                              position: 'absolute',
+                              bottom: '0px',
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              width: '32px',
+                              height: '32px',
+                              background: 'rgba(255, 255, 255, 0.95)',
+                              borderColor: '#d9d9d9',
+                              color: '#666',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '14px'
+                            }}
+                            title="向下移动"
+                            onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                          />
+                          
+                          {/* 左移按钮 */}
+                          <Button
+                            type="primary"
+                            shape="circle"
+                            size="small"
+                            icon={<LeftOutlined />}
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handlePointMove('left');
+                            }}
+                            style={{
+                              position: 'absolute',
+                              left: '0px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              width: '32px',
+                              height: '32px',
+                              background: 'rgba(255, 255, 255, 0.95)',
+                              borderColor: '#d9d9d9',
+                              color: '#666',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '14px'
+                            }}
+                            title="向左移动"
+                            onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                          />
+                          
+                          {/* 右移按钮 */}
+                          <Button
+                            type="primary"
+                            shape="circle"
+                            size="small"
+                            icon={<RightOutlined />}
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handlePointMove('right');
+                            }}
+                            style={{
+                              position: 'absolute',
+                              right: '0px',
+                              top: '50%',
+                              transform: 'translateY(-50%)',
+                              width: '32px',
+                              height: '32px',
+                              background: 'rgba(255, 255, 255, 0.95)',
+                              borderColor: '#d9d9d9',
+                              color: '#666',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '14px'
+                            }}
+                            title="向右移动"
+                            onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                          />
+                          
+                          {/* 右下角顺时针旋转按钮 */}
+                          <Button
+                            type="primary"
+                            shape="circle"
+                            size="small"
+                            icon={<RotateRightOutlined />}
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handlePointRotate();
+                            }}
+                            style={{
+                              position: 'absolute',
+                              bottom: '8px',
+                              right: '8px',
+                              width: '24px',
+                              height: '24px',
+                              background: 'rgba(255, 193, 7, 0.9)',
+                              borderColor: '#ffc107',
+                              color: '#fff',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '10px'
+                            }}
+                            title="顺时针旋转90度"
+                            onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                          />
+                          
+                          {/* 左下角逆时针旋转按钮 */}
+                          <Button
+                            type="primary"
+                            shape="circle"
+                            size="small"
+                            icon={<RotateLeftOutlined />}
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              e.preventDefault();
+                              handlePointRotateCounterClockwise();
+                            }}
+                            style={{
+                              position: 'absolute',
+                              bottom: '8px',
+                              left: '8px',
+                              width: '24px',
+                              height: '24px',
+                              background: 'rgba(255, 193, 7, 0.9)',
+                              borderColor: '#ffc107',
+                              color: '#fff',
+                              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '10px'
+                            }}
+                            title="逆时针旋转90度"
+                            onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                          />
+                        </div>
+                      );
+                    })()}
                     
                     {/* 连线SVG层 */}
                     <svg

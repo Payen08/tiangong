@@ -6,6 +6,14 @@ import {
   SafetyOutlined,
   SettingOutlined,
   PlusOutlined,
+  FileTextOutlined,
+  CheckCircleOutlined,
+  WifiOutlined,
+  DisconnectOutlined,
+  DatabaseOutlined,
+  ScheduleOutlined,
+  BarChartOutlined,
+  DeploymentUnitOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store';
@@ -16,55 +24,55 @@ const Home: React.FC = () => {
 
   const statisticsData = [
     {
-      title: '用户总数',
+      title: '昨日运单总数',
       value: 1234,
-      icon: <UserOutlined className="text-blue-500" />,
+      icon: <FileTextOutlined className="text-blue-500" />,
       color: 'bg-blue-50',
     },
     {
-      title: '角色数量',
-      value: 12,
-      icon: <TeamOutlined className="text-green-500" />,
+      title: '昨日完成运单数',
+      value: 1156,
+      icon: <CheckCircleOutlined className="text-green-500" />,
       color: 'bg-green-50',
     },
     {
-      title: '权限数量',
+      title: '在线设备数',
       value: 56,
-      icon: <SafetyOutlined className="text-orange-500" />,
+      icon: <WifiOutlined className="text-orange-500" />,
       color: 'bg-orange-50',
     },
     {
-      title: '系统模块',
+      title: '离线设备数',
       value: 8,
-      icon: <SettingOutlined className="text-purple-500" />,
-      color: 'bg-purple-50',
+      icon: <DisconnectOutlined className="text-red-500" />,
+      color: 'bg-red-50',
     },
   ];
 
   const quickActions = [
     {
-      title: '新增用户',
-      description: '快速添加新用户',
-      icon: <PlusOutlined />,
-      action: () => navigate('/system/users'),
+      title: '资源管理',
+      description: 'myData',
+      icon: <DatabaseOutlined />,
+      action: () => navigate('/resources/products'),
     },
     {
-      title: '角色管理',
-      description: '管理系统角色',
-      icon: <TeamOutlined />,
-      action: () => navigate('/system/roles'),
+      title: '排程管理',
+      description: 'myFMS',
+      icon: <ScheduleOutlined />,
+      action: () => navigate('/schedule/business-process'),
     },
     {
-      title: '权限配置',
-      description: '配置系统权限',
-      icon: <SafetyOutlined />,
-      action: () => navigate('/system/permissions'),
+      title: '排程管理',
+      description: 'myRCS',
+      icon: <DeploymentUnitOutlined />,
+      action: () => navigate('/dispatch/tasks'),
     },
     {
-      title: '系统设置',
-      description: '系统参数配置',
-      icon: <SettingOutlined />,
-      action: () => {},
+      title: '数据统计',
+      description: 'myRPT',
+      icon: <BarChartOutlined />,
+      action: () => navigate('/data-statistics/business-performance'),
     },
   ];
 
@@ -173,9 +181,9 @@ const Home: React.FC = () => {
           </Card>
         </Col>
 
-        {/* 最近活动 */}
+        {/* 操作记录 */}
         <Col xs={24} lg={12}>
-          <Card title="最近活动" className="h-full">
+          <Card title="操作记录" className="h-full">
             <List
               dataSource={recentActivities}
               renderItem={(item: Activity) => (
