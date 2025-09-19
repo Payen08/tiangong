@@ -451,9 +451,6 @@ const MapManagement: React.FC = () => {
   
   // 路网组相关状态
   // 路网组列表状态已在下方定义
-  const [addNetworkGroupModalVisible, setAddNetworkGroupModalVisible] = useState(false); // 新增路网组弹窗显示状态
-  const [addNetworkGroupForm] = Form.useForm(); // 新增路网组表单
-  const [addNetworkGroupLoading, setAddNetworkGroupLoading] = useState(false); // 新增路网组加载状态
   
   // 连线相关状态
   const [isConnecting, setIsConnecting] = useState(false); // 是否正在连线
@@ -1564,6 +1561,9 @@ const MapManagement: React.FC = () => {
   // 新增路网组气泡相关状态
   const [addNetworkGroupPopoverVisible, setAddNetworkGroupPopoverVisible] = useState(false);
   const [newNetworkGroupName, setNewNetworkGroupName] = useState('');
+  const [addNetworkGroupLoading, setAddNetworkGroupLoading] = useState(false);
+
+
 
   // 移除节点函数
   // const removeNodeFromGroup = (groupId: string, nodeId: string) => {
@@ -1673,6 +1673,55 @@ const MapManagement: React.FC = () => {
     } catch (error) {
       console.error('保存失败:', error);
     }
+  };
+
+  // 处理创建新路网组
+  const handleCreateNewNetworkGroup = async () => {
+    if (!newNetworkGroupName.trim()) {
+      message.warning('请输入路网组名称');
+      return;
+    }
+
+    // 获取当前选择的区域ID
+    const selectedAreaId = networkGroupSelectForm.getFieldValue('areaId');
+    if (!selectedAreaId) {
+      message.warning('请先选择区域');
+      return;
+    }
+
+    setAddNetworkGroupLoading(true);
+    try {
+      // 创建新的路网组
+      const newGroup: NetworkGroup = {
+        id: `network-group${Date.now()}`,
+        name: newNetworkGroupName.trim(),
+        areaId: selectedAreaId,
+        nodes: [],
+        paths: []
+      };
+      
+      setNetworkGroups(prev => [...prev, newGroup]);
+      
+      // 自动选择新创建的路网组
+      networkGroupSelectForm.setFieldsValue({ networkGroupId: newGroup.id });
+      
+      // 重置状态
+      setNewNetworkGroupName('');
+      setAddNetworkGroupPopoverVisible(false);
+      
+      message.success('路网组创建成功');
+    } catch (error) {
+      console.error('创建路网组失败:', error);
+      message.error('创建路网组失败');
+    } finally {
+      setAddNetworkGroupLoading(false);
+    }
+  };
+
+  // 取消创建新路网组
+  const handleCancelCreateNetworkGroup = () => {
+    setNewNetworkGroupName('');
+    setAddNetworkGroupPopoverVisible(false);
   };
 
   // 新增路径组
@@ -1994,36 +2043,7 @@ const MapManagement: React.FC = () => {
     setAddPathGroupPopoverVisible(false);
   };
 
-  // 处理新增路网组气泡确认
-  const handleCreateNewNetworkGroup = () => {
-    if (!newNetworkGroupName.trim()) {
-      message.error('请输入路网组名称');
-      return;
-    }
-    if (newNetworkGroupName.length > 6) {
-      message.error('路网组名称不能超过6个字符');
-      return;
-    }
 
-    const newGroup: NetworkGroup = {
-      id: `network-group-${Date.now()}`,
-      name: newNetworkGroupName.trim(),
-      nodes: [],
-      paths: []
-    };
-    setNetworkGroups(prev => [...prev, newGroup]);
-    message.success('新路网组已创建');
-
-    // 重置状态
-    setNewNetworkGroupName('');
-    setAddNetworkGroupPopoverVisible(false);
-  };
-
-  // 取消新增路网组
-  const handleCancelCreateNetworkGroup = () => {
-    setNewNetworkGroupName('');
-    setAddNetworkGroupPopoverVisible(false);
-  };
 
   // 将选中线条加入路径组
   const handleAddLinesToPathGroup = async () => {
@@ -13547,50 +13567,40 @@ const MapManagement: React.FC = () => {
                         <Form.Item
                           name={`networkGroupId_${config.id}`}
                           label="选择路网组"
-                          rules={[{ required: true, message: '请选择路网组' }]}
-                          style={{ marginBottom: 12 }}
+                          style={{ marginBottom: 16 }}
                         >
-                          <Input.Group compact>
-                            <Select 
-                              placeholder="请选择路网组" 
-                              disabled={currentMode === 'view'}
-                              value={config.networkGroupId}
-                              onChange={(value: string) => {
-                                 setNetworkConfigs(prev => 
-                                   prev.map(c => 
-                                     c.id === config.id 
-                                       ? { ...c, networkGroupId: value }
-                                       : c
-                                   )
-                                 );
-                                 // 同步更新表单字段值
-                                 areaEditForm.setFieldValue(`networkGroupId_${config.id}`, value);
-                               }}
-                              style={{ width: 'calc(100% - 80px)' }}
-                            >
-                              {networkGroups.filter(group => group.areaId === editingArea?.id).map(group => (
-                                <Select.Option key={group.id} value={group.id}>
-                                  {group.name}
-                                </Select.Option>
-                              ))}
-                            </Select>
-                            <Button 
-                              type="primary" 
-                              icon={<PlusOutlined />}
-                              disabled={currentMode === 'view'}
-                              onClick={() => setAddNetworkGroupModalVisible(true)}
-                              style={{ width: '80px' }}
-                            >
-                              新增
-                            </Button>
-                          </Input.Group>
+                          <Select 
+                            placeholder="请选择路网组" 
+                            disabled={currentMode === 'view'}
+                            showSearch
+                            value={config.networkGroupId}
+                            onChange={(value: string) => {
+                               setNetworkConfigs(prev => 
+                                 prev.map(c => 
+                                   c.id === config.id 
+                                     ? { ...c, networkGroupId: value }
+                                     : c
+                                 )
+                               );
+                               // 同步更新表单字段值
+                               areaEditForm.setFieldValue(`networkGroupId_${config.id}`, value);
+                             }}
+                            filterOption={(input: string, option: any) =>
+                              (option?.children as string)?.toLowerCase().includes(input.toLowerCase())
+                            }
+                          >
+                            {networkGroups.filter(group => group.areaId === editingArea?.id).map(group => (
+                              <Select.Option key={group.id} value={group.id}>
+                                {group.name}
+                              </Select.Option>
+                            ))}
+                          </Select>
                         </Form.Item>
                         
                         {/* 关联机器人 */}
                         <Form.Item
                           name={`associatedRobots_${config.id}`}
                           label="关联机器人"
-                          rules={[{ required: true, message: '请选择关联机器人' }]}
                           style={{ marginBottom: 16 }}
                         >
                           <Select 
@@ -14218,73 +14228,111 @@ const MapManagement: React.FC = () => {
           layout="vertical"
           style={{ marginTop: '16px' }}
         >
+          {/* 选择区域字段 */}
           <Form.Item
-            label={
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '16px' }}>
-                <span>选择路网组</span>
-                <Popover
-                  title="新增路网组"
-                  open={addNetworkGroupPopoverVisible}
-                  onOpenChange={setAddNetworkGroupPopoverVisible}
-                  content={
-                    <div style={{ width: '250px' }}>
-                      <Input
-                         placeholder="请输入路网组名称（不超过6个字符）"
-                         value={newNetworkGroupName}
-                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewNetworkGroupName(e.target.value)}
-                         maxLength={6}
-                         showCount
-                         allowClear
-                         style={{ marginBottom: '12px' }}
-                       />
-                      <div style={{ textAlign: 'right' }}>
-                        <Space>
-                          <Button size="small" onClick={handleCancelCreateNetworkGroup}>
-                            取消
-                          </Button>
-                          <Button 
-                            type="primary" 
-                            size="small" 
-                            onClick={handleCreateNewNetworkGroup}
-                            disabled={!newNetworkGroupName.trim()}
-                          >
-                            确认
-                          </Button>
-                        </Space>
-                      </div>
-                    </div>
-                  }
-                  trigger="click"
-                  placement="top"
-                >
-                  <Button 
-                    type="dashed" 
-                    size="small"
-                    icon={<PlusOutlined />}
-                  >
-                    新增路网组
-                  </Button>
-                </Popover>
-              </div>
-            }
-            name="networkGroupId"
-            rules={[{ required: true, message: '请选择路网组' }]}
+            label="选择区域"
+            name="areaId"
+            rules={[{ required: true, message: '请选择区域' }]}
           >
             <Select
-               placeholder="请选择路网组"
-               style={{ width: '100%' }}
-             >
-               {networkGroups
-                 .filter(group => group.areaId === editingArea?.id) // 只显示当前区域的路网组
-                 .map(group => (
-                 <Select.Option key={group.id} value={group.id}>
-                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                     <span>{group.name}</span>
-                     <span style={{ color: '#666', fontSize: '12px' }}>({group.paths.length} 条路径)</span>
-                   </div>
-                 </Select.Option>
-               ))}
-             </Select>
+              placeholder="请选择多路网区"
+              style={{ width: '100%' }}
+              onChange={(value: string) => {
+                // 当区域改变时，清空路网组选择
+                networkGroupSelectForm.setFieldsValue({ networkGroupId: undefined });
+                console.log('选择的区域ID:', value); // 使用value参数避免未使用警告
+              }}
+            >
+              {mapAreas
+                .filter(area => area.type === '多路网区') // 只显示多路网区
+                .map(area => (
+                <Select.Option key={area.id} value={area.id}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>{area.name}</span>
+                    <span style={{ color: '#666', fontSize: '12px' }}>多路网区</span>
+                  </div>
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item shouldUpdate>
+            {({ getFieldValue }: { getFieldValue: (name: string) => any }) => {
+              const selectedAreaId = getFieldValue('areaId');
+              return (
+                <Form.Item
+                  label={
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                      <span>选择路网组</span>
+                      <Popover
+                        title="新增路网组"
+                        open={addNetworkGroupPopoverVisible}
+                        onOpenChange={setAddNetworkGroupPopoverVisible}
+                        content={
+                          <div style={{ width: '250px' }}>
+                            <Input
+                              placeholder="请输入路网组名称"
+                              value={newNetworkGroupName}
+                              onChange={(e: ChangeEvent<HTMLInputElement>) => setNewNetworkGroupName(e.target.value)}
+                              style={{ marginBottom: '12px' }}
+                              onPressEnter={() => {
+                                if (newNetworkGroupName.trim()) {
+                                  handleCreateNewNetworkGroup();
+                                }
+                              }}
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                              <Button size="small" onClick={handleCancelCreateNetworkGroup}>
+                                取消
+                              </Button>
+                              <Button 
+                                type="primary" 
+                                size="small" 
+                                onClick={handleCreateNewNetworkGroup}
+                                disabled={!newNetworkGroupName.trim()}
+                                loading={addNetworkGroupLoading}
+                              >
+                                确认
+                              </Button>
+                            </div>
+                          </div>
+                        }
+                        trigger="click"
+                        placement="topRight"
+                      >
+                        <Button 
+                          type="link" 
+                          size="small" 
+                          icon={<PlusOutlined />}
+                          disabled={!selectedAreaId}
+                          style={{ padding: '0 4px', height: 'auto' }}
+                        >
+                          新增
+                        </Button>
+                      </Popover>
+                    </div>
+                  }
+                  name="networkGroupId"
+                >
+                  <Select
+                    placeholder="请选择路网组"
+                    style={{ width: '100%' }}
+                    disabled={!selectedAreaId} // 未选择区域时禁用
+                  >
+                    {networkGroups
+                      .filter(group => group.areaId === selectedAreaId) // 根据选择的区域过滤路网组
+                      .map(group => (
+                      <Select.Option key={group.id} value={group.id}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>{group.name}</span>
+                          <span style={{ color: '#666', fontSize: '12px' }}>({group.paths.length} 条路径)</span>
+                        </div>
+                      </Select.Option>
+                    ))}
+                  </Select>
+                </Form.Item>
+              );
+            }}
           </Form.Item>
           
           {/* 显示选中路网组的路径详情 */}
@@ -14328,89 +14376,7 @@ const MapManagement: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 新增路网组弹窗 */}
-      <Modal
-        title="新增路网组"
-        open={addNetworkGroupModalVisible}
-        getContainer={false}
-        zIndex={3000}
-        style={{ top: 20 }}
-        onOk={() => {
-           addNetworkGroupForm.validateFields().then(async (values: { name: string; description?: string }) => {
-            try {
-              setAddNetworkGroupLoading(true);
-              // 这里应该调用API创建路网组
-              console.log('创建路网组:', values);
-              
-              // 模拟API调用
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              
-              // 创建新的路网组对象
-              const newNetworkGroup: NetworkGroup = {
-                id: `group_${Date.now()}`,
-                name: values.name,
-                description: values.description || '',
-                createTime: new Date().toISOString(),
-                updateTime: new Date().toISOString(),
-                areaId: editingArea?.id, // 关联当前区域ID
-                nodes: [],
-                paths: []
-              };
-              
-              // 更新路网组列表
-              setNetworkGroups(prev => [...prev, newNetworkGroup]);
-              
-              message.success('路网组创建成功');
-              setAddNetworkGroupModalVisible(false);
-              addNetworkGroupForm.resetFields();
-              
-            } catch (error) {
-              message.error('创建路网组失败');
-            } finally {
-              setAddNetworkGroupLoading(false);
-            }
-          });
-        }}
-        onCancel={() => {
-          setAddNetworkGroupModalVisible(false);
-          addNetworkGroupForm.resetFields();
-        }}
-        confirmLoading={addNetworkGroupLoading}
-        width={400}
-      >
-        <Form
-          form={addNetworkGroupForm}
-          layout="vertical"
-          style={{ marginTop: 16 }}
-        >
-          <Form.Item
-            label="路网组名称"
-            name="name"
-            rules={[
-              { required: true, message: '请输入路网组名称' },
-              { max: 50, message: '路网组名称不能超过50个字符' }
-            ]}
-          >
-            <Input placeholder="请输入路网组名称（最多50个字符）" maxLength={50} showCount />
-          </Form.Item>
-          
-          <Form.Item
-            label="描述"
-            name="description"
-            rules={[
-              { max: 200, message: '描述不能超过200个字符' }
-            ]}
-          >
-            <Input.TextArea 
-              placeholder="请输入描述（可选）" 
-              maxLength={200} 
-              showCount 
-              rows={3}
-              style={{ resize: 'none' }}
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
+
 
       {/* 批量设置面板 */}
       <BatchSettingsPanel
