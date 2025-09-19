@@ -12369,7 +12369,50 @@ const MapManagement: React.FC = () => {
                                               }}
                                             >
                                               <div style={{ flex: 1 }}>
-                                                <div>{area.name} ({area.type || '区域'})</div>
+                                                <div 
+                                                  style={{ 
+                                                    display: 'flex', 
+                                                    alignItems: 'center', 
+                                                    gap: '4px',
+                                                    position: 'relative'
+                                                  }}
+                                                  onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                                                    if (currentMode === 'edit') {
+                                                      const deleteBtn = e.currentTarget.querySelector('.area-delete-btn') as HTMLElement;
+                                                      if (deleteBtn) deleteBtn.style.opacity = '1';
+                                                    }
+                                                  }}
+                                                  onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                                                    if (currentMode === 'edit') {
+                                                      const deleteBtn = e.currentTarget.querySelector('.area-delete-btn') as HTMLElement;
+                                                      if (deleteBtn) deleteBtn.style.opacity = '0';
+                                                    }
+                                                  }}
+                                                >
+                                                  <span>{area.name} ({area.type || '区域'})</span>
+                                                  {currentMode === 'edit' && (
+                                                    <Button
+                                                      className="area-delete-btn"
+                                                      type="text"
+                                                      danger
+                                                      size="small"
+                                                      icon={<DeleteOutlined />}
+                                                      onClick={(e: React.MouseEvent) => {
+                                                         e.stopPropagation();
+                                                         handleDeleteArea(area.id);
+                                                       }}
+                                                      style={{
+                                                        opacity: 0,
+                                                        transition: 'opacity 0.2s',
+                                                        fontSize: '10px',
+                                                        height: '16px',
+                                                        padding: '0 2px',
+                                                        marginLeft: '4px'
+                                                      }}
+                                                      title="删除区域"
+                                                    />
+                                                  )}
+                                                </div>
                                                 {area.type === '多路网区' && (
                                                   <div style={{ marginTop: '4px', paddingLeft: '8px' }}>
                                                     <div style={{ 
@@ -12531,30 +12574,7 @@ const MapManagement: React.FC = () => {
                                                   </div>
                                                 )}
                                               </div>
-                                              {hoveredAreaId === area.id && (
-                                                <Button
-                                                  type="text"
-                                                  danger
-                                                  size="small"
-                                                  icon={<DeleteOutlined />}
-                                                  onClick={(e: React.MouseEvent) => {
-                                                     e.stopPropagation();
-                                                     handleDeleteArea(area.id);
-                                                   }}
-                                                  style={{
-                                                    opacity: 0.8,
-                                                    transition: 'opacity 0.2s',
-                                                    fontSize: '10px',
-                                                    height: '20px',
-                                                    padding: '0 4px',
-                                                    position: 'absolute',
-                                                    right: '4px',
-                                                    top: '50%',
-                                                    transform: 'translateY(-50%)'
-                                                  }}
-                                                  title="删除区域"
-                                                />
-                                              )}
+
                                             </div>
 
                                           </div>
