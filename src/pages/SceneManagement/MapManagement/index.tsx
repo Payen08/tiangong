@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Card,
   Table,
@@ -60,6 +60,7 @@ import {
   UndoOutlined,
   RedoOutlined,
   RotateLeftOutlined,
+  RotateRightOutlined,
   HomeOutlined,
   NodeIndexOutlined,
   ShareAltOutlined,
@@ -67,9 +68,9 @@ import {
   GroupOutlined,
   UpOutlined,
   DownOutlined,
-  RotateRightOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import BatchSettingsPanel from './BatchSettingsPanel';
 
 // 添加CSS样式
 const thumbnailHoverStyle = `
@@ -201,6 +202,7 @@ interface NetworkGroup {
   description?: string;
   createTime?: string;
   updateTime?: string;
+  areaId?: string; // 关联的区域ID，用于区域隔离
   nodes: NetworkNode[];
   paths: NetworkPath[];
 }
@@ -282,6 +284,18 @@ const MapManagement: React.FC = () => {
   const [submitAndExitLoading, setSubmitAndExitLoading] = useState(false);
   const [currentEditFile, setCurrentEditFile] = useState<MapFile | null>(null); // 当前编辑的地图文件
 
+  // Modal容器获取函数
+  const getModalContainer = () => {
+    // 如果在地图编辑器模式下，返回地图编辑器画布容器
+    if (addMapFileStep === 2) {
+      const canvasContainer = document.getElementById('map-editor-canvas');
+      if (canvasContainer) {
+        return canvasContainer;
+      }
+    }
+    // 否则返回默认的document.body
+    return document.body;
+  };
 
   
   // 地图信息相关状态
@@ -367,7 +381,38 @@ const MapManagement: React.FC = () => {
 
   const [mapPoints, setMapPoints] = useState<any[]>(defaultMapPoints); // 地图上的点
   const [mapLines, setMapLines] = useState<MapLine[]>(defaultMapLines); // 地图上的连线
-  const [mapAreas, setMapAreas] = useState<MapArea[]>([]); // 地图上的区域
+  const [mapAreas, setMapAreas] = useState<MapArea[]>([
+    {
+      id: 'area-a',
+      name: 'A区域',
+      type: '工作区域',
+      points: [
+        { x: 100, y: 100 },
+        { x: 300, y: 100 },
+        { x: 300, y: 300 },
+        { x: 100, y: 300 }
+      ],
+      color: '#1890ff',
+      fillColor: 'rgba(24, 144, 255, 0.1)',
+      strokeColor: '#1890ff',
+      opacity: 0.3
+    },
+    {
+      id: 'area-b',
+      name: 'B区域',
+      type: '工作区域',
+      points: [
+        { x: 400, y: 100 },
+        { x: 600, y: 100 },
+        { x: 600, y: 300 },
+        { x: 400, y: 300 }
+      ],
+      color: '#52c41a',
+      fillColor: 'rgba(82, 196, 26, 0.1)',
+      strokeColor: '#52c41a',
+      opacity: 0.3
+    }
+  ]); // 地图上的区域
   const [pointCounter, setPointCounter] = useState(1); // 点名称计数器
   const [areaCounter, setAreaCounter] = useState(1); // 区域名称计数器
   const [selectedPoints, setSelectedPoints] = useState<string[]>([]); // 选中的点ID列表
@@ -377,6 +422,9 @@ const MapManagement: React.FC = () => {
   const [isSelecting, setIsSelecting] = useState(false); // 是否正在框选
   const [selectionStart, setSelectionStart] = useState<{x: number, y: number} | null>(null); // 框选起始点
   const [selectionEnd, setSelectionEnd] = useState<{x: number, y: number} | null>(null); // 框选结束点
+  
+  // 批量设置面板状态
+  const [batchSettingsPanelVisible, setBatchSettingsPanelVisible] = useState(false); // 批量设置面板显示状态
   const [hoveredAreaId, setHoveredAreaId] = useState<string | null>(null); // 鼠标悬停的区域ID
   
   // 复制粘贴相关状态
@@ -421,6 +469,11 @@ const MapManagement: React.FC = () => {
   } | null>(null); // 选中的控制手柄
   const [isDraggingControlHandle, setIsDraggingControlHandle] = useState(false); // 是否正在拖拽控制手柄
   const [dragStartPosition, setDragStartPosition] = useState<{x: number, y: number} | null>(null); // 拖拽开始位置
+
+  // 元素隐藏相关状态
+  const [hideMapNodes, setHideMapNodes] = useState(false); // 隐藏地图节点
+  const [hideAllPoints, setHideAllPoints] = useState(false); // 隐藏所有点
+  const [hideAllPaths, setHideAllPaths] = useState(false); // 隐藏所有路径
   
   // 点拖拽相关状态
   const [isDraggingPoint, setIsDraggingPoint] = useState(false); // 是否正在拖拽点
@@ -1341,12 +1394,32 @@ const MapManagement: React.FC = () => {
   const [continuousConnecting, setContinuousConnecting] = useState(false); // 连续连线模式
   const [lastConnectedPoint, setLastConnectedPoint] = useState<string | null>(null); // 上一个连接的点ID
   
-  // 监听mousePosition变化，强制重新渲染虚线
-  useEffect(() => {
-    if (mousePosition && (isConnecting || continuousConnecting) && (connectingStartPoint || lastConnectedPoint)) {
-      // 强制重新渲染虚线（已移除forceRender状态）
+  // 防抖处理鼠标位置更新
+  const mouseUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // 优化的鼠标位置更新函数
+  const updateMousePositionOptimized = useCallback((x: number, y: number) => {
+    // 立即更新ref，用于虚线渲染
+    mousePositionRef.current = { x, y };
+    
+    // 防抖更新状态，减少重新渲染频率
+    if (mouseUpdateTimeoutRef.current) {
+      clearTimeout(mouseUpdateTimeoutRef.current);
     }
-  }, [mousePosition, isConnecting, continuousConnecting, connectingStartPoint, lastConnectedPoint]);
+    
+    mouseUpdateTimeoutRef.current = setTimeout(() => {
+      setMousePosition({ x, y });
+    }, 16); // 约60fps的更新频率
+  }, []);
+  
+  // 清理防抖定时器
+  useEffect(() => {
+    return () => {
+      if (mouseUpdateTimeoutRef.current) {
+        clearTimeout(mouseUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
   
   // 撤销重做相关状态
   interface HistoryState {
@@ -1428,6 +1501,7 @@ const MapManagement: React.FC = () => {
     {
       id: 'network-group1',
       name: '路网组1',
+      areaId: 'area-a', // 属于A区域
       nodes: [
         { id: 'n1', name: 'n1', description: '站点' },
         { id: 'n2', name: 'n2', description: '电梯' },
@@ -1445,6 +1519,7 @@ const MapManagement: React.FC = () => {
     {
       id: 'network-group2',
       name: '路网组2',
+      areaId: 'area-b', // 属于B区域
       nodes: [
         { id: 'n1_g2', name: 'n1', description: '站点1' },
         { id: 'n3_g2', name: 'n3', description: '站点' }
@@ -1576,6 +1651,7 @@ const MapManagement: React.FC = () => {
         const newGroup: NetworkGroup = {
           id: `network-group${Date.now()}`,
           name: values.name,
+          areaId: editingArea?.id, // 关联到当前编辑区域
           nodes: [],
           paths: []
         };
@@ -5600,6 +5676,13 @@ const MapManagement: React.FC = () => {
         // 设置选中的点
         setSelectedPoints(pointsInSelection.map(p => p.id));
         
+        // 如果选中了多个点，显示批量设置面板
+        if (pointsInSelection.length > 1) {
+          setBatchSettingsPanelVisible(true);
+        } else {
+          setBatchSettingsPanelVisible(false);
+        }
+        
         // 查找框选区域内的线条（包括与框选区域相交的线条）
         const selectedPointIds = new Set(pointsInSelection.map(p => p.id));
         const linesInSelection = mapLines.filter(line => {
@@ -5651,6 +5734,7 @@ const MapManagement: React.FC = () => {
           setIsSelecting(false);
           setSelectionStart(null);
           setSelectionEnd(null);
+          setBatchSettingsPanelVisible(false);
         }
       } else {
         // 框选区域太小，清除选择
@@ -5659,12 +5743,14 @@ const MapManagement: React.FC = () => {
         setIsSelecting(false);
         setSelectionStart(null);
         setSelectionEnd(null);
+        setBatchSettingsPanelVisible(false);
       }
     } else {
       // 没有有效的框选，清除状态
       setIsSelecting(false);
       setSelectionStart(null);
       setSelectionEnd(null);
+      setBatchSettingsPanelVisible(false);
     }
   };
 
@@ -5767,6 +5853,27 @@ const MapManagement: React.FC = () => {
       setEditingPoint(null);
       pointEditForm.resetFields();
     }
+  };
+
+  // 批量更新选中的点
+  const handleBatchUpdatePoints = (updates: { direction?: number; type?: string }) => {
+    if (selectedPoints.length === 0) {
+      message.warning('请先选择要更新的点');
+      return;
+    }
+
+    // 保存历史记录（批量编辑之前）
+    saveToHistory();
+
+    setMapPoints(prev => 
+      prev.map(point => 
+        selectedPoints.includes(point.id) 
+          ? { ...point, ...updates }
+          : point
+      )
+    );
+
+    message.success(`已批量更新 ${selectedPoints.length} 个点`);
   };
 
   // 保存区域编辑
@@ -6774,6 +6881,11 @@ const MapManagement: React.FC = () => {
    };
 
   const renderLine = (line: MapLine) => {
+    // 检查隐藏状态，如果隐藏所有路径则不渲染
+    if (hideAllPaths) {
+      return null;
+    }
+    
     console.log('🔗 renderLine called:', line);
     const startPoint = getPointById(line.startPointId);
     const endPoint = getPointById(line.endPointId);
@@ -10180,6 +10292,8 @@ const MapManagement: React.FC = () => {
                   
                   {/* 画布主体 */}
                   <div 
+                    id="map-editor-canvas"
+                    className="map-editor-canvas"
                     ref={canvasRef}
                     style={{
                       flex: 1,
@@ -10275,8 +10389,8 @@ const MapManagement: React.FC = () => {
                     >
                     </div>
                     
-                    {/* 选中点的中心控制手柄 */}
-                    {selectedPoints.length > 0 && currentMode === 'edit' && (() => {
+                    {/* 选中点的中心控制手柄 - 只在选中单个点时显示 */}
+                    {selectedPoints.length === 1 && currentMode === 'edit' && (() => {
                       // 计算选中点的中心位置
                       const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
                       if (selectedPointsData.length === 0) return null;
@@ -10574,14 +10688,8 @@ const MapManagement: React.FC = () => {
                         // 在连线模式下更新鼠标位置
                         const shouldUpdateMousePosition = (isConnecting || continuousConnecting) && (connectingStartPoint || lastConnectedPoint);
 
-                        
                         if (shouldUpdateMousePosition) {
-                    
-                          const newMousePosition = { x, y };
-                          setMousePosition(newMousePosition);
-                          mousePositionRef.current = newMousePosition; // 立即更新ref
-                          // 立即触发强制重新渲染，确保虚线能及时显示
-                          // setForceRender(prev => prev + 1); // 已移除forceRender状态
+                          updateMousePositionOptimized(x, y);
                         }
                         // else 分支暂时无需处理
                         
@@ -10605,9 +10713,19 @@ const MapManagement: React.FC = () => {
                           handleSelectionDrag(e);
                         }
                       }}
+                      onMouseEnter={(e) => {
+                        // 鼠标进入SVG区域时，如果处于连线或区域绘制模式，重新设置鼠标位置
+                        if (isConnecting || continuousConnecting || isDrawingArea) {
+                          const canvasElement = e.currentTarget.closest('.canvas-container') as HTMLDivElement;
+                          if (canvasElement) {
+                            const { x, y } = screenToCanvasCoordinates(e.clientX, e.clientY, canvasElement);
+                            updateMousePositionOptimized(x, y);
+                          }
+                        }
+                      }}
                       onMouseLeave={() => {
                         // 鼠标离开SVG区域时清除鼠标位置
-                        if (isConnecting || isDrawingArea) {
+                        if (isConnecting || continuousConnecting || isDrawingArea) {
                           setMousePosition(null);
                         }
                       }}
@@ -10997,8 +11115,8 @@ const MapManagement: React.FC = () => {
                           );
                         })}
                         
-                        {/* 渲染线条 - 仅在拓扑地图模式下显示 */}
-                        {mapType === 'topology' && (() => {
+                        {/* 渲染线条 - 仅在拓扑地图模式下显示，且未隐藏所有路径时显示 */}
+                        {mapType === 'topology' && !hideAllPaths && (() => {
                           console.log('📊 mapLines data:', mapLines);
                           return mapLines.map(line => renderLine(line));
                         })()}
@@ -11048,7 +11166,11 @@ const MapManagement: React.FC = () => {
                             strokeWidth="2"
                             strokeDasharray="5,5"
                             opacity="0.7"
-                            style={{ pointerEvents: 'none' }}
+                            style={{ 
+                              pointerEvents: 'none',
+                              vectorEffect: 'non-scaling-stroke',
+                              shapeRendering: 'optimizeSpeed'
+                            }}
                           />
                         );
                       })()}
@@ -11154,8 +11276,16 @@ const MapManagement: React.FC = () => {
                       })()}
                     </svg>
                     
-                    {/* 绘制的点 - 仅在拓扑地图模式下显示 */}
+                    {/* 绘制的点 - 仅在拓扑地图模式下显示，并根据隐藏状态控制显示 */}
                     {mapType === 'topology' && mapPoints.map((point) => {
+                      // 检查是否应该隐藏该点
+                      const shouldHidePoint = hideAllPoints || (hideMapNodes && point.type === '节点');
+                      
+                      // 如果应该隐藏，则不渲染该点
+                      if (shouldHidePoint) {
+                        return null;
+                      }
+                      
                       // 直接使用画布坐标，因为父容器已经应用了CSS transform
                       // 不需要再次转换为屏幕坐标，避免双重变换
                       const canvasCoords = { x: point.x, y: point.y };
@@ -12536,7 +12666,7 @@ const MapManagement: React.FC = () => {
                                       <Collapse
                                         size="small"
                                         ghost
-                                        items={networkGroups.map(group => ({
+                                        items={networkGroups.filter(group => group.areaId === editingArea?.id).map(group => ({
                                           key: group.id,
                                           label: (
                                             <div 
@@ -12665,7 +12795,56 @@ const MapManagement: React.FC = () => {
                             />
                           </div>
                         )
-                      }] : [])
+                      }] : []),
+                      // 元素隐藏标签页
+                      {
+                        key: 'elementHide',
+                        label: '元素隐藏',
+                        children: (
+                          <div style={{ padding: '16px' }}>
+                            <div style={{ marginBottom: '16px' }}>
+                              <h4 style={{ marginBottom: '12px', fontSize: '14px', fontWeight: 500 }}>
+                                元素显示控制
+                              </h4>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <Checkbox
+                                  checked={hideMapNodes}
+                                  onChange={(e) => setHideMapNodes(e.target.checked)}
+                                  style={{ fontSize: '13px' }}
+                                >
+                                  隐藏地图节点
+                                </Checkbox>
+                                <Checkbox
+                                  checked={hideAllPoints}
+                                  onChange={(e) => setHideAllPoints(e.target.checked)}
+                                  style={{ fontSize: '13px' }}
+                                >
+                                  隐藏所有点
+                                </Checkbox>
+                                <Checkbox
+                                  checked={hideAllPaths}
+                                  onChange={(e) => setHideAllPaths(e.target.checked)}
+                                  style={{ fontSize: '13px' }}
+                                >
+                                  隐藏所有路径
+                                </Checkbox>
+                              </div>
+                            </div>
+                            <div style={{ 
+                              padding: '12px', 
+                              backgroundColor: '#f5f5f5', 
+                              borderRadius: '6px',
+                              fontSize: '12px',
+                              color: '#666'
+                            }}>
+                              <div style={{ marginBottom: '4px' }}>💡 提示：</div>
+                              <div>• 可以多选，支持同时隐藏多种元素</div>
+                              <div>• 隐藏的元素在地图上不会显示，但数据仍然保留</div>
+                              <div>• 取消勾选即可重新显示对应元素</div>
+                            </div>
+                          </div>
+                        )
+                      }
                     ]}
                   />
                 </div>
@@ -12680,6 +12859,7 @@ const MapManagement: React.FC = () => {
         title={currentMode === 'view' ? "查看点属性" : "编辑点属性"}
         open={pointEditModalVisible}
         zIndex={2000}
+        getContainer={getModalContainer}
         onCancel={() => {
           setPointEditModalVisible(false);
           setEditingPoint(null);
@@ -13093,6 +13273,7 @@ const MapManagement: React.FC = () => {
         title={currentMode === 'view' ? '查看区域属性' : '编辑区域属性'}
         open={areaEditModalVisible}
         zIndex={2000}
+        getContainer={getModalContainer}
         onCancel={() => {
           setAreaEditModalVisible(false);
           setEditingArea(null);
@@ -13229,6 +13410,98 @@ const MapManagement: React.FC = () => {
               if (areaType === '多路网区') {
                 return (
                   <>
+                    {/* 路网组管理模块 */}
+                    <Form.Item
+                      label="路网组管理"
+                      style={{ marginBottom: 16 }}
+                    >
+                      <div style={{ 
+                        border: '1px solid #f0f0f0', 
+                        borderRadius: '6px', 
+                        padding: '12px',
+                        backgroundColor: '#fafafa'
+                      }}>
+                        <div style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center',
+                          marginBottom: '12px'
+                        }}>
+                          <span style={{ fontWeight: 500, color: '#262626' }}>
+                            路网组列表
+                          </span>
+                          <Button 
+                            type="primary" 
+                            size="small"
+                            icon={<PlusOutlined />}
+                            onClick={() => handleAddNetworkGroup()}
+                            disabled={currentMode === 'view'}
+                          >
+                            新增路网组
+                          </Button>
+                        </div>
+                        
+                        {/* 路网组列表 */}
+                        <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                          {networkGroups.filter(group => group.areaId === editingArea?.id).length === 0 ? (
+                            <div style={{ 
+                              textAlign: 'center', 
+                              color: '#999', 
+                              padding: '20px 0',
+                              fontSize: '14px'
+                            }}>
+                              暂无路网组，请先新增路网组
+                            </div>
+                          ) : (
+                            networkGroups.filter(group => group.areaId === editingArea?.id).map(group => (
+                              <div key={group.id} style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center',
+                                padding: '8px 12px',
+                                marginBottom: '8px',
+                                backgroundColor: '#fff',
+                                border: '1px solid #e8e8e8',
+                                borderRadius: '4px'
+                              }}>
+                                <div>
+                                  <span style={{ fontWeight: 500 }}>{group.name}</span>
+                                  {group.description && (
+                                    <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>
+                                      {group.description}
+                                    </div>
+                                  )}
+                                </div>
+                                <div>
+                                  <Button 
+                                    type="link" 
+                                    size="small"
+                                    icon={<EditOutlined />}
+                                    onClick={() => handleEditNetworkGroup(group)}
+                                    disabled={currentMode === 'view'}
+                                    style={{ padding: '0 4px' }}
+                                  >
+                                    编辑
+                                  </Button>
+                                  <Button 
+                                    type="link" 
+                                    danger
+                                    size="small"
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => handleDeleteNetworkGroup(group.id)}
+                                    disabled={currentMode === 'view'}
+                                    style={{ padding: '0 4px' }}
+                                  >
+                                    删除
+                                  </Button>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </Form.Item>
+
                     {/* 配置路网组 */}
                     <Form.Item
                       label="配置路网组"
@@ -13312,7 +13585,7 @@ const MapManagement: React.FC = () => {
                                }}
                               style={{ width: 'calc(100% - 80px)' }}
                             >
-                              {networkGroups.map(group => (
+                              {networkGroups.filter(group => group.areaId === editingArea?.id).map(group => (
                                 <Select.Option key={group.id} value={group.id}>
                                   {group.name}
                                 </Select.Option>
@@ -13439,6 +13712,7 @@ const MapManagement: React.FC = () => {
         title={currentMode === 'view' ? '查看路径属性' : '编辑路径属性'}
         open={lineEditModalVisible}
         zIndex={2000}
+        getContainer={getModalContainer}
         onCancel={() => {
           setLineEditModalVisible(false);
           setEditingLine(null);
@@ -13590,6 +13864,8 @@ const MapManagement: React.FC = () => {
         }}
         width={400}
         destroyOnClose
+        style={{ top: 20 }}
+        zIndex={3000}
       >
         <Form
           form={networkGroupForm}
@@ -13610,6 +13886,21 @@ const MapManagement: React.FC = () => {
               showCount
             />
           </Form.Item>
+          <Form.Item
+            label="描述"
+            name="description"
+            rules={[
+              { max: 100, message: '描述不能超过100个字符' }
+            ]}
+          >
+            <Input.TextArea 
+              placeholder="请输入路网组描述（可选，最多100个字符）"
+              maxLength={100}
+              showCount
+              rows={3}
+              allowClear
+            />
+          </Form.Item>
         </Form>
       </Modal>
 
@@ -13617,6 +13908,7 @@ const MapManagement: React.FC = () => {
       <Modal
         title={editingPathGroup ? '编辑路径组' : '新增路径组'}
         open={isPathGroupModalVisible}
+        getContainer={getModalContainer}
         onOk={() => {
            pathGroupForm.validateFields().then(() => {
              handleSavePathGroup();
@@ -13810,6 +14102,8 @@ const MapManagement: React.FC = () => {
         okText="确认加入"
         cancelText="取消"
         width={500}
+        getContainer={() => currentMode === 'edit' ? document.querySelector('.map-editor-container') || document.body : document.body}
+        zIndex={currentMode === 'edit' ? 2000 : 1000}
       >
         <Form
           form={pathGroupSelectForm}
@@ -13933,6 +14227,8 @@ const MapManagement: React.FC = () => {
         okText="确认加入"
         cancelText="取消"
         width={500}
+        getContainer={() => currentMode === 'edit' ? document.querySelector('.map-editor-container') || document.body : document.body}
+        zIndex={currentMode === 'edit' ? 2000 : 1000}
       >
         <Form
           form={networkGroupSelectForm}
@@ -13995,7 +14291,9 @@ const MapManagement: React.FC = () => {
                placeholder="请选择路网组"
                style={{ width: '100%' }}
              >
-               {networkGroups.map(group => (
+               {networkGroups
+                 .filter(group => group.areaId === editingArea?.id) // 只显示当前区域的路网组
+                 .map(group => (
                  <Select.Option key={group.id} value={group.id}>
                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                      <span>{group.name}</span>
@@ -14051,7 +14349,9 @@ const MapManagement: React.FC = () => {
       <Modal
         title="新增路网组"
         open={addNetworkGroupModalVisible}
-        zIndex={2100}
+        getContainer={false}
+        zIndex={3000}
+        style={{ top: 20 }}
         onOk={() => {
            addNetworkGroupForm.validateFields().then(async (values: { name: string; description?: string }) => {
             try {
@@ -14069,6 +14369,7 @@ const MapManagement: React.FC = () => {
                 description: values.description || '',
                 createTime: new Date().toISOString(),
                 updateTime: new Date().toISOString(),
+                areaId: editingArea?.id, // 关联当前区域ID
                 nodes: [],
                 paths: []
               };
@@ -14107,10 +14408,64 @@ const MapManagement: React.FC = () => {
               { max: 50, message: '路网组名称不能超过50个字符' }
             ]}
           >
-            <Input placeholder="请输入路网组名称" />
+            <Input placeholder="请输入路网组名称（最多50个字符）" maxLength={50} showCount />
+          </Form.Item>
+          
+          <Form.Item
+            label="描述"
+            name="description"
+            rules={[
+              { max: 200, message: '描述不能超过200个字符' }
+            ]}
+          >
+            <Input.TextArea 
+              placeholder="请输入描述（可选）" 
+              maxLength={200} 
+              showCount 
+              rows={3}
+              style={{ resize: 'none' }}
+            />
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* 批量设置面板 */}
+      <BatchSettingsPanel
+        visible={batchSettingsPanelVisible}
+        onClose={() => setBatchSettingsPanelVisible(false)}
+        selectedPoints={selectedPoints.map(pointId => {
+          const point = mapPoints.find(p => p.id === pointId);
+          return point ? {
+            id: point.id,
+            name: point.name,
+            direction: point.direction || 0,
+            type: point.type || 'normal'
+          } : null;
+        }).filter(Boolean)}
+        onUpdate={(updateData) => {
+          // 批量更新选中的点
+          setMapPoints(prevPoints => 
+            prevPoints.map(point => {
+              if (selectedPoints.includes(point.id)) {
+                return {
+                  ...point,
+                  ...(updateData.direction !== undefined && { direction: updateData.direction }),
+                  ...(updateData.type !== undefined && { type: updateData.type })
+                };
+              }
+              return point;
+            })
+          );
+          
+          // 关闭面板
+          setBatchSettingsPanelVisible(false);
+          
+          // 清除选中状态
+          setSelectedPoints([]);
+          
+          message.success(`已批量更新 ${selectedPoints.length} 个点的设置`);
+        }}
+      />
     </div>
   );
 };
