@@ -385,7 +385,7 @@ const MapManagement: React.FC = () => {
     {
       id: 'area-a',
       name: 'A区域',
-      type: '工作区域',
+      type: '多路网区',
       points: [
         { x: 100, y: 100 },
         { x: 300, y: 100 },
@@ -401,7 +401,7 @@ const MapManagement: React.FC = () => {
     {
       id: 'area-b',
       name: 'B区域',
-      type: '工作区域',
+      type: '多路网区',
       points: [
         { x: 400, y: 100 },
         { x: 600, y: 100 },
@@ -12370,40 +12370,164 @@ const MapManagement: React.FC = () => {
                                             >
                                               <div style={{ flex: 1 }}>
                                                 <div>{area.name} ({area.type || '区域'})</div>
-                                                {area.type === '多路网区' && areaNetworkGroups.length > 0 && (
+                                                {area.type === '多路网区' && (
                                                   <div style={{ marginTop: '4px', paddingLeft: '8px' }}>
-                                                    <Collapse
-                                                      size="small"
-                                                      ghost
-                                                      items={areaNetworkGroups.map(networkGroup => ({
-                                                        key: networkGroup.id,
-                                                        label: (
-                                                          <div style={{ 
-                                                            fontSize: '11px', 
-                                                            color: '#1890ff'
-                                                          }}>
-                                                            {networkGroup.name}
-                                                          </div>
-                                                        ),
-                                                        children: (
-                                                          <div style={{ paddingLeft: '8px' }}>
-                                                            {networkGroup.paths.map(path => (
-                                                              <div 
-                                                                key={path.id}
-                                                                style={{ 
-                                                                  fontSize: '11px', 
-                                                                  lineHeight: '1.4',
-                                                                  color: '#666',
-                                                                  marginBottom: '2px'
-                                                                }}
-                                                              >
-                                                                {path.name}（{path.description}）
-                                                              </div>
-                                                            ))}
-                                                          </div>
-                                                        )
-                                                      }))}
-                                                    />
+                                                    <div style={{ 
+                                                      display: 'flex', 
+                                                      alignItems: 'center', 
+                                                      gap: '4px',
+                                                      marginBottom: '4px'
+                                                    }}>
+                                                      <GroupOutlined style={{ color: '#1890ff', fontSize: '10px' }} />
+                                                      <span style={{ fontSize: '10px', color: '#1890ff' }}>路网组</span>
+                                                      <Badge count={areaNetworkGroups.length} size="small" style={{ backgroundColor: '#1890ff' }} />
+                                                      {currentMode === 'edit' && (
+                                                        <Button 
+                                                          type="text" 
+                                                          size="small" 
+                                                          icon={<PlusOutlined />}
+                                                          style={{ 
+                                                            fontSize: '10px',
+                                                            height: '16px',
+                                                            padding: '0 2px',
+                                                            marginLeft: '2px'
+                                                          }}
+                                                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                                            e.stopPropagation();
+                                                            handleAddNetworkGroup();
+                                                          }}
+                                                        >
+                                                          新增
+                                                        </Button>
+                                                      )}
+                                                    </div>
+                                                    {areaNetworkGroups.length > 0 && (
+                                                      <Collapse
+                                                        size="small"
+                                                        ghost
+                                                        items={areaNetworkGroups.map(networkGroup => ({
+                                                          key: networkGroup.id,
+                                                          label: (
+                                                            <div 
+                                                              style={{ 
+                                                                display: 'flex', 
+                                                                alignItems: 'center', 
+                                                                gap: '4px',
+                                                                justifyContent: 'space-between',
+                                                                width: '100%'
+                                                              }}
+                                                              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                                                                const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
+                                                                if (actionBtns) actionBtns.style.opacity = '1';
+                                                              }}
+                                                              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                                                                const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
+                                                                if (actionBtns) actionBtns.style.opacity = '0';
+                                                              }}
+                                                            >
+                                                              <span style={{ fontSize: '11px', color: '#1890ff' }}>
+                                                                {networkGroup.name}
+                                                              </span>
+                                                              {currentMode === 'edit' && (
+                                                                <div 
+                                                                  className="network-group-actions"
+                                                                  style={{ 
+                                                                    opacity: 0, 
+                                                                    transition: 'opacity 0.2s',
+                                                                    display: 'flex',
+                                                                    gap: '2px'
+                                                                  }}
+                                                                >
+                                                                  <Button 
+                                                                    type="text" 
+                                                                    size="small" 
+                                                                    icon={<EditOutlined />}
+                                                                    style={{ 
+                                                                      fontSize: '10px',
+                                                                      height: '16px',
+                                                                      padding: '0 2px'
+                                                                    }}
+                                                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                                                      e.stopPropagation();
+                                                                      handleEditNetworkGroup(networkGroup);
+                                                                    }}
+                                                                  />
+                                                                  <Button 
+                                                                    type="text" 
+                                                                    size="small" 
+                                                                    danger
+                                                                    icon={<DeleteOutlined />}
+                                                                    style={{ 
+                                                                      fontSize: '10px',
+                                                                      height: '16px',
+                                                                      padding: '0 2px'
+                                                                    }}
+                                                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                                                      e.stopPropagation();
+                                                                      handleDeleteNetworkGroup(networkGroup.id);
+                                                                    }}
+                                                                  />
+                                                                </div>
+                                                              )}
+                                                            </div>
+                                                          ),
+                                                          children: (
+                                                            <div style={{ paddingLeft: '8px' }}>
+                                                              {networkGroup.paths.map(path => (
+                                                                <div 
+                                                                  key={path.id}
+                                                                  style={{ 
+                                                                    fontSize: '11px', 
+                                                                    lineHeight: '1.4',
+                                                                    color: '#666',
+                                                                    marginBottom: '2px',
+                                                                    display: 'flex',
+                                                                    justifyContent: 'space-between',
+                                                                    alignItems: 'center',
+                                                                    padding: '1px 2px',
+                                                                    borderRadius: '2px',
+                                                                    transition: 'background-color 0.2s'
+                                                                  }}
+                                                                  onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                                                                    e.currentTarget.style.backgroundColor = '#f5f5f5';
+                                                                    const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
+                                                                    if (removeBtn) removeBtn.style.opacity = '1';
+                                                                  }}
+                                                                  onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                                                                    e.currentTarget.style.backgroundColor = 'transparent';
+                                                                    const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
+                                                                    if (removeBtn) removeBtn.style.opacity = '0';
+                                                                  }}
+                                                                >
+                                                                  <span>{path.name}（{path.description}）</span>
+                                                                  {currentMode === 'edit' && (
+                                                                    <Button 
+                                                                      className="remove-btn"
+                                                                      type="text" 
+                                                                      size="small" 
+                                                                      danger
+                                                                      style={{ 
+                                                                        opacity: 0, 
+                                                                        transition: 'opacity 0.2s',
+                                                                        fontSize: '9px',
+                                                                        height: '14px',
+                                                                        padding: '0 2px'
+                                                                      }}
+                                                                      onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                                                                         e.stopPropagation();
+                                                                         removePathFromGroup(networkGroup.id, path.id);
+                                                                       }}
+                                                                    >
+                                                                      移除
+                                                                    </Button>
+                                                                  )}
+                                                                </div>
+                                                              ))}
+                                                            </div>
+                                                          )
+                                                        }))}
+                                                      />
+                                                    )}
                                                   </div>
                                                 )}
                                               </div>
@@ -12604,181 +12728,6 @@ const MapManagement: React.FC = () => {
                                                             e.stopPropagation();
                                                             removePathFromPathGroup(group.id, path.id);
                                                           }}
-                                                        >
-                                                          移除
-                                                        </Button>
-                                                      )}
-                                                    </div>
-                                                  ))}
-                                                </div>
-                                              </div>
-                                            </div>
-                                          )
-                                        }))}
-                                      />
-                                    </div>
-                                  )
-                                },
-                                {key: 'network-groups',
-                                  label: (
-                                    <div 
-                                      style={{ 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        gap: '8px',
-                                        position: 'relative'
-                                      }}
-                                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                                        const addBtn = e.currentTarget.querySelector('.network-group-add-btn') as HTMLElement;
-                                        if (addBtn) addBtn.style.opacity = '1';
-                                      }}
-                                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                                        const addBtn = e.currentTarget.querySelector('.network-group-add-btn') as HTMLElement;
-                                        if (addBtn) addBtn.style.opacity = '0';
-                                      }}
-                                    >
-                                      <GroupOutlined style={{ color: '#1890ff' }} />
-                                      <span>路网组</span>
-                                      <Badge count={networkGroups.length} size="small" style={{ backgroundColor: '#1890ff' }} />
-                                      {currentMode === 'edit' && (
-                                        <Button 
-                                          className="network-group-add-btn"
-                                          type="text" 
-                                          size="small" 
-                                          icon={<PlusOutlined />}
-                                          style={{ 
-                                            opacity: 0, 
-                                            transition: 'opacity 0.2s',
-                                            fontSize: '12px',
-                                            height: '20px',
-                                            padding: '0 4px',
-                                            marginLeft: '4px'
-                                          }}
-                                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                            e.stopPropagation();
-                                            handleAddNetworkGroup();
-                                          }}
-                                        >
-                                          新增
-                                        </Button>
-                                      )}
-                                    </div>
-                                  ),
-                                  children: (
-                                    <div style={{ paddingLeft: '8px' }}>
-                                      <Collapse
-                                        size="small"
-                                        ghost
-                                        items={networkGroups.filter(group => group.areaId === editingArea?.id).map(group => ({
-                                          key: group.id,
-                                          label: (
-                                            <div 
-                                              style={{ 
-                                                display: 'flex', 
-                                                alignItems: 'center', 
-                                                gap: '8px',
-                                                justifyContent: 'space-between',
-                                                width: '100%'
-                                              }}
-                                              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                                                const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
-                                                if (actionBtns) actionBtns.style.opacity = '1';
-                                              }}
-                                              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                                                const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
-                                                if (actionBtns) actionBtns.style.opacity = '0';
-                                              }}
-                                            >
-                                              <span>{group.name}</span>
-                                              {currentMode === 'edit' && (
-                                                <div 
-                                                  className="network-group-actions"
-                                                  style={{ 
-                                                    opacity: 0, 
-                                                    transition: 'opacity 0.2s',
-                                                    display: 'flex',
-                                                    gap: '4px'
-                                                  }}
-                                                >
-                                                  <Button 
-                                                    type="text" 
-                                                    size="small" 
-                                                    icon={<EditOutlined />}
-                                                    style={{ 
-                                                      fontSize: '12px',
-                                                      height: '20px',
-                                                      padding: '0 4px'
-                                                    }}
-                                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                                      e.stopPropagation();
-                                                      handleEditNetworkGroup(group);
-                                                    }}
-                                                  />
-                                                  <Button 
-                                                    type="text" 
-                                                    size="small" 
-                                                    danger
-                                                    icon={<DeleteOutlined />}
-                                                    style={{ 
-                                                      fontSize: '12px',
-                                                      height: '20px',
-                                                      padding: '0 4px'
-                                                    }}
-                                                    onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                                      e.stopPropagation();
-                                                      handleDeleteNetworkGroup(group.id);
-                                                    }}
-                                                  />
-                                                </div>
-                                              )}
-                                            </div>
-                                          ),
-                                          children: (
-                                            <div style={{ paddingLeft: '8px' }}>
-                                              <div>
-                                                <div style={{ fontSize: '12px', lineHeight: '1.4' }}>
-                                                  {group.paths.map(path => (
-                                                    <div 
-                                                      key={path.id}
-                                                      style={{ 
-                                                        fontSize: '12px', 
-                                                        lineHeight: '1.4',
-                                                        display: 'flex',
-                                                        justifyContent: 'space-between',
-                                                        alignItems: 'center',
-                                                        padding: '1px 4px',
-                                                        borderRadius: '4px',
-                                                        transition: 'background-color 0.2s'
-                                                      }}
-                                                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                                                        e.currentTarget.style.backgroundColor = '#f5f5f5';
-                                                        const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
-                                                        if (removeBtn) removeBtn.style.opacity = '1';
-                                                      }}
-                                                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                                        const removeBtn = e.currentTarget.querySelector('.remove-btn') as HTMLElement;
-                                                        if (removeBtn) removeBtn.style.opacity = '0';
-                                                      }}
-                                                    >
-                                                      <span>{path.name} ({path.description})</span>
-                                                      {currentMode === 'edit' && (
-                                                        <Button 
-                                                          className="remove-btn"
-                                                          type="text" 
-                                                          size="small" 
-                                                          danger
-                                                          style={{ 
-                                                            opacity: 0, 
-                                                            transition: 'opacity 0.2s',
-                                                            fontSize: '10px',
-                                                            height: '20px',
-                                                            padding: '0 4px'
-                                                          }}
-                                                          onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
-                                                             e.stopPropagation();
-                                                             removePathFromGroup(group.id, path.id);
-                                                           }}
                                                         >
                                                           移除
                                                         </Button>
