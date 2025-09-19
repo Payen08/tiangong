@@ -12320,8 +12320,8 @@ const MapManagement: React.FC = () => {
                                   children: (
                                     <div style={{ paddingLeft: '16px' }}>
                                       {mapAreas.map((area) => {
-                                        // 获取关联的路网组信息
-                                        const networkGroup = area.networkGroupId ? networkGroups.find(ng => ng.id === area.networkGroupId) : null;
+                                        // 获取该区域下的所有路网组信息
+                                        const areaNetworkGroups = networkGroups.filter(ng => ng.areaId === area.id);
                                         
                                         return (
                                           <div key={area.id}>
@@ -12350,12 +12350,12 @@ const MapManagement: React.FC = () => {
                                             >
                                               <div style={{ flex: 1 }}>
                                                 <div>{area.name} ({area.type || '区域'})</div>
-                                                {area.type === '多路网区' && networkGroup && (
+                                                {area.type === '多路网区' && areaNetworkGroups.length > 0 && (
                                                   <div style={{ marginTop: '4px', paddingLeft: '8px' }}>
                                                     <Collapse
                                                       size="small"
                                                       ghost
-                                                      items={[{
+                                                      items={areaNetworkGroups.map(networkGroup => ({
                                                         key: networkGroup.id,
                                                         label: (
                                                           <div style={{ 
@@ -12382,7 +12382,7 @@ const MapManagement: React.FC = () => {
                                                             ))}
                                                           </div>
                                                         )
-                                                      }]}
+                                                      }))}
                                                     />
                                                   </div>
                                                 )}
