@@ -1,11 +1,6 @@
 import React from 'react';
 import { Card, Row, Col, Statistic, List, Tag } from 'antd';
 import {
-  UserOutlined,
-  TeamOutlined,
-  SafetyOutlined,
-  SettingOutlined,
-  PlusOutlined,
   FileTextOutlined,
   CheckCircleOutlined,
   WifiOutlined,

@@ -51,7 +51,7 @@ import {
   RightOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  CloseOutlined,
+
   LoadingOutlined,
   ReloadOutlined,
   DragOutlined,
@@ -123,7 +123,7 @@ interface MapLine {
 interface MapArea {
   id: string;
   name: string;
-  type: '禁行区域' | '调速区域' | '多路网区' | 'forbidden' | 'cleaning' | 'virtual_wall' | 'slow_cleaning';
+  type: '工作区域' | '禁行区域' | '调速区域' | '多路网区' | 'forbidden' | 'cleaning' | 'virtual_wall' | 'slow_cleaning';
   points: { x: number; y: number }[];
   color: string;
   fillOpacity: number;
@@ -395,6 +395,7 @@ const MapManagement: React.FC = () => {
       color: '#1890ff',
       fillColor: 'rgba(24, 144, 255, 0.1)',
       strokeColor: '#1890ff',
+      fillOpacity: 0.1,
       opacity: 0.3
     },
     {
@@ -410,6 +411,7 @@ const MapManagement: React.FC = () => {
       color: '#52c41a',
       fillColor: 'rgba(82, 196, 26, 0.1)',
       strokeColor: '#52c41a',
+      fillOpacity: 0.1,
       opacity: 0.3
     }
   ]); // 地图上的区域
@@ -5855,26 +5857,7 @@ const MapManagement: React.FC = () => {
     }
   };
 
-  // 批量更新选中的点
-  const handleBatchUpdatePoints = (updates: { direction?: number; type?: string }) => {
-    if (selectedPoints.length === 0) {
-      message.warning('请先选择要更新的点');
-      return;
-    }
 
-    // 保存历史记录（批量编辑之前）
-    saveToHistory();
-
-    setMapPoints(prev => 
-      prev.map(point => 
-        selectedPoints.includes(point.id) 
-          ? { ...point, ...updates }
-          : point
-      )
-    );
-
-    message.success(`已批量更新 ${selectedPoints.length} 个点`);
-  };
 
   // 保存区域编辑
   const handleSaveAreaEdit = (values: any) => {
@@ -14441,7 +14424,7 @@ const MapManagement: React.FC = () => {
             direction: point.direction || 0,
             type: point.type || 'normal'
           } : null;
-        }).filter(Boolean)}
+        }).filter((item): item is { id: string; name: string; direction: number; type: string } => item !== null)}
         onUpdate={(updateData) => {
           // 批量更新选中的点
           setMapPoints(prevPoints => 

@@ -4,14 +4,7 @@ import {
   Typography,
   message,
   Spin,
-  Card,
-  List,
-  Input,
-  Tooltip,
   Space,
-  Avatar,
-  Tag,
-  Select,
 } from 'antd';
 
 
@@ -20,21 +13,12 @@ import {
   FullscreenExitOutlined,
   ReloadOutlined,
   EyeOutlined,
-  MenuUnfoldOutlined,
-  MenuFoldOutlined,
-  VideoCameraOutlined,
-  InfoCircleOutlined,
   BuildOutlined,
   RobotOutlined,
   ScheduleOutlined,
   EyeInvisibleOutlined,
   CarOutlined,
   AndroidOutlined,
-  PlayCircleOutlined,
-  PauseCircleOutlined,
-  CloseCircleOutlined,
-  StopOutlined,
-  HomeOutlined,
   VerticalAlignTopOutlined,
   BorderOutlined,
 } from '@ant-design/icons';
@@ -42,7 +26,6 @@ import ThreeScene, { ThreeSceneRef } from '@/components/ThreeScene';
 import FloorSelector from '@/components/FloorSelector';
 
 const { Text } = Typography;
-const { Option } = Select;
 
 // 机器人类型定义
 interface Robot {
@@ -72,21 +55,7 @@ interface Task {
 
 
 
-// 楼层数据接口
-interface FloorData {
-  id: string;
-  name: string;
-  level: number;
-  mapId: string;
-  mapName: string;
-  thumbnail: string;
-  status: 'active' | 'inactive';
-  deviceCount: number;
-  robotCount: number;
-}
 
-// 视图模式类型
-type ViewMode = 'overview' | 'floor';
 
 // 模拟机器人数据
 const mockRobots: Robot[] = [
@@ -299,63 +268,16 @@ const mockTasks: Task[] = [
 
 const DigitalTwin: React.FC = () => {
   const [loading, setLoading] = useState(true); // 页面加载状态
-  const [viewMode, setViewMode] = useState<ViewMode>('overview');
   const [selectedFloor, setSelectedFloor] = useState<string | null>('all');
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [floors, setFloors] = useState<FloorData[]>([]);
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
-  
-  // 机器人和任务相关状态
-  const [robots] = useState<Robot[]>(mockRobots);
-  const [tasks] = useState<Task[]>(mockTasks);
-
-  const [selectedRobot, setSelectedRobot] = useState<string | null>(null);
   
   // ThreeScene组件引用
   const threeSceneRef = React.useRef<ThreeSceneRef>(null);
 
-  // 模拟楼层数据
+  // 模拟加载延迟
   useEffect(() => {
-    const mockFloors: FloorData[] = [
-      {
-        id: 'floor_1',
-        name: '一楼大厅',
-        level: 1,
-        mapId: '1',
-        mapName: '一楼平面图',
-        thumbnail: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
-        status: 'active',
-        deviceCount: 15,
-        robotCount: 3,
-      },
-      {
-        id: 'floor_2',
-        name: '二楼办公区',
-        level: 2,
-        mapId: '2',
-        mapName: '二楼平面图',
-        thumbnail: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
-        status: 'active',
-        deviceCount: 12,
-        robotCount: 2,
-      },
-      {
-        id: 'floor_3',
-        name: '三楼生产区',
-        level: 3,
-        mapId: '3',
-        mapName: '三楼平面图',
-        thumbnail: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300&h=200&fit=crop&crop=center',
-        status: 'active',
-        deviceCount: 18,
-        robotCount: 4,
-      },
-    ];
-    
-    setFloors(mockFloors);
-    
-    // 模拟加载延迟
     const timer = setTimeout(() => {
       setLoading(false);
     }, 100);
@@ -419,7 +341,6 @@ const DigitalTwin: React.FC = () => {
   // 切换到楼层视图
   const handleFloorChange = (floorId: string) => {
     setSelectedFloor(floorId);
-    setViewMode('floor');
   };
 
   // 工具函数
@@ -432,190 +353,22 @@ const DigitalTwin: React.FC = () => {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'running': return 'green';
-      case 'idle': return 'blue';
-      case 'charging': return 'orange';
-      case 'error': return 'red';
-      case 'offline': return 'gray';
-      case 'move_stopped': return 'volcano';
-      default: return 'default';
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'running': return '运行中';
-      case 'idle': return '空闲';
-      case 'charging': return '充电中';
-      case 'error': return '故障';
-      case 'offline': return '离线';
-      case 'move_stopped': return '移动停止';
-      default: return '未知';
-    }
-  };
-
-  const getStatusAvatarColor = (status: string) => {
-    switch (status) {
-      case 'running': return '#52c41a';
-      case 'idle': return '#1890ff';
-      case 'charging': return '#fa8c16';
-      case 'error': return '#ff4d4f';
-      case 'offline': return '#8c8c8c';
-      case 'move_stopped': return '#fa541c';
-      default: return '#d9d9d9';
-    }
-  };
-
-  const getOnlineStatusColor = (isOnline: boolean) => {
-    return isOnline ? 'green' : 'red';
-  };
-
-  const getOnlineStatusText = (isOnline: boolean) => {
-    return isOnline ? '在线' : '离线';
-  };
 
 
 
-  const getTaskStatusColor = (status: string) => {
-    switch (status) {
-      case 'executing': return 'blue';
-      case 'pending': return 'orange';
-      case 'paused': return 'volcano';
-      case 'completed': return 'green';
-      case 'cancelled': return 'gray';
-      case 'error': return 'red';
-      default: return 'default';
-    }
-  };
-
-  const getTaskStatusText = (status: string) => {
-    switch (status) {
-      case 'executing': return '执行中';
-      case 'pending': return '待执行';
-      case 'paused': return '已暂停';
-      case 'completed': return '已完成';
-      case 'cancelled': return '已取消';
-      case 'error': return '错误';
-      default: return '未知';
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'red';
-      case 'medium': return 'orange';
-      case 'low': return 'blue';
-      default: return 'default';
-    }
-  };
 
 
-
-  const handleRobotClick = (robot: Robot) => {
-    setSelectedRobot(robot.id);
-    message.info(`选中机器人: ${robot.name}`);
-  };
-
-  const getTaskActions = (task: Task) => {
-    const actions = [];
-    
-    if (task.status === 'pending') {
-      actions.push(
-        <Button 
-          key="start" 
-          size="small" 
-          icon={<PlayCircleOutlined />}
-          style={{
-            backgroundColor: 'rgba(82, 196, 26, 0.15)',
-            color: 'rgba(82, 196, 26, 0.9)',
-            border: '1px solid rgba(82, 196, 26, 0.3)',
-            borderRadius: '4px'
-          }}
-        >
-          开始
-        </Button>
-      );
-    }
-    
-    if (task.status === 'executing') {
-      actions.push(
-        <Button 
-          key="pause" 
-          size="small" 
-          icon={<PauseCircleOutlined />}
-          style={{
-            backgroundColor: 'rgba(255, 193, 7, 0.15)',
-            color: 'rgba(255, 193, 7, 0.9)',
-            border: '1px solid rgba(255, 193, 7, 0.3)',
-            borderRadius: '4px'
-          }}
-        >
-          暂停
-        </Button>
-      );
-    }
-    
-    if (task.status === 'paused') {
-      actions.push(
-        <Button 
-          key="resume" 
-          size="small" 
-          icon={<PlayCircleOutlined />}
-          style={{
-            backgroundColor: 'rgba(24, 144, 255, 0.15)',
-            color: 'rgba(24, 144, 255, 0.9)',
-            border: '1px solid rgba(24, 144, 255, 0.3)',
-            borderRadius: '4px'
-          }}
-        >
-          继续
-        </Button>
-      );
-    }
-    
-    if (['pending', 'executing', 'paused'].includes(task.status)) {
-       actions.push(
-         <Button 
-           key="cancel" 
-           size="small" 
-           icon={<StopOutlined />}
-           style={{
-             backgroundColor: 'rgba(255, 77, 79, 0.15)',
-             color: 'rgba(255, 77, 79, 0.9)',
-             border: '1px solid rgba(255, 77, 79, 0.3)',
-             borderRadius: '4px'
-           }}
-         >
-           取消
-         </Button>
-       );
-     }
-    
-    return actions;
-  };
 
 
 
   // 返回全场景视图（重置视图）
   const handleBackToOverview = () => {
-    setViewMode('overview');
     // 重置视图时设置为全部楼层
     setSelectedFloor('all');
     if (threeSceneRef.current && threeSceneRef.current.setAllFloorsView) {
       threeSceneRef.current.setAllFloorsView();
     }
     message.success('已重置到初始3D视图视角');
-  };
-
-  // 刷新3D视图
-  const handleRefresh = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      message.success('3D视图已刷新');
-    }, 1000);
   };
 
   // 新增面板控制函数
@@ -625,14 +378,6 @@ const DigitalTwin: React.FC = () => {
     const newVisible = !(leftPanelVisible && rightPanelVisible);
     setLeftPanelVisible(newVisible);
     setRightPanelVisible(newVisible);
-  };
-  
-  // 视图控制函数
-  const handleResetView = () => {
-    if (threeSceneRef.current && threeSceneRef.current.resetView) {
-      threeSceneRef.current.resetView();
-      message.success('已重置到初始3D视角');
-    }
   };
   
   const handleTopView = () => {

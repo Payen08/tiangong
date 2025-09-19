@@ -1,10 +1,6 @@
-import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
-
-interface ThreeSceneProps {
-  // This component will fetch and manage its own state for now.
-}
 
 export interface ThreeSceneRef {
   resetView: () => void;
@@ -15,7 +11,7 @@ export interface ThreeSceneRef {
   testRobotMovement: () => void;
 }
 
-const ThreeScene = forwardRef<ThreeSceneRef>((props, ref) => {
+const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
   console.log('[ThreeScene] 组件开始渲染');
   const mountRef = useRef<HTMLDivElement>(null);
   const animationIdRef = useRef<number | null>(null);
@@ -297,7 +293,6 @@ const ThreeScene = forwardRef<ThreeSceneRef>((props, ref) => {
     const spacing = 8; // 设备间距
     const startX = -20; // 起始X坐标
     const floorHeight = 25; // 楼层高度间距
-    const rowSpacing = 25; // 行间距
     
     // 创建楼层组
     const floor1Group = new THREE.Group();
@@ -459,43 +454,9 @@ const ThreeScene = forwardRef<ThreeSceneRef>((props, ref) => {
       return false;
     };
 
-    // 寻找两点间的路径段
-    const findPathSegment = (startPos: THREE.Vector3, endPos: THREE.Vector3): PathSegment | null => {
-      return pathSegments.find(segment => {
-        const threshold = 0.1;
-        return (
-          (segment.startPoint.distanceTo(startPos) < threshold && segment.endPoint.distanceTo(endPos) < threshold) ||
-          (segment.startPoint.distanceTo(endPos) < threshold && segment.endPoint.distanceTo(startPos) < threshold)
-        );
-      }) || null;
-    };
 
-    // 申请路径资源
-    const requestPathResource = (startStation: StationNode, endStation: StationNode): boolean => {
-      const pathSegment = findPathSegment(startStation.position, endStation.position);
-      if (pathSegment) {
-        return occupyPath(pathSegment.id);
-      }
-      return false;
-    };
 
-    // 释放路径资源
-    const releasePathResource = (startStation: StationNode, endStation: StationNode): boolean => {
-      const pathSegment = findPathSegment(startStation.position, endStation.position);
-      if (pathSegment) {
-        return releasePath(pathSegment.id);
-      }
-      return false;
-    };
 
-    // 随机选择目标站点
-    const getRandomTargetStation = (currentStationId: string): StationNode | null => {
-      const availableStations = stationNodes.filter(node => node.id !== currentStationId);
-      if (availableStations.length === 0) return null;
-      
-      const randomIndex = Math.floor(Math.random() * availableStations.length);
-      return availableStations[randomIndex];
-    };
 
     // 构建站点连接关系
      const buildStationConnections = () => {
@@ -524,74 +485,9 @@ const ThreeScene = forwardRef<ThreeSceneRef>((props, ref) => {
        });
      };
 
-     // 获取站点的邻接站点
-     const getNeighborStations = (stationId: string): StationNode[] => {
-       const station = stationNodes.find(s => s.id === stationId);
-       if (!station) return [];
 
-       const neighbors: StationNode[] = [];
-       const threshold = 0.1;
 
-       station.connections.forEach(pathId => {
-         const segment = pathSegments.find(p => p.id === pathId);
-         if (!segment) return;
 
-         // 找到路径段连接的另一个站点
-         if (segment.startPoint.distanceTo(station.position) < threshold) {
-           const neighbor = stationNodes.find(s => 
-             segment.endPoint.distanceTo(s.position) < threshold
-           );
-           if (neighbor && !neighbors.find(n => n.id === neighbor.id)) {
-             neighbors.push(neighbor);
-           }
-         } else if (segment.endPoint.distanceTo(station.position) < threshold) {
-           const neighbor = stationNodes.find(s => 
-             segment.startPoint.distanceTo(s.position) < threshold
-           );
-           if (neighbor && !neighbors.find(n => n.id === neighbor.id)) {
-             neighbors.push(neighbor);
-           }
-         }
-       });
-
-       return neighbors;
-     };
-
-     // 使用BFS算法进行路径规划
-     const planPath = (startStation: StationNode, targetStation: StationNode): StationNode[] => {
-       if (startStation.id === targetStation.id) return [startStation];
-
-       const visited = new Set<string>();
-       const queue: { station: StationNode; path: StationNode[] }[] = [];
-       
-       queue.push({ station: startStation, path: [startStation] });
-       visited.add(startStation.id);
-
-       while (queue.length > 0) {
-         const { station: currentStation, path } = queue.shift()!;
-
-         // 检查是否到达目标
-         if (currentStation.id === targetStation.id) {
-           return path;
-         }
-
-         // 探索邻接站点
-         const neighbors = getNeighborStations(currentStation.id);
-         for (const neighbor of neighbors) {
-           if (!visited.has(neighbor.id)) {
-             visited.add(neighbor.id);
-             queue.push({
-               station: neighbor,
-               path: [...path, neighbor]
-             });
-           }
-         }
-       }
-
-       // 如果找不到路径，返回直接连接
-       console.warn(`无法找到从 ${startStation.label} 到 ${targetStation.label} 的路径，使用直接连接`);
-       return [startStation, targetStation];
-     };
 
     // CRM机器人移动状态 - 参考视图场控页面的机器人状态管理
     interface RobotMovementState {
@@ -687,13 +583,7 @@ const ThreeScene = forwardRef<ThreeSceneRef>((props, ref) => {
       return [currentPathId, nextPathId];
     };
 
-    // 释放路径资源
-    const releasePathResources = (pathIds: string[]) => {
-      pathIds.forEach(pathId => {
-        releasePath(pathId);
-        console.log(`释放路径资源：${pathId}`);
-      });
-    };
+
 
     // 机器人移动动画 - 参考视图场控页面的移动逻辑
     const animateRobotMovement = () => {
@@ -913,13 +803,10 @@ const ThreeScene = forwardRef<ThreeSceneRef>((props, ref) => {
       const nodeY = 0.1; // 站点Y坐标，贴近地面
       const equipmentRows = [25, 0, -25, -50]; // 设备行的Z坐标
       const equipmentCols = [-20, -12, -4, 4, 12, 20]; // 设备列的X坐标
-      const rowLabels = ['1-1', '1-2', '1-3', '1-4']; // 行标签
       
       // 为每台设备创建站点，根据需求选择性创建前后站点
-      equipmentRows.forEach((z, rowIndex) => {
-        equipmentCols.forEach((x, colIndex) => {
-          const rowLabel = rowLabels[rowIndex];
-          const colLabel = (colIndex + 1).toString(); // 列编号从1开始
+      equipmentRows.forEach((z) => {
+        equipmentCols.forEach((x) => {
           
           // 设备前侧的站点 (Z坐标加上5个单位，距离更远，Y坐标贴地面)
           // 1-1行(Z=25)和1-3行(Z=-25)不创建前面的站点
