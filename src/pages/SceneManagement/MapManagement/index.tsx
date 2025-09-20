@@ -485,6 +485,7 @@ const MapManagement: React.FC = () => {
   const [hideMapNodes, setHideMapNodes] = useState(false); // 隐藏地图节点
   const [hideAllPoints, setHideAllPoints] = useState(false); // 隐藏所有点
   const [hideAllPaths, setHideAllPaths] = useState(false); // 隐藏所有路径
+  const [hideVehicleModels, setHideVehicleModels] = useState(true); // 隐藏车体模型，默认开启
   
   // 点拖拽相关状态
   const [isDraggingPoint, setIsDraggingPoint] = useState(false); // 是否正在拖拽点
@@ -7248,6 +7249,70 @@ const MapManagement: React.FC = () => {
     return colorMap[type] || '#8c8c8c';
   };
 
+  // 判断是否需要显示车体模型的点位类型
+  const shouldShowVehicleModel = (type: string) => {
+    const vehicleModelTypes = ['站点', '停靠点', '充电点', '临停点', '电梯点', '自动门', '归位点'];
+    return vehicleModelTypes.includes(type);
+  };
+
+  // 渲染车体模型组件
+  const renderVehicleModel = (point: any, canvasCoords: { x: number, y: number }) => {
+    if (hideVehicleModels || !shouldShowVehicleModel(point.type)) {
+      return null;
+    }
+
+    const vehicleWidth = 20;  // 车体宽度
+    const vehicleHeight = 40; // 车体高度
+    const borderRadius = 4;   // 圆角半径
+    
+    // 获取点位对应的颜色
+    const pointColor = getPointColor(point.type);
+    
+    // 将十六进制颜色转换为rgba格式，用于半透明背景
+    const hexToRgba = (hex: string, alpha: number) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    return (
+      <div
+        key={`vehicle-${point.id}`}
+        style={{
+          position: 'absolute',
+          left: canvasCoords.x - vehicleWidth / 2,
+          top: canvasCoords.y - vehicleHeight / 2,
+          width: `${vehicleWidth}px`,
+          height: `${vehicleHeight}px`,
+          backgroundColor: hexToRgba(pointColor, 0.1), // 使用点位颜色的半透明背景
+          border: `2px solid ${pointColor}`, // 使用点位颜色的边框
+          borderRadius: `${borderRadius}px`,
+          zIndex: 999, // 确保在点位下方
+          transform: `rotate(${(point.direction || 0)}deg)`,
+          transformOrigin: 'center',
+          transition: 'all 0.2s ease',
+          pointerEvents: 'none', // 不阻挡点位的交互
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)' // 轻微阴影
+        }}
+      >
+        {/* 车体前端指示器 */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '2px',
+            left: '50%',
+            width: '6px',
+            height: '6px',
+            backgroundColor: pointColor, // 使用点位颜色
+            borderRadius: '50%',
+            transform: 'translateX(-50%)',
+          }}
+        />
+      </div>
+    );
+  };
+
   // 获取更深的颜色用于描边
   // 颜色加深函数 - 已移除未使用的函数
   
@@ -12281,6 +12346,22 @@ const MapManagement: React.FC = () => {
                       })()}
                     </svg>
                     
+                    {/* 车体模型 - 在点位下方渲染 */}
+                    {mapType === 'topology' && mapPoints.map((point) => {
+                      // 检查是否应该隐藏该点
+                      const shouldHidePoint = hideAllPoints || (hideMapNodes && point.type === '节点');
+                      
+                      // 如果应该隐藏，则不渲染车体模型
+                      if (shouldHidePoint) {
+                        return null;
+                      }
+                      
+                      // 直接使用画布坐标，因为父容器已经应用了CSS transform
+                      const canvasCoords = { x: point.x, y: point.y };
+                      
+                      return renderVehicleModel(point, canvasCoords);
+                    })}
+
                     {/* 绘制的点 - 仅在拓扑地图模式下显示，并根据隐藏状态控制显示 */}
                     {mapType === 'topology' && mapPoints.map((point) => {
                       // 检查是否应该隐藏该点
@@ -14026,6 +14107,13 @@ const MapManagement: React.FC = () => {
                                   style={{ fontSize: '13px' }}
                                 >
                                   隐藏所有路径
+                                </Checkbox>
+                                <Checkbox
+                                  checked={hideVehicleModels}
+                                  onChange={(e) => setHideVehicleModels(e.target.checked)}
+                                  style={{ fontSize: '13px' }}
+                                >
+                                  隐藏车体模型
                                 </Checkbox>
                               </div>
                             </div>
