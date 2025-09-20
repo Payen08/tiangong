@@ -3055,12 +3055,6 @@ const MapManagement: React.FC = () => {
                 onClick: () => handleEdit(record),
               },
               {
-                key: 'sync',
-                icon: <SyncOutlined />,
-                label: '同步',
-                onClick: () => handleMapSync(record),
-              },
-              {
                 key: 'settings',
                 icon: <SettingOutlined />,
                 label: '设置',
@@ -3134,12 +3128,6 @@ const MapManagement: React.FC = () => {
                         icon: <EditOutlined />,
                         label: '编辑',
                         onClick: () => handleEdit(record),
-                      },
-                      {
-                        key: 'sync',
-                        icon: <SyncOutlined />,
-                        label: '同步',
-                        onClick: () => handleMapSync(record),
                       },
                       {
                         key: 'settings',
@@ -3897,6 +3885,11 @@ const MapManagement: React.FC = () => {
             status: 'success',
             duration 
           });
+          
+          // 切图成功后自动启用对应的地图文件
+          if (slicingMapFile && selectedMap) {
+            handleEnableFile(slicingMapFile, selectedMap.id);
+          }
         } else {
           const errorMessage = '切图失败：网络连接超时，请检查机器人连接状态';
           setSliceStatuses(prev => prev.map(s => 
@@ -8535,15 +8528,25 @@ const MapManagement: React.FC = () => {
                 height: '32px'
               }}>
                 <Title level={5} style={{ margin: 0, color: '#666', fontSize: '16px', fontWeight: 500, lineHeight: '32px' }}>地图文件</Title>
-                <Button 
-                  type="primary" 
-                  icon={<PlusOutlined />} 
-                  size="small"
-                  onClick={handleAddMapFile}
-                  disabled={!selectedMap}
-                >
-                  新增
-                </Button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <Button 
+                    icon={<SyncOutlined />} 
+                    size="small"
+                    onClick={() => selectedMap && handleMapSync(selectedMap)}
+                    disabled={!selectedMap}
+                  >
+                    同步
+                  </Button>
+                  <Button 
+                    type="primary" 
+                    icon={<PlusOutlined />} 
+                    size="small"
+                    onClick={handleAddMapFile}
+                    disabled={!selectedMap}
+                  >
+                    新增
+                  </Button>
+                </div>
               </div>
 
               {selectedMap ? (
