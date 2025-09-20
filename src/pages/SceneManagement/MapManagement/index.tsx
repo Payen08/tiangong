@@ -51,7 +51,7 @@ import {
   RightOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-
+  ClockCircleOutlined,
   LoadingOutlined,
   ReloadOutlined,
   DragOutlined,
@@ -223,7 +223,9 @@ interface SyncStatus {
 // 同步结果接口
 interface SyncResult {
   robotId: string;
+  robotName: string;
   success: boolean;
+  status: 'success' | 'failed';
   errorMessage?: string;
   duration: number;
 }
@@ -270,8 +272,18 @@ const MapManagement: React.FC = () => {
   // 同步进度相关状态
   const [syncProgressModalVisible, setSyncProgressModalVisible] = useState(false);
   const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([]);
-
   const [allSyncCompleted, setAllSyncCompleted] = useState(false);
+  
+  // 切图相关状态
+  const [mapSliceDrawerVisible, setMapSliceDrawerVisible] = useState(false);
+  const [slicingMapFile, setSlicingMapFile] = useState<MapFile | null>(null);
+  const [selectedSliceRobots, setSelectedSliceRobots] = useState<string[]>([]);
+  const [selectedSliceMapFiles, setSelectedSliceMapFiles] = useState<string[]>([]);
+  
+  // 切图进度相关状态
+  const [sliceProgressModalVisible, setSliceProgressModalVisible] = useState(false);
+  const [sliceStatuses, setSliceStatuses] = useState<SyncStatus[]>([]);
+  const [allSliceCompleted, setAllSliceCompleted] = useState(false);
   
   // 地图名称搜索相关状态已移除
   
@@ -427,7 +439,6 @@ const MapManagement: React.FC = () => {
   
   // 批量设置面板状态
   const [batchSettingsPanelVisible, setBatchSettingsPanelVisible] = useState(false); // 批量设置面板显示状态
-  const [hoveredAreaId, setHoveredAreaId] = useState<string | null>(null); // 鼠标悬停的区域ID
   
   // 复制粘贴相关状态
   const [copiedElements, setCopiedElements] = useState<{
@@ -3326,7 +3337,13 @@ const MapManagement: React.FC = () => {
               ? { ...s, status: 'success', progress: 100, endTime }
               : s
           ));
-          results.push({ robotId: status.robotId, success: true, duration });
+          results.push({ 
+            robotId: status.robotId, 
+            robotName: status.robotName,
+            success: true, 
+            status: 'success',
+            duration 
+          });
         } else {
           const errorMessage = '网络连接超时，请检查机器人连接状态';
           setSyncStatuses(prev => prev.map(s => 
@@ -3334,7 +3351,14 @@ const MapManagement: React.FC = () => {
               ? { ...s, status: 'failed', errorMessage, endTime }
               : s
           ));
-          results.push({ robotId: status.robotId, success: false, errorMessage, duration });
+          results.push({ 
+            robotId: status.robotId, 
+            robotName: status.robotName,
+            success: false, 
+            status: 'failed',
+            errorMessage, 
+            duration 
+          });
         }
       } catch (error) {
         const endTime = new Date().toLocaleTimeString();
@@ -3345,7 +3369,14 @@ const MapManagement: React.FC = () => {
             ? { ...s, status: 'failed', errorMessage, endTime }
             : s
         ));
-        results.push({ robotId: status.robotId, success: false, errorMessage, duration });
+        results.push({ 
+          robotId: status.robotId, 
+          robotName: status.robotName,
+          success: false, 
+          status: 'failed',
+          errorMessage, 
+          duration 
+        });
       }
     });
     
@@ -3394,6 +3425,18 @@ const MapManagement: React.FC = () => {
     setSyncingMap(null);
     setSelectedSyncRobots([]);
     setSelectedSyncMapFiles([]);
+  };
+
+  // 关闭切图进度弹窗
+  const handleCloseSliceProgress = () => {
+    setSliceProgressModalVisible(false);
+    setSliceStatuses([]);
+    setAllSliceCompleted(false);
+    
+    // 重置切图相关状态
+    setSlicingMapFile(null);
+    setSelectedSliceRobots([]);
+    setSelectedSliceMapFiles([]);
   };
 
   // handleEnable函数已移除
@@ -3757,6 +3800,157 @@ const MapManagement: React.FC = () => {
     
     message.info('进入拓扑地图阅览模式');
    };
+
+  // 处理切图功能
+  const handleSliceMap = (file: MapFile) => {
+    console.log('切图地图文件:', file);
+    
+    // 设置切图的地图文件
+    setSlicingMapFile(file);
+    
+    // 重置选中的机器人和地图文件
+    setSelectedSliceRobots([]);
+    setSelectedSliceMapFiles([file.id]);
+    
+    // 打开切图抽屉
+    setMapSliceDrawerVisible(true);
+    
+    message.info(`开始切图地图文件: ${file.name}`);
+  };
+
+  // 确认切图
+  const handleConfirmSlice = async () => {
+    if (selectedSliceRobots.length === 0) {
+      message.warning('请至少选择一个机器人');
+      return;
+    }
+    
+    if (selectedSliceMapFiles.length === 0) {
+      message.warning('请至少选择一个地图文件');
+      return;
+    }
+    
+    // 关闭切图抽屉，打开切图进度弹窗
+    setMapSliceDrawerVisible(false);
+    setSliceProgressModalVisible(true);
+    
+    // 初始化切图状态
+    const initialStatuses: SyncStatus[] = selectedSliceRobots.map(robotId => {
+      const robot = robotDevices.find(r => r.id === robotId);
+      return {
+        robotId,
+        robotName: robot?.deviceName || `机器人-${robotId}`,
+        status: 'pending',
+        progress: 0
+      };
+    });
+    
+    setSliceStatuses(initialStatuses);
+    setAllSliceCompleted(false);
+    
+    // 执行切图
+    await performSlice(initialStatuses);
+  };
+
+  // 执行切图操作
+  const performSlice = async (statuses: SyncStatus[]) => {
+    const results: SyncResult[] = [];
+    
+    // 模拟并发切图
+    const slicePromises = statuses.map(async (status) => {
+      // 设置开始时间和状态
+      const startTime = new Date().toLocaleTimeString();
+      setSliceStatuses(prev => prev.map(s => 
+        s.robotId === status.robotId 
+          ? { ...s, status: 'syncing', startTime, progress: 0 }
+          : s
+      ));
+      
+      const sliceStartTime = Date.now();
+      
+      try {
+        // 模拟切图进度
+        for (let progress = 0; progress <= 100; progress += 10) {
+          await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 300));
+          setSliceStatuses(prev => prev.map(s => 
+            s.robotId === status.robotId 
+              ? { ...s, progress }
+              : s
+          ));
+        }
+        
+        // 模拟成功/失败（90%成功率）
+        const isSuccess = Math.random() > 0.1;
+        const endTime = new Date().toLocaleTimeString();
+        const duration = Date.now() - sliceStartTime;
+        
+        if (isSuccess) {
+          setSliceStatuses(prev => prev.map(s => 
+            s.robotId === status.robotId 
+              ? { ...s, status: 'success', progress: 100, endTime }
+              : s
+          ));
+          results.push({ 
+            robotId: status.robotId, 
+            robotName: status.robotName,
+            success: true, 
+            status: 'success',
+            duration 
+          });
+        } else {
+          const errorMessage = '切图失败：网络连接超时，请检查机器人连接状态';
+          setSliceStatuses(prev => prev.map(s => 
+            s.robotId === status.robotId 
+              ? { ...s, status: 'failed', errorMessage, endTime }
+              : s
+          ));
+          results.push({ 
+            robotId: status.robotId, 
+            robotName: status.robotName,
+            success: false, 
+            status: 'failed',
+            errorMessage, 
+            duration 
+          });
+        }
+      } catch (error) {
+        const endTime = new Date().toLocaleTimeString();
+        const duration = Date.now() - sliceStartTime;
+        const errorMessage = '切图过程中发生未知错误';
+        setSliceStatuses(prev => prev.map(s => 
+          s.robotId === status.robotId 
+            ? { ...s, status: 'failed', errorMessage, endTime }
+            : s
+        ));
+        results.push({ 
+          robotId: status.robotId, 
+          robotName: status.robotName,
+          success: false, 
+          status: 'failed',
+          errorMessage, 
+          duration 
+        });
+      }
+    });
+    
+    // 等待所有切图完成
+    await Promise.all(slicePromises);
+    
+    // 设置切图结果
+    setAllSliceCompleted(true);
+    
+    // 显示汇总消息
+    const successCount = results.filter(r => r.success).length;
+    const failedCount = results.length - successCount;
+    
+    if (failedCount === 0) {
+      message.success(`切图完成！成功切图到 ${successCount} 个机器人`);
+    } else if (successCount === 0) {
+      message.error(`切图失败！${failedCount} 个机器人切图失败`);
+    } else {
+      message.warning(`切图完成！${successCount} 个成功，${failedCount} 个失败`);
+    }
+  };
 
   // 新增地图文件相关处理函数
   const handleAddMapFile = () => {
@@ -8428,6 +8622,12 @@ const MapManagement: React.FC = () => {
                                 onClick={() => handleDetail(file)}
                                 title="编辑"
                               />,
+                              <ShareAltOutlined
+                                key="slice"
+                                onClick={() => handleSliceMap(file)}
+                                title="切图"
+                                style={{ color: '#1890ff' }}
+                              />,
                             ]}
                           >
                             <Card.Meta
@@ -9929,6 +10129,493 @@ const MapManagement: React.FC = () => {
                  失败: {syncStatuses.filter(s => s.status === 'failed').length} 台 | 
                  总计: {syncStatuses.length} 台
                </div>
+             </div>
+           )}
+         </div>
+       </Drawer>
+
+       {/* 切图进度弹窗 */}
+       <Drawer
+         title="切图进度"
+         width="66.67vw"
+         placement="right"
+         onClose={handleCloseSliceProgress}
+         open={sliceProgressModalVisible}
+         bodyStyle={{ padding: '24px' }}
+         footer={
+           allSliceCompleted ? (
+             <div style={{ textAlign: 'center' }}>
+               <Button type="primary" onClick={handleCloseSliceProgress}>
+                 关闭
+               </Button>
+             </div>
+           ) : null
+         }
+       >
+         <div>
+           {/* 机器人切图状态列表 */}
+           <List
+             dataSource={sliceStatuses}
+             renderItem={(item: SyncStatus) => (
+               <List.Item>
+                 <List.Item.Meta
+                   avatar={
+                     <div style={{ display: 'flex', alignItems: 'center' }}>
+                       {item.status === 'pending' && <ClockCircleOutlined style={{ color: '#d9d9d9', fontSize: '16px' }} />}
+                       {item.status === 'syncing' && <SyncOutlined spin style={{ color: '#1890ff', fontSize: '16px' }} />}
+                       {item.status === 'success' && <CheckCircleOutlined style={{ color: '#52c41a', fontSize: '16px' }} />}
+                       {item.status === 'failed' && <CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: '16px' }} />}
+                     </div>
+                   }
+                   title={
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <span>{item.robotName}</span>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                         {item.status === 'syncing' && (
+                           <span style={{ fontSize: '12px', color: '#666' }}>
+                             {item.progress}%
+                           </span>
+                         )}
+                         {item.status === 'failed' && (
+                           <Button 
+                             size="small" 
+                             type="link" 
+                             onClick={() => {
+                               // 重试失败的切图
+                               const retryStatus = { ...item, status: 'pending' as const };
+                               setSliceStatuses(prev => prev.map(s => 
+                                 s.robotId === item.robotId ? retryStatus : s
+                               ));
+                               performSlice([retryStatus]);
+                             }}
+                           >
+                             重试
+                           </Button>
+                         )}
+                       </div>
+                     </div>
+                   }
+                   description={
+                     <div>
+                       {item.status === 'failed' && item.errorMessage && (
+                         <div style={{ color: '#ff4d4f', fontSize: '12px', marginBottom: '4px' }}>
+                           {item.errorMessage}
+                         </div>
+                       )}
+                       {item.status === 'syncing' && (
+                         <Progress 
+                           percent={item.progress} 
+                           size="small" 
+                           status="active"
+                           style={{ marginTop: '8px' }}
+                         />
+                      )}
+                      {item.startTime && (
+                        <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
+                          开始时间: {item.startTime}
+                          {item.endTime && ` | 结束时间: ${item.endTime}`}
+                        </div>
+                      )}
+                    </div>
+                  }
+                />
+              </List.Item>
+            )}
+          />
+
+          {/* 汇总信息 */}
+          {allSliceCompleted && (
+            <div style={{ marginTop: '16px', padding: '12px', backgroundColor: '#f6ffed', borderRadius: '6px' }}>
+              <div style={{ fontWeight: 500, marginBottom: '8px' }}>切图完成汇总</div>
+              <div>
+                成功: {sliceStatuses.filter(s => s.status === 'success').length} 台 | 
+                失败: {sliceStatuses.filter(s => s.status === 'failed').length} 台 | 
+                总计: {sliceStatuses.length} 台
+              </div>
+            </div>
+          )}
+        </div>
+      </Drawer>
+
+       {/* 地图切图侧滑弹窗 */}
+       <Drawer
+         title={`地图切图 - ${slicingMapFile?.name || ''}`}
+         width={`${Math.floor(window.innerWidth * 2 / 3)}px`}
+         placement="right"
+         onClose={() => {
+           setMapSliceDrawerVisible(false);
+           setSlicingMapFile(null);
+           setSelectedSliceRobots([]);
+           setSelectedSliceMapFiles([]);
+         }}
+         open={mapSliceDrawerVisible}
+         bodyStyle={{ padding: '24px' }}
+         footer={
+           <div style={{ textAlign: 'center' }}>
+             <Button 
+               onClick={() => {
+                 setMapSliceDrawerVisible(false);
+                 setSlicingMapFile(null);
+                 setSelectedSliceRobots([]);
+                 setSelectedSliceMapFiles([]);
+               }} 
+               style={{ marginRight: 8 }}
+             >
+               取消
+             </Button>
+             <Button 
+               type="primary" 
+               disabled={selectedSliceRobots.length === 0 || selectedSliceMapFiles.length === 0}
+               onClick={() => handleConfirmSlice()}
+               loading={loading}
+             >
+               确认切图 (机器人:{selectedSliceRobots.length}, 文件:{selectedSliceMapFiles.length})
+             </Button>
+           </div>
+         }
+       >
+         <div>
+           {/* 选择机器人部分 */}
+           <div style={{ marginBottom: 32 }}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+               <div>
+                   <div style={{ marginBottom: 8 }}>
+                     <Title level={5} style={{ margin: 0, display: 'inline-block', marginRight: 16 }}>选择在线机器人设备</Title>
+                     <Space size={8}>
+                       <Button 
+                         size="small" 
+                         onClick={() => {
+                           const onlineRobots = robotDevices.filter(robot => 
+                             robot.isOnline && 
+                             robot.isEnabled && 
+                             robot.deviceName.toLowerCase().includes(robotSearchText.toLowerCase())
+                           );
+                           setSelectedSliceRobots(onlineRobots.map(robot => robot.id));
+                         }}
+                       >
+                         全选
+                       </Button>
+                       <Button 
+                         size="small" 
+                         onClick={() => setSelectedSliceRobots([])}
+                       >
+                         清空选择
+                       </Button>
+                     </Space>
+                   </div>
+                   <div style={{ color: '#666', fontSize: '14px' }}>
+                     仅显示在线且已启用的机器人设备，支持多选。已选择 {selectedSliceRobots.length} 个机器人
+                   </div>
+                 </div>
+               <div style={{ width: '300px' }}>
+                 <Input.Search
+                    placeholder="搜索机器人设备名称..."
+                    value={robotSearchText}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRobotSearchText(e.target.value)}
+                    allowClear
+                    style={{ width: '100%' }}
+                  />
+               </div>
+             </div>
+           
+             {/* 机器人卡片滑动区域 */}
+             <div style={{ position: 'relative' }}>
+               {/* 左滑动按钮 */}
+               <Button
+                 type="text"
+                 icon={<LeftOutlined />}
+                 style={{
+                   position: 'absolute',
+                   left: '-20px',
+                   top: '50%',
+                   transform: 'translateY(-50%)',
+                   zIndex: 10,
+                   backgroundColor: '#fff',
+                   border: '1px solid #d9d9d9',
+                   borderRadius: '50%',
+                   width: '32px',
+                   height: '32px',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                   transition: 'all 0.2s ease',
+                   opacity: isSliding ? 0.6 : 1
+                 }}
+                 disabled={robotSlideIndex === 0 || isSliding}
+                 onClick={() => handleRobotSlide('left')}
+               />
+               
+               {/* 右滑动按钮 */}
+               <Button
+                 type="text"
+                 icon={<RightOutlined />}
+                 style={{
+                   position: 'absolute',
+                   right: '-20px',
+                   top: '50%',
+                   transform: 'translateY(-50%)',
+                   zIndex: 10,
+                   backgroundColor: '#fff',
+                   border: '1px solid #d9d9d9',
+                   borderRadius: '50%',
+                   width: '32px',
+                   height: '32px',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                   transition: 'all 0.2s ease',
+                   opacity: isSliding ? 0.6 : 1
+                 }}
+                 disabled={robotSlideIndex >= Math.ceil(robotDevices.filter(robot => 
+                   robot.isOnline && 
+                   robot.isEnabled && 
+                   robot.deviceName.toLowerCase().includes(robotSearchText.toLowerCase())
+                 ).length / robotCardsPerPage) - 1 || isSliding}
+                 onClick={() => handleRobotSlide('right')}
+               />
+               
+               {/* 机器人卡片网格 */}
+               <div style={{ 
+                 overflow: 'hidden',
+                 paddingBottom: '8px'
+               }}>
+                 <Row 
+                   gutter={[12, 12]}
+                   style={{
+                     transform: isSliding ? 
+                       (slideDirection === 'right' ? 'translateX(-30px)' : 'translateX(30px)') : 
+                       'translateX(0)',
+                     opacity: isSliding ? 0.3 : 1,
+                     transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                     filter: isSliding ? 'blur(1px)' : 'blur(0px)'
+                   }}
+                 >
+                   {robotDevices
+                     .filter(robot => 
+                       robot.isOnline && 
+                       robot.isEnabled && 
+                       robot.deviceName.toLowerCase().includes(robotSearchText.toLowerCase())
+                     )
+                     .slice(robotSlideIndex * robotCardsPerPage, (robotSlideIndex + 1) * robotCardsPerPage)
+                     .map(robot => (
+                       <Col key={robot.id} xs={24} sm={12} md={12} lg={6} xl={6}>
+                         <Card 
+                           size="small" 
+                           style={{ 
+                             width: '100%',
+                             height: '110px',
+                             border: selectedSliceRobots.includes(robot.id) ? '2px solid #1890ff' : '1px solid #e8e8e8',
+                             backgroundColor: selectedSliceRobots.includes(robot.id) ? '#f0f9ff' : '#fff',
+                             borderRadius: '8px',
+                             cursor: 'pointer',
+                             transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                             position: 'relative',
+                             transform: isSliding ? 
+                               `scale(0.95) translateX(${slideDirection === 'right' ? '-10px' : '10px'})` : 
+                               'scale(1) translateX(0)',
+                             boxShadow: isSliding ? 
+                               '0 1px 4px rgba(0,0,0,0.04)' : 
+                               (selectedSliceRobots.includes(robot.id) ? '0 4px 12px rgba(24,144,255,0.15)' : '0 2px 8px rgba(0,0,0,0.1)'),
+                             filter: isSliding ? 'brightness(0.95)' : 'brightness(1)'
+                           }}
+                           bodyStyle={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}
+                           hoverable
+                           onClick={() => {
+                             setSelectedSliceRobots(prev => 
+                               prev.includes(robot.id) 
+                                 ? prev.filter(id => id !== robot.id)
+                                 : [...prev, robot.id]
+                             );
+                           }}
+                           onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
+                             if (!isSliding) {
+                               e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)';
+                               e.currentTarget.style.boxShadow = selectedSliceRobots.includes(robot.id) ? 
+                                 '0 8px 20px rgba(24,144,255,0.25)' : 
+                                 '0 8px 20px rgba(0,0,0,0.15)';
+                             }
+                           }}
+                           onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
+                             if (!isSliding) {
+                               e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                               e.currentTarget.style.boxShadow = selectedSliceRobots.includes(robot.id) ? 
+                                 '0 4px 12px rgba(24,144,255,0.15)' : 
+                                 '0 2px 8px rgba(0,0,0,0.1)';
+                             }
+                           }}
+                         >
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                             <Avatar 
+                               icon={<RobotOutlined />} 
+                               style={{ 
+                                 backgroundColor: '#1890ff',
+                                 border: '2px solid #e6f7ff',
+                                 flexShrink: 0
+                               }}
+                               size={18}
+                             />
+                             <div style={{ flex: 1, textAlign: 'left', overflow: 'hidden' }}>
+                               <div style={{ 
+                                 fontWeight: 600, 
+                                 fontSize: '13px', 
+                                 marginBottom: '4px', 
+                                 color: '#262626',
+                                 overflow: 'hidden',
+                                 textOverflow: 'ellipsis',
+                                 whiteSpace: 'nowrap'
+                               }}>
+                                 {robot.deviceName}
+                               </div>
+                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
+                                 <Badge 
+                                   status={robot.isOnline ? 'success' : 'error'} 
+                                   text={
+                                     <span style={{ fontSize: '11px', fontWeight: 500 }}>
+                                       {robot.isOnline ? '在线' : '离线'}
+                                     </span>
+                                   }
+                                 />
+                                 <span style={{ color: '#666', fontSize: '10px' }}>
+                                   {robot.ipAddress}:{robot.port}
+                                 </span>
+                                 <span style={{ 
+                                   color: '#999', 
+                                   fontSize: '10px',
+                                   overflow: 'hidden',
+                                   textOverflow: 'ellipsis',
+                                   whiteSpace: 'nowrap',
+                                   width: '100%'
+                                 }}>
+                                   最近连接: {robot.lastConnectTime}
+                                 </span>
+                               </div>
+                             </div>
+                             
+                             {/* 选择按钮放在右侧，与图标纵向对齐 */}
+                             <Checkbox 
+                               checked={selectedSliceRobots.includes(robot.id)}
+                               style={{ 
+                                 flexShrink: 0
+                               }}
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 setSelectedSliceRobots(prev => 
+                                   prev.includes(robot.id) 
+                                     ? prev.filter(id => id !== robot.id)
+                                     : [...prev, robot.id]
+                                 );
+                               }}
+                             />
+                           </div>
+                         </Card>
+                         </Col>
+                       ))
+                     }
+                   </Row>
+                 </div>
+               </div>
+             </div>
+
+           {/* 选择地图文件部分 */}
+           {slicingMapFile && (
+             <div>
+               <div style={{ marginBottom: 16 }}>
+                 <Title level={5} style={{ margin: 0, display: 'inline-block', marginRight: 16 }}>选择地图文件</Title>
+                 <Space size={8}>
+                   <Button 
+                     size="small" 
+                     onClick={() => {
+                       setSelectedSliceMapFiles([slicingMapFile.id]);
+                     }}
+                   >
+                     选择当前文件
+                   </Button>
+                   <Button 
+                     size="small" 
+                     onClick={() => setSelectedSliceMapFiles([])}
+                   >
+                     清空选择
+                   </Button>
+                 </Space>
+               </div>
+               <div style={{ color: '#666', fontSize: '14px', marginBottom: 16 }}>
+                 选择要切图的地图文件，默认选择当前文件。已选择 {selectedSliceMapFiles.length} 个文件
+               </div>
+               
+               <Row gutter={[16, 16]}>
+                 <Col xs={12} sm={8} md={6} lg={6} xl={4} key={slicingMapFile.id}>
+                   <Card
+                     size="small"
+                     hoverable
+                     cover={
+                       <img
+                         alt={slicingMapFile.name}
+                         src={slicingMapFile.thumbnail}
+                         style={{
+                           height: 80,
+                           objectFit: 'cover',
+                           backgroundColor: '#f5f5f5',
+                         }}
+                       />
+                     }
+                     style={{
+                       border: selectedSliceMapFiles.includes(slicingMapFile.id) ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                       backgroundColor: selectedSliceMapFiles.includes(slicingMapFile.id) ? '#f0f9ff' : '#fff',
+                       cursor: 'pointer'
+                     }}
+                     onClick={() => {
+                       setSelectedSliceMapFiles(prev => 
+                         prev.includes(slicingMapFile.id) 
+                           ? prev.filter(id => id !== slicingMapFile.id)
+                           : [...prev, slicingMapFile.id]
+                       );
+                     }}
+                   >
+                     <Card.Meta
+                       title={
+                         <div style={{ position: 'relative' }}>
+                           <div 
+                             style={{ 
+                               fontSize: '12px',
+                               fontWeight: 500,
+                               overflow: 'hidden',
+                               textOverflow: 'ellipsis',
+                               whiteSpace: 'nowrap'
+                             }}
+                             title={slicingMapFile.name}
+                           >
+                             {slicingMapFile.name}
+                           </div>
+
+                           <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                             <Tag 
+                               size="small" 
+                               color="blue"
+                               style={{ fontSize: '10px' }}
+                             >
+                               切图文件
+                             </Tag>
+                             <Checkbox 
+                               checked={selectedSliceMapFiles.includes(slicingMapFile.id)}
+                               onChange={(e) => {
+                                 e.stopPropagation();
+                                 setSelectedSliceMapFiles(prev => 
+                                   prev.includes(slicingMapFile.id) 
+                                     ? prev.filter(id => id !== slicingMapFile.id)
+                                     : [...prev, slicingMapFile.id]
+                                 );
+                               }}
+                               onClick={(e) => e.stopPropagation()}
+                             />
+                           </div>
+                         </div>
+                       }
+                     />
+                   </Card>
+                 </Col>
+               </Row>
              </div>
            )}
          </div>
@@ -12900,11 +13587,9 @@ const MapManagement: React.FC = () => {
                                               onClick={() => handleAreaListClick(area.id)}
                                               onMouseEnter={(e) => {
                                                 e.currentTarget.style.backgroundColor = '#f5f5f5';
-                                                setHoveredAreaId(area.id);
                                               }}
                                               onMouseLeave={(e) => {
                                                 e.currentTarget.style.backgroundColor = 'transparent';
-                                                setHoveredAreaId(null);
                                               }}
                                             >
                                               <div style={{ flex: 1 }}>
