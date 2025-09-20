@@ -444,6 +444,7 @@ const MapManagement: React.FC = () => {
   const [isDrawingArea, setIsDrawingArea] = useState(false); // 是否正在绘制区域
   const [currentAreaPoints, setCurrentAreaPoints] = useState<{x: number, y: number}[]>([]); // 当前正在绘制的区域点
   const [isCompletingArea, setIsCompletingArea] = useState(false); // 是否正在完成区域创建（防止状态重置）
+  const [currentAreaType, setCurrentAreaType] = useState<'工作区域' | '禁行区域' | '调速区域' | '多路网区' | 'forbidden' | 'cleaning' | 'virtual_wall' | 'slow_cleaning'>('调速区域'); // 当前绘制的区域类型
   const [editingArea, setEditingArea] = useState<MapArea | null>(null); // 正在编辑的区域
   const [areaEditModalVisible, setAreaEditModalVisible] = useState(false); // 区域编辑弹窗显示状态
   const [areaEditForm] = Form.useForm(); // 区域编辑表单
@@ -1889,7 +1890,7 @@ const MapManagement: React.FC = () => {
 
   const handleSelectionContextMenu = (e: React.MouseEvent) => {
     // 如果正在绘制区域且有足够的点，右键完成绘制
-    if (selectedTool === 'area' && isDrawingArea && currentAreaPoints.length >= 3) {
+    if ((selectedTool === 'area' || selectedTool === 'forbidden-area' || selectedTool === 'multi-network-area') && isDrawingArea && currentAreaPoints.length >= 3) {
       e.preventDefault();
       e.stopPropagation();
       completeAreaDrawing();
@@ -1928,7 +1929,7 @@ const MapManagement: React.FC = () => {
   // 处理画布双击事件
   const handleCanvasDoubleClick = (_e: React.MouseEvent) => {
     // 如果正在绘制区域且有足够的点，双击完成绘制
-    if (selectedTool === 'area' && isDrawingArea && currentAreaPoints.length >= 3) {
+    if ((selectedTool === 'area' || selectedTool === 'forbidden-area' || selectedTool === 'multi-network-area') && isDrawingArea && currentAreaPoints.length >= 3) {
       completeAreaDrawing();
       return;
     }
@@ -4223,6 +4224,9 @@ const MapManagement: React.FC = () => {
           '当前步骤': addMapFileStep
         });
         
+        // 关闭批量设置面板
+        setBatchSettingsPanelVisible(false);
+        
         if (addMapFileStep === 2) {
           // 在地图编辑器（步骤2）中取消：直接退出到地图管理页面
           console.log('🔄 [地图文件编辑] 地图编辑器中取消：直接退出到地图管理页面');
@@ -4411,6 +4415,10 @@ const MapManagement: React.FC = () => {
         '选中地图': selectedMap,
         'mapInfo': mapInfo
       });
+      
+      // 关闭批量设置面板
+      setBatchSettingsPanelVisible(false);
+      
       setSubmitAndExitLoading(true);
       
       // 获取地图文件名称：优先从mapInfo中获取，如果没有则从表单中获取
@@ -5073,10 +5081,20 @@ const MapManagement: React.FC = () => {
     
     // 如果选择了区域工具，重置区域绘制状态
     if (toolType === 'area') {
-
       // 重置区域绘制相关状态
       setIsDrawingArea(false);
       setCurrentAreaPoints([]);
+      setCurrentAreaType('调速区域'); // 设置为调速区域类型
+    } else if (toolType === 'forbidden-area') {
+      // 禁行区域工具复用区域绘制逻辑，但设置不同的区域类型
+      setIsDrawingArea(false);
+      setCurrentAreaPoints([]);
+      setCurrentAreaType('禁行区域'); // 设置为禁行区域类型
+    } else if (toolType === 'multi-network-area') {
+      // 多路网区域工具复用区域绘制逻辑，但设置不同的区域类型
+      setIsDrawingArea(false);
+      setCurrentAreaPoints([]);
+      setCurrentAreaType('多路网区'); // 设置为多路网区域类型
     } else if (isDrawingArea && !isCompletingArea) {
       // 如果当前处于区域绘制模式但选择了非区域工具，且不在完成区域过程中，退出区域绘制模式
 
@@ -5100,7 +5118,7 @@ const MapManagement: React.FC = () => {
     const y = event.clientY - rect.top;
     
     // 只在区域绘制模式下更新鼠标位置
-    if (selectedTool === 'area' && isDrawingArea) {
+    if ((selectedTool === 'area' || selectedTool === 'forbidden-area' || selectedTool === 'multi-network-area') && isDrawingArea) {
       setMousePosition({ x, y });
     } else {
       // 清除鼠标位置，隐藏虚线
@@ -5247,7 +5265,215 @@ const MapManagement: React.FC = () => {
       
       setMapPoints(prev => [...prev, newPoint]);
       setPointCounter(prev => prev + 1);
-    } else if (selectedTool === 'area') {
+    } else if (selectedTool === 'station') {
+      const canvasElement = event.currentTarget;
+      
+      // 详细的坐标转换调试
+      console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制站点', {
+        原始事件坐标: { 
+          clientX: event.clientX, 
+          clientY: event.clientY,
+          offsetX: (event as any).offsetX,
+          offsetY: (event as any).offsetY
+        },
+        画布元素信息: {
+          tagName: canvasElement.tagName,
+          className: canvasElement.className,
+          rect: canvasElement.getBoundingClientRect()
+        },
+        当前画布状态: {
+          canvasScale: canvasScale,
+          canvasOffset: canvasOffset
+        },
+        timestamp: new Date().toISOString()
+      });
+      
+      const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+      
+      console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制站点', {
+        输入屏幕坐标: { clientX: event.clientX, clientY: event.clientY },
+        输出画布坐标: { x, y },
+        即将创建站点的位置: { x, y },
+        timestamp: new Date().toISOString()
+      });
+      
+      // 清除线的选中状态
+      if (selectedLines.length > 0) {
+        setSelectedLines([]);
+      }
+      
+      // 创建新站点
+      const newPoint = {
+        id: `point_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: `s${pointCounter}`,
+        type: '站点', // 默认类型为站点
+        x: x,
+        y: y,
+        direction: 0 // 默认方向
+      };
+      
+      // 保存历史记录（添加点之前）
+      saveToHistory();
+      
+      setMapPoints(prev => [...prev, newPoint]);
+      setPointCounter(prev => prev + 1);
+    } else if (selectedTool === 'dock') {
+      const canvasElement = event.currentTarget;
+      
+      // 详细的坐标转换调试
+      console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制停靠点', {
+        原始事件坐标: { 
+          clientX: event.clientX, 
+          clientY: event.clientY,
+          offsetX: (event as any).offsetX,
+          offsetY: (event as any).offsetY
+        },
+        画布元素信息: {
+          tagName: canvasElement.tagName,
+          className: canvasElement.className,
+          rect: canvasElement.getBoundingClientRect()
+        },
+        当前画布状态: {
+          canvasScale: canvasScale,
+          canvasOffset: canvasOffset
+        },
+        timestamp: new Date().toISOString()
+      });
+      
+      const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+      
+      console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制停靠点', {
+        输入屏幕坐标: { clientX: event.clientX, clientY: event.clientY },
+        输出画布坐标: { x, y },
+        即将创建停靠点的位置: { x, y },
+        timestamp: new Date().toISOString()
+      });
+      
+      // 清除线的选中状态
+      if (selectedLines.length > 0) {
+        setSelectedLines([]);
+      }
+      
+      // 创建新停靠点
+      const newPoint = {
+        id: `point_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: `d${pointCounter}`,
+        type: '停靠点', // 默认类型为停靠点
+        x: x,
+        y: y,
+        direction: 0 // 默认方向
+      };
+      
+      // 保存历史记录（添加点之前）
+      saveToHistory();
+      
+      setMapPoints(prev => [...prev, newPoint]);
+      setPointCounter(prev => prev + 1);
+    } else if (selectedTool === 'charge') {
+      const canvasElement = event.currentTarget;
+      
+      // 详细的坐标转换调试
+      console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制充电点', {
+        原始事件坐标: { 
+          clientX: event.clientX, 
+          clientY: event.clientY,
+          offsetX: (event as any).offsetX,
+          offsetY: (event as any).offsetY
+        },
+        画布元素信息: {
+          tagName: canvasElement.tagName,
+          className: canvasElement.className,
+          rect: canvasElement.getBoundingClientRect()
+        },
+        当前画布状态: {
+          canvasScale: canvasScale,
+          canvasOffset: canvasOffset
+        },
+        timestamp: new Date().toISOString()
+      });
+      
+      const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+      
+      console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制充电点', {
+        输入屏幕坐标: { clientX: event.clientX, clientY: event.clientY },
+        输出画布坐标: { x, y },
+        即将创建充电点的位置: { x, y },
+        timestamp: new Date().toISOString()
+      });
+      
+      // 清除线的选中状态
+      if (selectedLines.length > 0) {
+        setSelectedLines([]);
+      }
+      
+      // 创建新充电点
+      const newPoint = {
+        id: `point_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: `c${pointCounter}`,
+        type: '充电点', // 默认类型为充电点
+        x: x,
+        y: y,
+        direction: 0 // 默认方向
+      };
+      
+      // 保存历史记录（添加点之前）
+      saveToHistory();
+      
+      setMapPoints(prev => [...prev, newPoint]);
+      setPointCounter(prev => prev + 1);
+    } else if (selectedTool === 'temp') {
+      const canvasElement = event.currentTarget;
+      
+      // 详细的坐标转换调试
+      console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制临停点', {
+        原始事件坐标: { 
+          clientX: event.clientX, 
+          clientY: event.clientY,
+          offsetX: (event as any).offsetX,
+          offsetY: (event as any).offsetY
+        },
+        画布元素信息: {
+          tagName: canvasElement.tagName,
+          className: canvasElement.className,
+          rect: canvasElement.getBoundingClientRect()
+        },
+        当前画布状态: {
+          canvasScale: canvasScale,
+          canvasOffset: canvasOffset
+        },
+        timestamp: new Date().toISOString()
+      });
+      
+      const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
+      
+      console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制临停点', {
+        输入屏幕坐标: { clientX: event.clientX, clientY: event.clientY },
+        输出画布坐标: { x, y },
+        即将创建临停点的位置: { x, y },
+        timestamp: new Date().toISOString()
+      });
+      
+      // 清除线的选中状态
+      if (selectedLines.length > 0) {
+        setSelectedLines([]);
+      }
+      
+      // 创建新临停点
+      const newPoint = {
+        id: `point_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: `m${pointCounter}`,
+        type: '临停点', // 默认类型为临停点
+        x: x,
+        y: y,
+        direction: 0 // 默认方向
+      };
+      
+      // 保存历史记录（添加点之前）
+      saveToHistory();
+      
+      setMapPoints(prev => [...prev, newPoint]);
+      setPointCounter(prev => prev + 1);
+    } else if (selectedTool === 'area' || selectedTool === 'forbidden-area' || selectedTool === 'multi-network-area') {
       // 区域绘制工具
       const canvasElement = event.currentTarget;
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
@@ -5930,6 +6156,8 @@ const MapManagement: React.FC = () => {
     // 保存历史记录（删除点之前）
     saveToHistory();
     
+    const deletedCount = selectedPoints.length;
+    
     setMapPoints(prev => 
       prev.filter(point => !selectedPoints.includes(point.id))
     );
@@ -5938,7 +6166,11 @@ const MapManagement: React.FC = () => {
     setSelectionStart(null);
     setSelectionEnd(null);
     setIsSelecting(false);
-    message.success(`已删除 ${selectedPoints.length} 个点`);
+    
+    // 关闭批量设置面板
+    setBatchSettingsPanelVisible(false);
+    
+    message.success(`已删除 ${deletedCount} 个点`);
   };
 
   // 从地图元素列表中移除节点
@@ -6336,12 +6568,12 @@ const MapManagement: React.FC = () => {
               id: `area_${Date.now()}`,
               name: `a${mapAreas.length + 1}`,
               points: [...currentAreaPoints],
-              type: '调速区域',
-              speed: 0.8,
-              color: getAreaColors({ type: '调速区域', speed: 0.8 } as MapArea).strokeColor,
+              type: currentAreaType,
+              speed: currentAreaType === '调速区域' ? 0.8 : undefined,
+              color: getAreaColors({ type: currentAreaType, speed: currentAreaType === '调速区域' ? 0.8 : undefined } as MapArea).strokeColor,
               fillOpacity: 0.3,
-              fillColor: getAreaColors({ type: '调速区域', speed: 0.8 } as MapArea).fillColor,
-              strokeColor: getAreaColors({ type: '调速区域', speed: 0.8 } as MapArea).strokeColor,
+              fillColor: getAreaColors({ type: currentAreaType, speed: currentAreaType === '调速区域' ? 0.8 : undefined } as MapArea).fillColor,
+              strokeColor: getAreaColors({ type: currentAreaType, speed: currentAreaType === '调速区域' ? 0.8 : undefined } as MapArea).strokeColor,
               opacity: 0.3
             };
             
@@ -6423,14 +6655,14 @@ const MapManagement: React.FC = () => {
          const newArea: MapArea = {
            id: `area_${Date.now()}`,
            name: `a${mapAreas.length + 1}`,
-           type: '调速区域',
+           type: currentAreaType,
            points: [...currentAreaPoints],
-           color: '#1890ff',
+           color: getAreaColors({ type: currentAreaType, speed: currentAreaType === '调速区域' ? 50 : undefined } as MapArea).strokeColor,
            fillOpacity: 0.3,
-           fillColor: '#1890ff',
-           strokeColor: '#1890ff',
+           fillColor: getAreaColors({ type: currentAreaType, speed: currentAreaType === '调速区域' ? 50 : undefined } as MapArea).fillColor,
+           strokeColor: getAreaColors({ type: currentAreaType, speed: currentAreaType === '调速区域' ? 50 : undefined } as MapArea).strokeColor,
            opacity: 0.3,
-           speed: 50
+           speed: currentAreaType === '调速区域' ? 50 : undefined
          };
          
          setMapAreas(prev => [...prev, newArea]);
@@ -6590,6 +6822,22 @@ const MapManagement: React.FC = () => {
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
+          case 't':
+            // 在黑白底图模式下屏蔽绘制站点工具的快捷键
+            console.log('🔍 [快捷键调试] T键按下', {
+              mapType: mapType,
+              isGrayscaleMode: isGrayscaleMode(),
+              当前工具: selectedTool
+            });
+            if (!isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键T - 切换到绘制站点工具');
+              setSelectedTool('station');
+            } else {
+              console.log('🚫 [快捷键屏蔽] T键在黑白底图模式下被屏蔽');
+              event.preventDefault(); // 阻止默认行为但不切换工具
+            }
+            break;
           case 'd':
             // 在黑白底图模式下屏蔽双向直线工具的快捷键
             console.log('🔍 [快捷键调试] D键按下', {
@@ -6623,7 +6871,7 @@ const MapManagement: React.FC = () => {
             }
             break;
           case 'a':
-            // 在黑白底图模式下屏蔽绘制区域工具的快捷键
+            // 在黑白底图模式下屏蔽绘制调速区域工具的快捷键
             console.log('🔍 [快捷键调试] A键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
@@ -6631,7 +6879,7 @@ const MapManagement: React.FC = () => {
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键A - 切换到绘制区域工具');
+              console.log('⌨️ [工具切换] 快捷键A - 切换到绘制调速区域工具');
               setSelectedTool('area');
             } else {
               console.log('🚫 [快捷键屏蔽] A键在黑白底图模式下被屏蔽');
@@ -6667,12 +6915,76 @@ const MapManagement: React.FC = () => {
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
+          case 'k':
+            // 在黑白底图模式下屏蔽绘制停靠点工具的快捷键
+            console.log('🔍 [快捷键调试] K键按下', {
+              mapType: mapType,
+              isGrayscaleMode: isGrayscaleMode(),
+              当前工具: selectedTool
+            });
+            if (!isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键K - 切换到绘制停靠点工具');
+              setSelectedTool('dock');
+            } else {
+              console.log('🚫 [快捷键屏蔽] K键在黑白底图模式下被屏蔽');
+              event.preventDefault(); // 阻止默认行为但不切换工具
+            }
+            break;
+          case 'h':
+            // 在黑白底图模式下屏蔽绘制充电点工具的快捷键
+            console.log('🔍 [快捷键调试] H键按下', {
+              mapType: mapType,
+              isGrayscaleMode: isGrayscaleMode(),
+              当前工具: selectedTool
+            });
+            if (!isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键H - 切换到绘制充电点工具');
+              setSelectedTool('charge');
+            } else {
+              console.log('🚫 [快捷键屏蔽] H键在黑白底图模式下被屏蔽');
+              event.preventDefault(); // 阻止默认行为但不切换工具
+            }
+            break;
+          case 'm':
+            // 在黑白底图模式下屏蔽绘制临停点工具的快捷键
+            console.log('🔍 [快捷键调试] M键按下', {
+              mapType: mapType,
+              isGrayscaleMode: isGrayscaleMode(),
+              当前工具: selectedTool
+            });
+            if (!isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键M - 切换到绘制临停点工具');
+              setSelectedTool('temp');
+            } else {
+              console.log('🚫 [快捷键屏蔽] M键在黑白底图模式下被屏蔽');
+              event.preventDefault(); // 阻止默认行为但不切换工具
+            }
+            break;
           case 'e':
             // 在黑白底图模式下，E键切换到橡皮擦工具
             if (isGrayscaleMode()) {
               event.preventDefault();
               console.log('⌨️ [工具切换] 快捷键E - 切换到橡皮擦工具');
               setSelectedTool('eraser');
+            }
+            break;
+          case 'f':
+            // 在黑白底图模式下屏蔽绘制禁行区域工具的快捷键
+            console.log('🔍 [快捷键调试] F键按下', {
+              mapType: mapType,
+              isGrayscaleMode: isGrayscaleMode(),
+              currentTool: selectedTool
+            });
+            if (!isGrayscaleMode()) {
+              event.preventDefault();
+              console.log('⌨️ [工具切换] 快捷键F - 切换到绘制禁行区域工具');
+              handleToolSelect('forbidden-area');
+            } else {
+              console.log('🚫 [快捷键屏蔽] F键在黑白底图模式下被屏蔽');
+              event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
         }
@@ -10958,16 +11270,16 @@ const MapManagement: React.FC = () => {
                                   
                                   setSelectedAreas(prev => {
                                     const isCurrentlySelected = prev.includes(area.id);
-                                    // 修改逻辑：重复点击已选中区域时保持选中状态
+                                    // 单选模式：点击新区域时取消之前的选择，只选中当前区域
                                     const newSelectedAreas = isCurrentlySelected 
-                                      ? prev  // 如果已选中，保持选中状态
-                                      : [...prev, area.id];  // 如果未选中，添加到选中列表
+                                      ? []  // 如果已选中，取消选中（点击已选中区域取消选择）
+                                      : [area.id];  // 如果未选中，只选中当前区域（取消其他区域的选择）
                                     
-                                    console.log('🔍 [区域选择状态调试] 区域选择状态变化', {
+                                    console.log('🔍 [区域选择状态调试] 区域单选状态变化', {
                                       区域ID: area.id,
                                       区域名称: area.name,
                                       之前是否选中: isCurrentlySelected,
-                                      操作类型: isCurrentlySelected ? '保持选中' : '选中',
+                                      操作类型: isCurrentlySelected ? '取消选中' : '单选',
                                       变化前选中区域: prev,
                                       变化后选中区域: newSelectedAreas,
                                       时间戳: new Date().toISOString()
@@ -11438,7 +11750,7 @@ const MapManagement: React.FC = () => {
                           flexShrink: 0
                         }} />
                         <span>
-                          {currentAreaPoints.length === 0 && '点击画布开始绘制区域'}
+                          {currentAreaPoints.length === 0 && '点击画布开始绘制调速区域'}
                           {currentAreaPoints.length === 1 && '继续点击添加第二个点'}
                           {currentAreaPoints.length === 2 && '继续点击添加第三个点'}
                           {currentAreaPoints.length >= 3 && (
@@ -11972,7 +12284,151 @@ const MapManagement: React.FC = () => {
                                   </Button>
                                   
                                   <Button 
-                                    type={selectedTool === 'double-line' ? 'primary' : 'text'}
+                                    type={selectedTool === 'station' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('station')}
+                                    disabled={(mapType as string) === 'grayscale'}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'station' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
+                                      borderRadius: '6px',
+                                      background: (mapType as string) === 'grayscale' ? '#f5f5f5' : (selectedTool === 'station' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'station' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <circle cx="8" cy="8" r="6" fill="none" stroke="#52c41a" strokeWidth="1.5"/>
+                                        <circle cx="8" cy="8" r="2" fill="#52c41a"/>
+                                      </svg>
+                                      绘制站点
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'station' ? 'rgba(82, 196, 26, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>T</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'dock' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('dock')}
+                                    disabled={(mapType as string) === 'grayscale'}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'dock' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
+                                      borderRadius: '6px',
+                                      background: (mapType as string) === 'grayscale' ? '#f5f5f5' : (selectedTool === 'dock' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'dock' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <circle cx="8" cy="8" r="6" fill="none" stroke="#722ed1" strokeWidth="1.5"/>
+                                        <circle cx="8" cy="8" r="2" fill="#722ed1"/>
+                                      </svg>
+                                      绘制停靠点
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'dock' ? 'rgba(114, 46, 209, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>K</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'charge' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('charge')}
+                                    disabled={(mapType as string) === 'grayscale'}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'charge' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
+                                      borderRadius: '6px',
+                                      background: (mapType as string) === 'grayscale' ? '#f5f5f5' : (selectedTool === 'charge' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'charge' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <circle cx="8" cy="8" r="6" fill="none" stroke="#fa8c16" strokeWidth="1.5"/>
+                                        <circle cx="8" cy="8" r="2" fill="#fa8c16"/>
+                                      </svg>
+                                      绘制充电点
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'charge' ? 'rgba(250, 140, 22, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>H</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'temp' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('temp')}
+                                    disabled={(mapType as string) === 'grayscale'}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'temp' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
+                                      borderRadius: '6px',
+                                      background: (mapType as string) === 'grayscale' ? '#f5f5f5' : (selectedTool === 'temp' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'temp' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <circle cx="8" cy="8" r="6" fill="none" stroke="#eb2f96" strokeWidth="1.5"/>
+                                        <circle cx="8" cy="8" r="2" fill="#eb2f96"/>
+                                      </svg>
+                                      绘制临停点
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'temp' ? 'rgba(235, 47, 150, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>M</span>
+                                  </Button>
+                                   
+                                   <Button 
+                                     type={selectedTool === 'double-line' ? 'primary' : 'text'}
                                     onClick={() => handleToolSelect('double-line')}
                                     disabled={(mapType as string) === 'grayscale'}
                                     style={{
@@ -12042,42 +12498,6 @@ const MapManagement: React.FC = () => {
                                       minWidth: '20px',
                                       textAlign: 'center'
                                     }}>S</span>
-                                  </Button>
-                                  
-                                  <Button 
-                                    type={selectedTool === 'area' ? 'primary' : 'text'}
-                                    onClick={() => handleToolSelect('area')}
-                                    disabled={(mapType as string) === 'grayscale'}
-                                    style={{
-                                      height: '40px',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'space-between',
-                                      padding: '0 12px',
-                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'area' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
-                                      borderRadius: '6px',
-                                      background: (mapType as string) === 'grayscale' ? '#fafafa' : (selectedTool === 'node' ? '#e6f7ff' : '#fff'),
-                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'area' ? '#1890ff' : '#666'),
-                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
-                                    }}
-                                  >
-                                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
-                                        <polygon points="3,3 13,3 13,13 3,13" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
-                                        <polygon points="3,3 13,3 13,13 3,13" fill="#1890ff" fillOpacity="0.2"/>
-                                      </svg>
-                                      绘制区域
-                                    </div>
-                                    <span style={{ 
-                                      fontSize: '12px', 
-                                      opacity: 0.7,
-                                      fontWeight: 'normal',
-                                      backgroundColor: selectedTool === 'area' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
-                                      padding: '2px 6px',
-                                      borderRadius: '4px',
-                                      minWidth: '20px',
-                                      textAlign: 'center'
-                                    }}>A</span>
                                   </Button>
                                   
                                   <Button 
@@ -12152,6 +12572,125 @@ const MapManagement: React.FC = () => {
                                       textAlign: 'center'
                                     }}>C</span>
                                   </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'area' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('area')}
+                                    disabled={(mapType as string) === 'grayscale'}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'area' ? '1px solid #1890ff' : '1px solid #d9d9d9'),
+                                      borderRadius: '6px',
+                                      background: (mapType as string) === 'grayscale' ? '#fafafa' : (selectedTool === 'node' ? '#e6f7ff' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'area' ? '#1890ff' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <polygon points="3,3 13,3 13,13 3,13" fill="none" stroke="#1890ff" strokeWidth="1.5"/>
+                                        <polygon points="3,3 13,3 13,13 3,13" fill="#1890ff" fillOpacity="0.2"/>
+                                      </svg>
+                                      绘制调速区域
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'area' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>A</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'forbidden-area' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('forbidden-area')}
+                                    disabled={(mapType as string) === 'grayscale'}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'forbidden-area' ? '1px solid #ff4d4f' : '1px solid #d9d9d9'),
+                                      borderRadius: '6px',
+                                      background: (mapType as string) === 'grayscale' ? '#fafafa' : (selectedTool === 'forbidden-area' ? '#fff2f0' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'forbidden-area' ? '#ff4d4f' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <polygon points="3,3 13,3 13,13 3,13" fill="none" stroke="#ff4d4f" strokeWidth="1.5"/>
+                                        <polygon points="3,3 13,3 13,13 3,13" fill="#ff4d4f" fillOpacity="0.2"/>
+                                        <line x1="3" y1="3" x2="13" y2="13" stroke="#ff4d4f" strokeWidth="2"/>
+                                        <line x1="13" y1="3" x2="3" y2="13" stroke="#ff4d4f" strokeWidth="2"/>
+                                      </svg>
+                                      绘制禁行区域
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'forbidden-area' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>F</span>
+                                  </Button>
+                                  
+                                  <Button 
+                                    type={selectedTool === 'multi-network-area' ? 'primary' : 'text'}
+                                    onClick={() => handleToolSelect('multi-network-area')}
+                                    disabled={(mapType as string) === 'grayscale'}
+                                    style={{
+                                      height: '40px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      padding: '0 12px',
+                                      border: (mapType as string) === 'grayscale' ? '1px solid #f0f0f0' : (selectedTool === 'multi-network-area' ? '1px solid #52c41a' : '1px solid #d9d9d9'),
+                                      borderRadius: '6px',
+                                      background: (mapType as string) === 'grayscale' ? '#fafafa' : (selectedTool === 'multi-network-area' ? '#f6ffed' : '#fff'),
+                                      color: (mapType as string) === 'grayscale' ? '#bfbfbf' : (selectedTool === 'multi-network-area' ? '#52c41a' : '#666'),
+                                      cursor: (mapType as string) === 'grayscale' ? 'not-allowed' : 'pointer'
+                                    }}
+                                  >
+                                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                                      <svg width="16" height="16" viewBox="0 0 16 16" style={{ marginRight: '8px' }}>
+                                        <polygon points="3,3 13,3 13,13 3,13" fill="none" stroke="#52c41a" strokeWidth="1.5"/>
+                                        <polygon points="3,3 13,3 13,13 3,13" fill="#52c41a" fillOpacity="0.2"/>
+                                        <circle cx="5" cy="5" r="1" fill="#52c41a"/>
+                                        <circle cx="11" cy="5" r="1" fill="#52c41a"/>
+                                        <circle cx="5" cy="11" r="1" fill="#52c41a"/>
+                                        <circle cx="11" cy="11" r="1" fill="#52c41a"/>
+                                        <line x1="5" y1="5" x2="11" y2="5" stroke="#52c41a" strokeWidth="1"/>
+                                        <line x1="5" y1="11" x2="11" y2="11" stroke="#52c41a" strokeWidth="1"/>
+                                        <line x1="5" y1="5" x2="5" y2="11" stroke="#52c41a" strokeWidth="1"/>
+                                        <line x1="11" y1="5" x2="11" y2="11" stroke="#52c41a" strokeWidth="1"/>
+                                      </svg>
+                                      绘制多路网区域
+                                    </div>
+                                    <span style={{ 
+                                      fontSize: '12px', 
+                                      opacity: 0.7,
+                                      fontWeight: 'normal',
+                                      backgroundColor: selectedTool === 'multi-network-area' ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                      minWidth: '20px',
+                                      textAlign: 'center'
+                                    }}>M</span>
+                                  </Button>
+
                                 </>
                               )}
                             </div>
@@ -13283,8 +13822,8 @@ const MapManagement: React.FC = () => {
           layout="vertical"
           onFinish={handleSaveAreaEdit}
           initialValues={{
-            type: '调速区域',
-            speed: 0.8
+            type: currentAreaType,
+            speed: currentAreaType === '调速区域' ? 0.8 : undefined
           }}
         >
           <Form.Item
