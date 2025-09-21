@@ -415,10 +415,33 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setCurrentStep(0);
         setDataType(editingFunction.dataType);
         setCurrentFunctionType(editingFunction.functionType); // 设置当前功能类型
-        setValueConfigItems(editingFunction.valueConfig || []);
         
-        // 针对http、mqtt、墨影采集卡和墨影机器人协议的特殊处理
-        if (productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt' || productProtocol === '墨影采集卡' || productProtocol === '墨影机器人协议') {
+        // 处理valueConfig数据类型转换
+        let parsedValueConfig: ValueConfigItem[] = [];
+        if (editingFunction.valueConfig) {
+          if (typeof editingFunction.valueConfig === 'string') {
+            try {
+              // 如果是字符串，尝试解析为JSON数组
+              parsedValueConfig = JSON.parse(editingFunction.valueConfig);
+
+            } catch (error) {
+              console.warn('Failed to parse valueConfig string:', error);
+              parsedValueConfig = [];
+            }
+          } else if (Array.isArray(editingFunction.valueConfig)) {
+            // 如果已经是数组，直接使用
+            parsedValueConfig = editingFunction.valueConfig;
+
+          }
+        }
+        
+
+        
+        setValueConfigItems(parsedValueConfig);
+        
+        // 针对http、mqtt和墨影机器人协议的特殊处理：强制设置为非组合
+        // 墨影采集卡协议支持组合模式，所以不在强制非组合的列表中
+        if (productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt' || productProtocol === '墨影机器人协议') {
           setIsComposite(false); // 强制设置为非组合
         } else {
           setIsComposite(editingFunction.isComposite || false);
@@ -465,20 +488,41 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         setRobotDataPath(editingFunction.robotDataPath || '');
         
         // 设置组合模式相关状态
-        setCompositeType(editingFunction.compositeType || 'multi-register');
+        const defaultCompositeType = productProtocol === '墨影采集卡' ? 'multi-pin' : 'multi-register';
+        setCompositeType(editingFunction.compositeType || defaultCompositeType);
+        
+
 
 
         
         // 同步表单字段值，确保受控组件正确显示
         setTimeout(() => {
-          form.setFieldsValue({
-            registerAddress: editingFunction.registerAddress || '',
-            registerType: editingFunction.registerType || 'holding-register',
-            functionCode: editingFunction.functionCode || '',
-            modbusDataType: editingFunction.modbusDataType || 'uint16',
-            byteOrder: editingFunction.byteOrder || '',
-            isComposite: (productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt' || productProtocol === '墨影采集卡') ? false : (editingFunction.isComposite || false),
-          });
+          const formValues: any = {
+            isComposite: (productProtocol === 'http' || productProtocol === 'mqtt' || productProtocol === 'Mqtt' || productProtocol === '墨影机器人协议') ? false : (editingFunction.isComposite || false),
+            compositeType: editingFunction.compositeType || defaultCompositeType,
+          };
+
+          // Modbus协议字段
+          if (productProtocol === 'modbus_tcp') {
+            formValues.registerAddress = editingFunction.registerAddress || '';
+            formValues.registerType = editingFunction.registerType || 'holding-register';
+            formValues.functionCode = editingFunction.functionCode || '';
+            formValues.modbusDataType = editingFunction.modbusDataType || 'uint16';
+            formValues.byteOrder = editingFunction.byteOrder || '';
+          }
+
+          // 墨影采集卡协议字段
+          if (productProtocol === '墨影采集卡') {
+            formValues.moyingChannelType = editingFunction.moyingChannelType || 'report';
+            formValues.moyingMacAddress = editingFunction.moyingMacAddress || '';
+            formValues.moyingFunctionId = editingFunction.moyingFunctionId || '';
+            formValues.moyingPinType = editingFunction.moyingPinType || 'input';
+            formValues.moyingPinNumber = editingFunction.moyingPinNumber || '';
+            formValues.moyingPinValue = editingFunction.moyingPinValue || '';
+            formValues.moyingDataPath = editingFunction.moyingDataPath || '';
+          }
+
+          form.setFieldsValue(formValues);
         }, 0);
       } else {
         // 新增模式：重置表单并设置初始值
@@ -561,6 +605,28 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       }
     }
   }, [visible, form, isEdit, editingFunction]);
+
+
+
+  // 修复状态更新时序问题：确保编辑模式下状态正确同步
+  useEffect(() => {
+    if (isEdit && editingFunction && visible) {
+      // 延迟执行，确保所有状态都已更新
+      const timer = setTimeout(() => {
+        // 如果状态不匹配，强制更新
+        if (productProtocol === '墨影采集卡') {
+          if (isComposite !== editingFunction.isComposite) {
+            setIsComposite(editingFunction.isComposite || false);
+          }
+          if (compositeType !== editingFunction.compositeType) {
+            setCompositeType(editingFunction.compositeType || 'multi-pin');
+          }
+        }
+      }, 100); // 100ms延迟确保状态更新完成
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isEdit, editingFunction, visible, productProtocol, isComposite, compositeType]);
 
   // 监听步骤变化，确保映射功能名称字段正确显示
   useEffect(() => {
@@ -1062,16 +1128,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         }
       }
       
-      // 验证墨影采集卡协议的必填字段
+      // 墨影采集卡协议在非组合模式下需要校验引脚号必填，但不需要校验引脚值
       if (productProtocol === '墨影采集卡' && !isComposite) {
-        if (!moyingPinNumber || !moyingPinNumber.trim()) {
+        if (!moyingPinNumber) {
           message.error('请输入引脚编号');
-          setLoading(false);
-          return;
-        }
-        if (!moyingPinValue || !moyingPinValue.trim()) {
-          message.error('请输入引脚值');
-          setLoading(false);
           return;
         }
       }
@@ -1143,16 +1203,21 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           mqttPayloadFormat,
           mqttClientId: mqttClientId || undefined,
         } : {}),
-        ...(productProtocol === '墨影采集卡' ? {
-          // 墨影采集卡协议字段
-          moyingChannelType,
-          moyingMacAddress: moyingMacAddress || undefined,
-          moyingFunctionId: moyingFunctionId || undefined,
-          moyingPinType,
-          moyingPinNumber: moyingPinNumber || undefined,
-          moyingPinValue: moyingPinValue || undefined,
-          moyingDataPath: moyingDataPath || undefined,
-        } : {}),
+        ...(productProtocol === '墨影采集卡' ? (
+          isComposite ? {
+            // 墨影采集卡组合模式字段
+            compositeType,
+          } : {
+            // 墨影采集卡非组合模式字段
+            moyingChannelType,
+            moyingMacAddress: moyingMacAddress || undefined,
+            moyingFunctionId: moyingFunctionId || undefined,
+            moyingPinType,
+            moyingPinNumber: moyingPinNumber || undefined,
+            moyingPinValue: moyingPinValue || undefined,
+            moyingDataPath: moyingDataPath || undefined,
+          }
+        ) : {}),
         ...(productProtocol === '墨影机器人协议' ? {
           // 墨影机器人协议字段
           robotCommandType,
