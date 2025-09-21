@@ -40,6 +40,7 @@ import {
   SettingOutlined,
   SyncOutlined,
   EyeOutlined,
+  EyeInvisibleOutlined,
   FileImageOutlined,
   PlusOutlined,
   UploadOutlined,
@@ -75,6 +76,9 @@ import BatchSettingsPanel from './BatchSettingsPanel';
 // 添加CSS样式
 const thumbnailHoverStyle = `
   .thumbnail-overlay:hover {
+    opacity: 1 !important;
+  }
+  .network-group-label:hover .network-group-actions {
     opacity: 1 !important;
   }
 `;
@@ -203,6 +207,7 @@ interface NetworkGroup {
   createTime?: string;
   updateTime?: string;
   areaId?: string; // 关联的区域ID，用于区域隔离
+  visible?: boolean; // 控制路网组数据的显示/隐藏
   nodes: NetworkNode[];
   paths: NetworkPath[];
 }
@@ -393,40 +398,7 @@ const MapManagement: React.FC = () => {
 
   const [mapPoints, setMapPoints] = useState<any[]>(defaultMapPoints); // 地图上的点
   const [mapLines, setMapLines] = useState<MapLine[]>(defaultMapLines); // 地图上的连线
-  const [mapAreas, setMapAreas] = useState<MapArea[]>([
-    {
-      id: 'area-a',
-      name: 'A区域',
-      type: '多路网区',
-      points: [
-        { x: 100, y: 100 },
-        { x: 300, y: 100 },
-        { x: 300, y: 300 },
-        { x: 100, y: 300 }
-      ],
-      color: '#1890ff',
-      fillColor: 'rgba(24, 144, 255, 0.1)',
-      strokeColor: '#1890ff',
-      fillOpacity: 0.1,
-      opacity: 0.3
-    },
-    {
-      id: 'area-b',
-      name: 'B区域',
-      type: '多路网区',
-      points: [
-        { x: 400, y: 100 },
-        { x: 600, y: 100 },
-        { x: 600, y: 300 },
-        { x: 400, y: 300 }
-      ],
-      color: '#52c41a',
-      fillColor: 'rgba(82, 196, 26, 0.1)',
-      strokeColor: '#52c41a',
-      fillOpacity: 0.1,
-      opacity: 0.3
-    }
-  ]); // 地图上的区域
+  const [mapAreas, setMapAreas] = useState<MapArea[]>([]); // 地图上的区域
   const [pointCounter, setPointCounter] = useState(1); // 点名称计数器
   const [areaCounter, setAreaCounter] = useState(1); // 区域名称计数器
   const [selectedPoints, setSelectedPoints] = useState<string[]>([]); // 选中的点ID列表
@@ -1509,38 +1481,7 @@ const MapManagement: React.FC = () => {
   }
 
   // 路网组状态管理
-  const [networkGroups, setNetworkGroups] = useState<NetworkGroup[]>([
-    {
-      id: 'network-group1',
-      name: '路网组1',
-      areaId: 'area-a', // 属于A区域
-      nodes: [
-        { id: 'n1', name: 'n1', description: '站点' },
-        { id: 'n2', name: 'n2', description: '电梯' },
-        { id: 'n3', name: 'n3', description: '站点' },
-        { id: 'n4', name: 'n4', description: '充电桩' },
-        { id: 'n5', name: 'n5', description: '停靠点' }
-      ],
-      paths: [
-        { id: 'e1', name: 'e1', description: 'n1→n2' },
-        { id: 'e2', name: 'e2', description: 'n3→n4' },
-        { id: 'e3', name: 'e3', description: 'n2→n5' },
-        { id: 'e4', name: 'e4', description: 'n1→n3' }
-      ]
-    },
-    {
-      id: 'network-group2',
-      name: '路网组2',
-      areaId: 'area-b', // 属于B区域
-      nodes: [
-        { id: 'n1_g2', name: 'n1', description: '站点1' },
-        { id: 'n3_g2', name: 'n3', description: '站点' }
-      ],
-      paths: [
-        { id: 'e1_g2', name: 'e1', description: 'n1→n2' }
-      ]
-    }
-  ]);
+  const [networkGroups, setNetworkGroups] = useState<NetworkGroup[]>([]);
 
   // 路径组管理状态
   const [isPathGroupModalVisible, setIsPathGroupModalVisible] = useState(false);
@@ -1642,6 +1583,28 @@ const MapManagement: React.FC = () => {
     });
   };
 
+  // 切换路网组可见性
+  const handleToggleNetworkGroupVisibility = (groupId: string) => {
+    setNetworkGroups(prev => {
+      const updatedGroups = prev.map(group => 
+        group.id === groupId 
+          ? { ...group, visible: !group.visible }
+          : group
+      );
+      
+      // 调试信息
+      const targetGroup = updatedGroups.find(g => g.id === groupId);
+      console.log(`路网组可见性切换:`, {
+        groupId,
+        groupName: targetGroup?.name,
+        newVisible: targetGroup?.visible,
+        paths: targetGroup?.paths
+      });
+      
+      return updatedGroups;
+    });
+  };
+
   // 设为默认显示
   // const handleSetDefaultNetworkGroup = (groupId: string) => {
   //   setDefaultNetworkGroup(groupId);
@@ -1667,6 +1630,7 @@ const MapManagement: React.FC = () => {
           id: `network-group${Date.now()}`,
           name: values.name,
           areaId: editingArea?.id, // 关联到当前编辑区域
+          visible: true, // 默认显示
           nodes: [],
           paths: []
         };
@@ -1709,6 +1673,7 @@ const MapManagement: React.FC = () => {
         id: `network-group${Date.now()}`,
         name: newNetworkGroupName.trim(),
         areaId: selectedAreaId,
+        visible: true, // 默认显示
         nodes: [],
         paths: []
       };
@@ -12187,8 +12152,35 @@ const MapManagement: React.FC = () => {
                         
                         {/* 渲染线条 - 仅在拓扑地图模式下显示，且未隐藏所有路径时显示 */}
                         {mapType === 'topology' && !hideAllPaths && (() => {
-                          console.log('📊 mapLines data:', mapLines);
-                          return mapLines.map(line => renderLine(line));
+                          // 根据路网组的visible状态过滤显示的路径
+                          const visibleLines = mapLines.filter(line => {
+                            // 查找包含此路径的路网组
+                            const containingNetworkGroup = networkGroups.find(group => 
+                              group.paths.some(path => path.id === line.id || path.name === line.name)
+                            );
+                            
+                            // 调试信息
+                            console.log(`路径 ${line.id} (${line.name}):`, {
+                              containingNetworkGroup: containingNetworkGroup ? {
+                                id: containingNetworkGroup.id,
+                                name: containingNetworkGroup.name,
+                                visible: containingNetworkGroup.visible
+                              } : null,
+                              shouldShow: containingNetworkGroup ? containingNetworkGroup.visible : true
+                            });
+                            
+                            // 如果路径不属于任何路网组，则默认显示
+                            if (!containingNetworkGroup) {
+                              return true;
+                            }
+                            
+                            // 如果路径属于某个路网组，则根据该路网组的visible状态决定是否显示
+                            return containingNetworkGroup.visible;
+                          });
+                          
+                          console.log('可见路径数量:', visibleLines.length, '总路径数量:', mapLines.length);
+                          
+                          return visibleLines.map(line => renderLine(line));
                         })()}
 
 
@@ -12347,36 +12339,111 @@ const MapManagement: React.FC = () => {
                     </svg>
                     
                     {/* 车体模型 - 在点位下方渲染 */}
-                    {mapType === 'topology' && mapPoints.map((point) => {
-                      // 检查是否应该隐藏该点
-                      const shouldHidePoint = hideAllPoints || (hideMapNodes && point.type === '节点');
+                    {mapType === 'topology' && (() => {
+                      // 根据路网组可见性过滤显示的点
+                      const visiblePoints = mapPoints.filter(point => {
+                        // 检查是否应该隐藏该点（原有逻辑）
+                        const shouldHidePoint = hideAllPoints || (hideMapNodes && point.type === '节点');
+                        if (shouldHidePoint) {
+                          return false;
+                        }
+                        
+                        // 检查该点是否作为起点或终点被某个可见路径使用
+                        const isPointUsedByVisiblePath = mapLines.some(line => {
+                          // 检查该点是否是这条线的起点或终点
+                          const isStartOrEndPoint = line.startPointId === point.id || line.endPointId === point.id;
+                          if (!isStartOrEndPoint) {
+                            return false;
+                          }
+                          
+                          // 查找包含此路径的路网组
+                          const containingNetworkGroup = networkGroups.find(group => 
+                            group.paths.some(path => path.id === line.id || path.name === line.name)
+                          );
+                          
+                          // 如果路径不属于任何路网组，则默认显示
+                          if (!containingNetworkGroup) {
+                            return true;
+                          }
+                          
+                          // 如果路径属于某个路网组，则根据该路网组的visible状态决定是否显示
+                          return containingNetworkGroup.visible;
+                        });
+                        
+                        // 如果该点没有被任何路径使用，则默认显示
+                        const isPointUsedByAnyPath = mapLines.some(line => 
+                          line.startPointId === point.id || line.endPointId === point.id
+                        );
+                        
+                        return !isPointUsedByAnyPath || isPointUsedByVisiblePath;
+                      });
                       
-                      // 如果应该隐藏，则不渲染车体模型
-                      if (shouldHidePoint) {
-                        return null;
-                      }
-                      
-                      // 直接使用画布坐标，因为父容器已经应用了CSS transform
-                      const canvasCoords = { x: point.x, y: point.y };
-                      
-                      return renderVehicleModel(point, canvasCoords);
-                    })}
+                      return visiblePoints.map((point) => {
+                        // 直接使用画布坐标，因为父容器已经应用了CSS transform
+                        const canvasCoords = { x: point.x, y: point.y };
+                        
+                        return renderVehicleModel(point, canvasCoords);
+                      });
+                    })()}
 
                     {/* 绘制的点 - 仅在拓扑地图模式下显示，并根据隐藏状态控制显示 */}
-                    {mapType === 'topology' && mapPoints.map((point) => {
-                      // 检查是否应该隐藏该点
-                      const shouldHidePoint = hideAllPoints || (hideMapNodes && point.type === '节点');
+                    {mapType === 'topology' && (() => {
+                      // 根据路网组可见性过滤显示的点
+                      const visiblePoints = mapPoints.filter(point => {
+                        // 检查是否应该隐藏该点（原有逻辑）
+                        const shouldHidePoint = hideAllPoints || (hideMapNodes && point.type === '节点');
+                        if (shouldHidePoint) {
+                          return false;
+                        }
+                        
+                        // 检查该点是否作为起点或终点被某个可见路径使用
+                        const isPointUsedByVisiblePath = mapLines.some(line => {
+                          // 检查该点是否是这条线的起点或终点
+                          const isStartOrEndPoint = line.startPointId === point.id || line.endPointId === point.id;
+                          if (!isStartOrEndPoint) {
+                            return false;
+                          }
+                          
+                          // 查找包含此路径的路网组
+                          const containingNetworkGroup = networkGroups.find(group => 
+                            group.paths.some(path => path.id === line.id || path.name === line.name)
+                          );
+                          
+                          // 调试信息
+                          console.log(`点 ${point.id} 被路径 ${line.id} 使用:`, {
+                            containingNetworkGroup: containingNetworkGroup ? {
+                              id: containingNetworkGroup.id,
+                              name: containingNetworkGroup.name,
+                              visible: containingNetworkGroup.visible
+                            } : null,
+                            shouldShow: containingNetworkGroup ? containingNetworkGroup.visible : true
+                          });
+                          
+                          // 如果路径不属于任何路网组，则默认显示
+                          if (!containingNetworkGroup) {
+                            return true;
+                          }
+                          
+                          // 如果路径属于某个路网组，则根据该路网组的visible状态决定是否显示
+                          return containingNetworkGroup.visible;
+                        });
+                        
+                        // 如果该点没有被任何路径使用，则默认显示
+                        const isPointUsedByAnyPath = mapLines.some(line => 
+                          line.startPointId === point.id || line.endPointId === point.id
+                        );
+                        
+                        return !isPointUsedByAnyPath || isPointUsedByVisiblePath;
+                      });
                       
-                      // 如果应该隐藏，则不渲染该点
-                      if (shouldHidePoint) {
-                        return null;
-                      }
+                      console.log('可见点数量:', visiblePoints.length, '总点数量:', mapPoints.length);
                       
-                      // 直接使用画布坐标，因为父容器已经应用了CSS transform
-                      // 不需要再次转换为屏幕坐标，避免双重变换
-                      const canvasCoords = { x: point.x, y: point.y };
+                      return visiblePoints.map((point) => {
+                        // 直接使用画布坐标，因为父容器已经应用了CSS transform
+                        // 不需要再次转换为屏幕坐标，避免双重变换
+                        const canvasCoords = { x: point.x, y: point.y };
                       
-                      return (
+                        return (
                         <div
                           key={point.id}
                           className="map-point"
@@ -12448,8 +12515,9 @@ const MapManagement: React.FC = () => {
                             </div>
                           )}
                         </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                     
                     {/* 画布提示内容 - 仅在编辑模式下显示 */}
                     {currentMode === 'edit' && (() => {
@@ -13664,16 +13732,7 @@ const MapManagement: React.FC = () => {
                                                 alignItems: 'center',
                                                 padding: '2px 4px',
                                                 borderRadius: '4px',
-                                                transition: 'background-color 0.2s',
-                                                cursor: 'pointer',
                                                 position: 'relative'
-                                              }}
-                                              onClick={() => handleAreaListClick(area.id)}
-                                              onMouseEnter={(e) => {
-                                                e.currentTarget.style.backgroundColor = '#f5f5f5';
-                                              }}
-                                              onMouseLeave={(e) => {
-                                                e.currentTarget.style.backgroundColor = 'transparent';
                                               }}
                                             >
                                               <div style={{ flex: 1 }}>
@@ -13697,7 +13756,23 @@ const MapManagement: React.FC = () => {
                                                     }
                                                   }}
                                                 >
-                                                  <span>{area.name} ({area.type || '区域'})</span>
+                                                  <span 
+                                                    style={{ 
+                                                      cursor: 'pointer',
+                                                      padding: '2px 4px',
+                                                      borderRadius: '2px',
+                                                      transition: 'background-color 0.2s'
+                                                    }}
+                                                    onClick={() => handleAreaListClick(area.id)}
+                                                    onMouseEnter={(e) => {
+                                                      e.currentTarget.style.backgroundColor = '#f5f5f5';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                      e.currentTarget.style.backgroundColor = 'transparent';
+                                                    }}
+                                                  >
+                                                    {area.name} ({area.type || '区域'})
+                                                  </span>
                                                   {currentMode === 'edit' && (
                                                     <Button
                                                       className="area-delete-btn"
@@ -13770,13 +13845,22 @@ const MapManagement: React.FC = () => {
                                                               onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
                                                                 const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
                                                                 if (actionBtns) actionBtns.style.opacity = '1';
+                                                                const eyeIcon = e.currentTarget.querySelector('.network-group-eye-icon') as HTMLElement;
+                                                                if (eyeIcon) eyeIcon.style.opacity = '1';
                                                               }}
                                                               onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
                                                                 const actionBtns = e.currentTarget.querySelector('.network-group-actions') as HTMLElement;
                                                                 if (actionBtns) actionBtns.style.opacity = '0';
+                                                                const eyeIcon = e.currentTarget.querySelector('.network-group-eye-icon') as HTMLElement;
+                                                                if (eyeIcon) eyeIcon.style.opacity = '0';
                                                               }}
                                                             >
-                                                              <span style={{ fontSize: '11px', color: '#1890ff' }}>
+                                                              <span style={{ 
+                                                                fontSize: '11px', 
+                                                                color: '#1890ff',
+                                                                display: 'flex',
+                                                                alignItems: 'center'
+                                                              }}>
                                                                 {networkGroup.name}
                                                               </span>
                                                               {currentMode === 'edit' && (
@@ -13786,9 +13870,36 @@ const MapManagement: React.FC = () => {
                                                                     opacity: 0, 
                                                                     transition: 'opacity 0.2s',
                                                                     display: 'flex',
-                                                                    gap: '2px'
+                                                                    gap: '2px',
+                                                                    alignItems: 'center'
                                                                   }}
                                                                 >
+                                                                  <span
+                                                                    className="network-group-eye-icon"
+                                                                    style={{
+                                                                      cursor: 'pointer',
+                                                                      color: networkGroup.visible ? '#1890ff' : '#d9d9d9',
+                                                                      fontSize: '12px',
+                                                                      display: 'flex',
+                                                                      alignItems: 'center',
+                                                                      padding: '1px',
+                                                                      borderRadius: '2px',
+                                                                      transition: 'all 0.2s ease'
+                                                                    }}
+                                                                    onClick={(e) => {
+                                                                      e.stopPropagation();
+                                                                      handleToggleNetworkGroupVisibility(networkGroup.id);
+                                                                    }}
+                                                                    onMouseEnter={(e) => {
+                                                                      e.currentTarget.style.backgroundColor = '#f0f0f0';
+                                                                    }}
+                                                                    onMouseLeave={(e) => {
+                                                                      e.currentTarget.style.backgroundColor = 'transparent';
+                                                                    }}
+                                                                    title={networkGroup.visible ? '隐藏路网组' : '显示路网组'}
+                                                                  >
+                                                                    {networkGroup.visible ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                                                                  </span>
                                                                   <Button 
                                                                     type="text" 
                                                                     size="small" 
