@@ -264,7 +264,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
   
   // 根据节点类型添加特定字段
   switch (type) {
-    case 'condition':
+    case 'condition': {
       // 条件表达式字段
       if (behaviorTreeData?.conditionExpression) {
         fieldCount++;
@@ -278,6 +278,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       const extraHeightPerGroup = 25; // 每个条件组的额外高度
       totalHeight += (conditionGroupsCount - 1) * extraHeightPerGroup; // 第一个条件组已包含在基础高度中
       break;
+    }
     case 'repeat':
       // 重复次数或功能描述字段
       fieldCount++;
@@ -958,7 +959,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
           }
         };
         break;
-      case 'sequence':
+      case 'sequence': {
         const sequenceNodeData = {
           id: newNodeId,
           type: 'sequence' as NodeType,
@@ -1006,7 +1007,8 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
           }
         };
         break;
-      case 'parallel':
+      }
+      case 'parallel': {
         const parallelNodeData = {
           id: newNodeId,
           type: 'parallel' as NodeType,
@@ -1054,7 +1056,8 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
           }
         };
         break;
-      case 'condition':
+      }
+      case 'condition': {
         const conditionNodeData = {
           id: newNodeId,
           type: 'condition' as NodeType,
@@ -1117,7 +1120,8 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
           }
         };
         break;
-      case 'inverter':
+      }
+      case 'inverter': {
         const inverterNodeData = {
           id: newNodeId,
           type: 'inverter' as NodeType,
@@ -1165,7 +1169,8 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
           }
         };
         break;
-      case 'repeat':
+      }
+      case 'repeat': {
         const repeatNodeData = {
           id: newNodeId,
           type: 'repeat' as NodeType,
@@ -1216,6 +1221,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
           }
         };
         break;
+      }
       default:
         newNode = {
           id: newNodeId,
@@ -1946,7 +1952,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
         setSelectedStageNode(null);
         setStagePropertyPanelVisible(false);
       }
-    } catch (error) {
+    } catch {
       message.error('请完善必填信息');
     }
   };
@@ -2009,7 +2015,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
     };
   };
 
-  const handleFinish = async (_values: any) => {
+  const handleFinish = async () => {
     try {
       setLoading(true);
       
@@ -2994,7 +3000,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       // 检测目标连接点
       const targetPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
       if (targetPoint && targetPoint.type === 'input' && dragConnectionStart && targetPoint.nodeId !== dragConnectionStart.nodeId) {
-
+        // TODO: 实现连接逻辑
       }
     } else if (isDraggingNode && draggedNode) {
       // 拖拽节点
@@ -3250,7 +3256,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
         setDragConnectionEnd(null);
         return; // 提前返回，避免重置dragConnectionStart
       } else {
-
+        // 其他情况的处理逻辑
       }
       
       // 重置拖拽状态

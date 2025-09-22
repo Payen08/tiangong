@@ -84,29 +84,32 @@ export const getDateRangeByType = (type: TimeRangeType): { start: Date; end: Dat
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   
   switch (type) {
-    case 'yesterday':
+    case 'yesterday': {
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
       return {
         start: yesterday,
         end: new Date(yesterday.getTime() + 24 * 60 * 60 * 1000 - 1)
       };
+    }
     
-    case 'last7days':
+    case 'last7days': {
       const sevenDaysAgo = new Date(today);
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       return {
         start: sevenDaysAgo,
         end: new Date(today.getTime() - 1)
       };
+    }
     
-    case 'last30days':
+    case 'last30days': {
       const thirtyDaysAgo = new Date(today);
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       return {
         start: thirtyDaysAgo,
         end: new Date(today.getTime() - 1)
       };
+    }
     
     default:
       return {

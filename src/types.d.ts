@@ -49,7 +49,7 @@ declare module 'antd/locale/zh_CN' {
 }
 
 declare module 'antd/es/table' {
-  export interface ColumnsType<T = any> {
+  export interface ColumnsType<_T = any> {
     [key: string]: any;
   }
 }

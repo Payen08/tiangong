@@ -1379,7 +1379,7 @@ const MapManagement: React.FC = () => {
   const [lastConnectedPoint, setLastConnectedPoint] = useState<string | null>(null); // 上一个连接的点ID
   
   // 防抖处理鼠标位置更新
-  const mouseUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const mouseUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // 优化的鼠标位置更新函数
   const updateMousePositionOptimized = useCallback((x: number, y: number) => {

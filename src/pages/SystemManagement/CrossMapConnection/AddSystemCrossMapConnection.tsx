@@ -846,7 +846,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
 
   // 处理光标闪烁定时器
   useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
     
     if (floorInputState.isEditing) {
       intervalId = setInterval(() => {

@@ -426,7 +426,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
   };
 
   // 渲染设备需求表单
-  const renderDeviceRequirement = (requirement: DeviceRequirement): JSX.Element => (
+  const renderDeviceRequirement = (requirement: DeviceRequirement): React.ReactElement => (
     <Card
       key={requirement.id}
       size="small"

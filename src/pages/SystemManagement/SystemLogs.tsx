@@ -70,7 +70,7 @@ const SystemLogs: React.FC = () => {
     try {
       // 直接设置数据，不使用loading
       setLogFiles(mockLogFiles);
-    } catch (error) {
+    } catch {
       message.error('加载日志文件失败');
     }
   };

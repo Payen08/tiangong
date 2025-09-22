@@ -33,7 +33,7 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
     const mountNode = mountRef.current;
     
     // 声明自动测试定时器变量
-    let autoTestTimer: NodeJS.Timeout;
+    let autoTestTimer: ReturnType<typeof setTimeout>;
 
     // Scene
     const scene = new THREE.Scene();
