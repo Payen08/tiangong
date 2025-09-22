@@ -1439,6 +1439,19 @@ const MapManagement: React.FC = () => {
   // 右侧信息面板标签页状态
   const [activeTabKey, setActiveTabKey] = useState('elements'); // 默认选中地图元素Tab
 
+  // 地图原点坐标编辑相关状态
+  const [originEditVisible, setOriginEditVisible] = useState(false); // 原点编辑气泡显示状态
+  const [tempOriginX, setTempOriginX] = useState<number>(0); // 临时X坐标
+  const [tempOriginY, setTempOriginY] = useState<number>(0); // 临时Y坐标
+
+  // 地图方向编辑相关状态
+  const [directionEditVisible, setDirectionEditVisible] = useState(false); // 方向编辑气泡显示状态
+  const [tempDirection, setTempDirection] = useState<number>(0); // 临时方向值
+
+  // 分辨率编辑相关状态
+  const [resolutionEditVisible, setResolutionEditVisible] = useState(false); // 分辨率编辑气泡显示状态
+  const [tempResolution, setTempResolution] = useState<number>(0.05); // 临时分辨率值
+
   // 搜索功能状态
   const [searchValue, setSearchValue] = useState('');
   const [searchType, setSearchType] = useState<'line' | 'point'>('line');
@@ -11103,56 +11116,210 @@ const MapManagement: React.FC = () => {
                      </div>
                     
                     <div>
-                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图原点 (X, Y坐标)</div>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: '#666', 
+                        marginBottom: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}>
+                        <span>地图原点 (X, Y坐标)</span>
+                        <Popover
+                          content={
+                            <div style={{ width: 280, padding: '8px 0' }}>
+                              <div style={{ marginBottom: 16 }}>
+                                <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: 8 }}>编辑地图原点坐标</div>
+                                <div style={{ display: 'flex', gap: '8px', marginBottom: 16 }}>
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>X坐标</div>
+                                    <Input 
+                                      value={tempOriginX}
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTempOriginX(Number(e.target.value) || 0)}
+                                      placeholder="请输入X坐标"
+                                      size="small"
+                                      type="number"
+                                    />
+                                  </div>
+                                  <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>Y坐标</div>
+                                    <Input 
+                                      value={tempOriginY}
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTempOriginY(Number(e.target.value) || 0)}
+                                      placeholder="请输入Y坐标"
+                                      size="small"
+                                      type="number"
+                                    />
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                  <Button 
+                                    size="small" 
+                                    onClick={() => setOriginEditVisible(false)}
+                                  >
+                                    取消
+                                  </Button>
+                                  <Button 
+                                    type="primary" 
+                                    size="small"
+                                    onClick={() => {
+                                      setMapInfo({
+                                        ...mapInfo,
+                                        originX: tempOriginX,
+                                        originY: tempOriginY
+                                      });
+                                      setOriginEditVisible(false);
+                                      message.success('地图原点坐标已更新');
+                                    }}
+                                  >
+                                    保存
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          }
+                          title={null}
+                          trigger="click"
+                          open={originEditVisible}
+                          onOpenChange={(visible) => {
+                            if (visible) {
+                              // 打开时初始化临时值
+                              setTempOriginX(mapInfo.originX);
+                              setTempOriginY(mapInfo.originY);
+                            }
+                            setOriginEditVisible(visible);
+                          }}
+                          placement="bottomRight"
+                        >
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<EditOutlined />}
+                            style={{
+                              padding: '2px 4px',
+                              height: 'auto',
+                              color: '#1890ff'
+                            }}
+                          />
+                        </Popover>
+                      </div>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <Input 
                           value={mapInfo.originX}
-                          onChange={currentMode === 'edit' ? (e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, originX: Number(e.target.value) || 0}) : undefined}
                           placeholder="X坐标"
                           size="small"
                           type="number"
                           style={{ 
                             flex: 1,
-                            backgroundColor: currentMode === 'view' ? '#f5f5f5' : undefined,
-                            color: currentMode === 'view' ? '#999' : undefined
+                            backgroundColor: '#f5f5f5',
+                            color: '#999'
                           }}
-                          readOnly={currentMode === 'view'}
+                          readOnly
                         />
                         <Input 
                           value={mapInfo.originY}
-                          onChange={currentMode === 'edit' ? (e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, originY: Number(e.target.value) || 0}) : undefined}
                           placeholder="Y坐标"
                           size="small"
                           type="number"
                           style={{ 
                             flex: 1,
-                            backgroundColor: currentMode === 'view' ? '#f5f5f5' : undefined,
-                            color: currentMode === 'view' ? '#999' : undefined
+                            backgroundColor: '#f5f5f5',
+                            color: '#999'
                           }}
-                          readOnly={currentMode === 'view'}
+                          readOnly
                         />
                       </div>
                     </div>
                     
                     <div>
-                       <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图方向</div>
-                       <Input 
-                         value={mapInfo.direction}
-                         onChange={currentMode === 'edit' ? (e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, direction: Number(e.target.value) || 0}) : undefined}
-                         placeholder="请输入地图方向（-180到180）"
-                         size="small"
-                         type="number"
-                         min="-180"
-                         max="180"
-                         addonAfter="°"
-                         className={currentMode === 'view' ? 'readonly-input' : ''}
-                         style={{
-                           backgroundColor: currentMode === 'view' ? '#f5f5f5 !important' : undefined,
-                           color: currentMode === 'view' ? '#999 !important' : undefined
-                         }}
-                         readOnly={currentMode === 'view'}
-                       />
-                     </div>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        fontSize: '12px', 
+                        color: '#666', 
+                        marginBottom: '4px' 
+                      }}>
+                        地图方向
+                        <Popover
+                          content={
+                            <div style={{ width: '200px' }}>
+                              <div style={{ marginBottom: '8px', fontSize: '12px', fontWeight: 500 }}>
+                                编辑地图方向
+                              </div>
+                              <div style={{ marginBottom: '12px' }}>
+                                <Input 
+                                  value={tempDirection}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTempDirection(Number(e.target.value) || 0)}
+                                  placeholder="请输入地图方向（-180到180）"
+                                  size="small"
+                                  type="number"
+                                  min="-180"
+                                  max="180"
+                                  addonAfter="°"
+                                />
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                <Button 
+                                  size="small"
+                                  onClick={() => setDirectionEditVisible(false)}
+                                >
+                                  取消
+                                </Button>
+                                <Button 
+                                  type="primary" 
+                                  size="small"
+                                  onClick={() => {
+                                    setMapInfo({
+                                      ...mapInfo,
+                                      direction: tempDirection
+                                    });
+                                    setDirectionEditVisible(false);
+                                    message.success('地图方向已更新');
+                                  }}
+                                >
+                                  保存
+                                </Button>
+                              </div>
+                            </div>
+                          }
+                          title={null}
+                          trigger="click"
+                          open={directionEditVisible}
+                          onOpenChange={(visible) => {
+                            if (visible) {
+                              // 打开时初始化临时值
+                              setTempDirection(mapInfo.direction);
+                            }
+                            setDirectionEditVisible(visible);
+                          }}
+                          placement="bottomRight"
+                        >
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<EditOutlined />}
+                            style={{
+                              padding: '2px 4px',
+                              height: 'auto',
+                              color: '#1890ff'
+                            }}
+                          />
+                        </Popover>
+                      </div>
+                      <Input 
+                        value={mapInfo.direction}
+                        placeholder="地图方向"
+                        size="small"
+                        type="number"
+                        addonAfter="°"
+                        style={{ 
+                          backgroundColor: '#f5f5f5',
+                          color: '#999'
+                        }}
+                        readOnly
+                      />
+                    </div>
                     
                     <div>
                        <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>地图长宽 (单位: m)</div>
@@ -11203,20 +11370,90 @@ const MapManagement: React.FC = () => {
                      </div>
                     
                     <div>
-                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>分辨率 (m/pixel)</div>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between', 
+                        alignItems: 'center', 
+                        fontSize: '12px', 
+                        color: '#666', 
+                        marginBottom: '4px' 
+                      }}>
+                        分辨率 (m/pixel)
+                        <Popover
+                          content={
+                            <div style={{ width: '200px' }}>
+                              <div style={{ marginBottom: '8px', fontSize: '12px', fontWeight: 500 }}>
+                                编辑分辨率
+                              </div>
+                              <div style={{ marginBottom: '12px' }}>
+                                <Input 
+                                  value={tempResolution}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTempResolution(Number(e.target.value) || 0)}
+                                  placeholder="请输入分辨率"
+                                  size="small"
+                                  type="number"
+                                  step="0.001"
+                                  min="0"
+                                />
+                              </div>
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                <Button 
+                                  size="small"
+                                  onClick={() => setResolutionEditVisible(false)}
+                                >
+                                  取消
+                                </Button>
+                                <Button 
+                                  type="primary" 
+                                  size="small"
+                                  onClick={() => {
+                                    setMapInfo({
+                                      ...mapInfo,
+                                      resolution: tempResolution
+                                    });
+                                    setResolutionEditVisible(false);
+                                    message.success('分辨率已更新');
+                                  }}
+                                >
+                                  保存
+                                </Button>
+                              </div>
+                            </div>
+                          }
+                          title={null}
+                          trigger="click"
+                          open={resolutionEditVisible}
+                          onOpenChange={(visible) => {
+                            if (visible) {
+                              // 打开时初始化临时值
+                              setTempResolution(mapInfo.resolution);
+                            }
+                            setResolutionEditVisible(visible);
+                          }}
+                          placement="bottomRight"
+                        >
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<EditOutlined />}
+                            style={{
+                              padding: '2px 4px',
+                              height: 'auto',
+                              color: '#1890ff'
+                            }}
+                          />
+                        </Popover>
+                      </div>
                       <Input 
                         value={mapInfo.resolution}
-                        onChange={currentMode === 'edit' ? (e: React.ChangeEvent<HTMLInputElement>) => setMapInfo({...mapInfo, resolution: Number(e.target.value) || 0}) : undefined}
-                        placeholder="请输入分辨率"
+                        placeholder="分辨率"
                         size="small"
                         type="number"
-                        step="0.001"
-                        min="0"
-                        style={{
-                          backgroundColor: currentMode === 'view' ? '#f5f5f5' : undefined,
-                          color: currentMode === 'view' ? '#999' : undefined
+                        style={{ 
+                          backgroundColor: '#f5f5f5',
+                          color: '#999'
                         }}
-                        readOnly={currentMode === 'view'}
+                        readOnly
                       />
                     </div>
                     
@@ -14187,8 +14424,8 @@ const MapManagement: React.FC = () => {
                           </div>
                         )
                       }] : []),
-                      // 元素隐藏标签页
-                      {
+                      // 元素隐藏标签页 - 只在拓扑地图模式下显示
+                      ...(mapType === 'topology' ? [{
                         key: 'elementHide',
                         label: '元素隐藏',
                         children: (
@@ -14242,7 +14479,7 @@ const MapManagement: React.FC = () => {
                             </div>
                           </div>
                         )
-                      }
+                      }] : [])
                     ]}
                   />
                 </div>
