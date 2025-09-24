@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Drawer, Form, Input, Button, Space, Card, Row, Col, Select, Tag, message } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 
@@ -127,7 +128,7 @@ const AddCrossMapPathGroup: React.FC<AddCrossMapPathGroupProps> = ({
       onSave(saveData);
       setLoading(false);
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
       setLoading(false);
     }
   };
@@ -165,7 +166,7 @@ const AddCrossMapPathGroup: React.FC<AddCrossMapPathGroupProps> = ({
       onClose={handleCancel}
       width={width}
       placement={placement}
-      destroyOnClose
+      destroyOnHidden
       footer={
         <div style={{ textAlign: 'center' }}>
           <Space>

@@ -261,7 +261,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ visible, onClose, taskData }) =
       closable={true}
       maskClosable={true}
       keyboard={true}
-      destroyOnClose={false}
+      destroyOnHidden={false}
       mask={true}
       getContainer={false}
       style={{

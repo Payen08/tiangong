@@ -26,6 +26,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useResponsive } from '@/hooks/useResponsive';
+import { isDev } from '@/lib/utils';
 
 const { confirm } = Modal;
 
@@ -230,7 +231,7 @@ const IdleDockingManagement: React.FC = () => {
         form.resetFields();
       }, 1000);
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
     }
   };
 

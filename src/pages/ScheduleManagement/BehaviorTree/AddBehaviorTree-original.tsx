@@ -27,6 +27,7 @@ import {
   SortAscendingOutlined,
   DeleteOutlined
 } from '@ant-design/icons';
+import { isDev } from '@/lib/utils';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -507,7 +508,7 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
       message.success(editData ? '保存成功' : '创建成功');
       onClose();
     } catch (error) {
-      console.error('保存失败:', error);
+      if (isDev) console.error('保存失败:', error);
       message.error('保存失败');
     } finally {
       setLoading(false);
@@ -520,7 +521,7 @@ const AddBehaviorTree: React.FC<AddBehaviorTreeProps> = ({
       width="100%"
       open={visible}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
       styles={{
         body: { padding: 0 },
         header: { borderBottom: '1px solid #f0f0f0' }

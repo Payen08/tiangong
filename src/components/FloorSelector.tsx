@@ -69,7 +69,7 @@ const FloorSelector: React.FC<FloorSelectorProps> = ({
   };
 
   // 下拉菜单样式 - 与深色主题保持一致
-  const dropdownStyle: React.CSSProperties = {
+  const popupStyles: React.CSSProperties = {
     backgroundColor: 'rgba(4, 3, 28, 0.95)', // 深色背景，与主界面一致
     backdropFilter: 'blur(10px)',
     border: '1px solid rgba(255, 255, 255, 0.1)', // 添加边框
@@ -82,10 +82,10 @@ const FloorSelector: React.FC<FloorSelectorProps> = ({
       value={selectedFloor}
       onChange={handleFloorChange}
       style={defaultStyle}
-      dropdownStyle={dropdownStyle}
+      styles={{ popup: { root: popupStyles } }}
       disabled={disabled}
       placeholder={placeholder}
-      popupClassName="floor-selector-dropdown"
+      classNames={{ popup: { root: "floor-selector-dropdown" } }}
     >
       {floors.map(floor => (
         <Option key={floor.id} value={floor.id}>

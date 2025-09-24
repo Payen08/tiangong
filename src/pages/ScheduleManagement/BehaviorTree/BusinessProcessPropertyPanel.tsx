@@ -14,6 +14,7 @@ import {
   SettingOutlined,
   EyeOutlined
 } from '@ant-design/icons';
+import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 
@@ -151,7 +152,7 @@ const BusinessProcessPropertyPanel: React.FC<BusinessProcessPropertyPanelProps> 
       message.success('业务流程节点属性已保存');
       onClose();
     }).catch((error: any) => {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
       message.error('请检查表单输入');
     });
   };

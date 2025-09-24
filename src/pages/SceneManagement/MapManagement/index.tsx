@@ -72,6 +72,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import BatchSettingsPanel from './BatchSettingsPanel';
+import { isDev } from '@/lib/utils';
 
 // 添加CSS样式
 const thumbnailHoverStyle = `
@@ -550,7 +551,7 @@ const MapManagement: React.FC = () => {
     setIsDraggingControlHandle(true);
     setDragStartPosition({ x: canvasX, y: canvasY });
     
-    console.log('🎯 Control handle mouse down:', { lineId, handleType, canvasX, canvasY });
+    if (isDev) console.log('🎯 Control handle mouse down:', { lineId, handleType, canvasX, canvasY });
   };
 
   // 控制手柄拖拽事件
@@ -592,7 +593,7 @@ const MapManagement: React.FC = () => {
     setIsDraggingControlHandle(false);
     setSelectedControlHandle(null);
     setDragStartPosition(null);
-    console.log('🎯 Control handle drag end');
+    if (isDev) console.log('🎯 Control handle drag end');
   };
   
   // 点拖拽开始事件
@@ -642,7 +643,7 @@ const MapManagement: React.FC = () => {
     setDraggingPointId(pointId);
     setPointDragStart({ x: canvasX, y: canvasY });
     
-    console.log('🎯 Point drag start:', { pointId, canvasX, canvasY });
+    if (isDev) console.log('🎯 Point drag start:', { pointId, canvasX, canvasY });
   };
   
   // 点拖拽移动事件
@@ -727,7 +728,7 @@ const MapManagement: React.FC = () => {
     setPointDragStart(null);
     setPointsInitialPositions({});
     setSelectionInitialPosition(null);  // 清空初始位置记录
-    console.log('🎯 Point drag end');
+    if (isDev) console.log('🎯 Point drag end');
   };
 
   // 处理框选区域拖拽开始
@@ -740,7 +741,7 @@ const MapManagement: React.FC = () => {
     const canvasCoords = screenToCanvasCoordinates(event.clientX, event.clientY, canvasRef.current);
     setIsDraggingSelection(true);
     setSelectionDragStart(canvasCoords);
-    console.log('🎯 Selection drag start:', canvasCoords);
+    if (isDev) console.log('🎯 Selection drag start:', canvasCoords);
   };
 
   // 处理框选区域拖拽移动
@@ -819,7 +820,7 @@ const MapManagement: React.FC = () => {
   const handleSelectionDragEnd = () => {
     setIsDraggingSelection(false);
     setSelectionDragStart(null);
-    console.log('🎯 Selection drag end');
+    if (isDev) console.log('🎯 Selection drag end');
   };
   
   // 处理方向键移动选中元素
@@ -1086,28 +1087,28 @@ const MapManagement: React.FC = () => {
 
   // 处理点位旋转90度
   const handlePointRotate = () => {
-    console.log('🔄 [旋转调试] 顺时针旋转函数被调用');
-    console.log('🔄 [旋转调试] 当前选中点数量:', selectedPoints.length);
-    console.log('🔄 [旋转调试] 选中点ID列表:', selectedPoints);
+    if (isDev) console.log('🔄 [旋转调试] 顺时针旋转函数被调用');
+    if (isDev) console.log('🔄 [旋转调试] 当前选中点数量:', selectedPoints.length);
+    if (isDev) console.log('🔄 [旋转调试] 选中点ID列表:', selectedPoints);
     
     if (selectedPoints.length === 0) {
-      console.log('🔄 [旋转调试] 没有选中点，退出旋转');
+      if (isDev) console.log('🔄 [旋转调试] 没有选中点，退出旋转');
       return;
     }
     
     // 计算选中点的中心点
     const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
-    console.log('🔄 [旋转调试] 选中点数据:', selectedPointsData);
+    if (isDev) console.log('🔄 [旋转调试] 选中点数据:', selectedPointsData);
     
     if (selectedPointsData.length === 0) {
-      console.log('🔄 [旋转调试] 没有找到选中点数据，退出旋转');
+      if (isDev) console.log('🔄 [旋转调试] 没有找到选中点数据，退出旋转');
       return;
     }
     
     const centerX = selectedPointsData.reduce((sum, point) => sum + point.x, 0) / selectedPointsData.length;
     const centerY = selectedPointsData.reduce((sum, point) => sum + point.y, 0) / selectedPointsData.length;
     
-    console.log('🔄 [旋转调试] 旋转中心点:', { centerX, centerY });
+    if (isDev) console.log('🔄 [旋转调试] 旋转中心点:', { centerX, centerY });
     
     // 更新点位置（绕中心点顺时针旋转90度）
     setMapPoints(prevPoints => {
@@ -1137,7 +1138,7 @@ const MapManagement: React.FC = () => {
             direction: newDirection
           };
           
-          console.log('🔄 [旋转调试] 点旋转:', {
+          if (isDev) console.log('🔄 [旋转调试] 点旋转:', {
             pointId: point.id,
             原坐标: { x: point.x, y: point.y },
             新坐标: { x: newPoint.x, y: newPoint.y },
@@ -1150,7 +1151,7 @@ const MapManagement: React.FC = () => {
         return point;
       });
       
-      console.log('🔄 [旋转调试] 旋转完成，更新选中框位置');
+      if (isDev) console.log('🔄 [旋转调试] 旋转完成，更新选中框位置');
       
       // 更新选中框位置
       setTimeout(() => {
@@ -1167,7 +1168,7 @@ const MapManagement: React.FC = () => {
             const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
             const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
             
-            console.log('🔄 [旋转调试] 新选中框位置:', { newSelectionStart, newSelectionEnd });
+            if (isDev) console.log('🔄 [旋转调试] 新选中框位置:', { newSelectionStart, newSelectionEnd });
             
             setSelectionStart(newSelectionStart);
             setSelectionEnd(newSelectionEnd);
@@ -1230,28 +1231,28 @@ const MapManagement: React.FC = () => {
 
   // 逆时针旋转90度
   const handlePointRotateCounterClockwise = () => {
-    console.log('🔄 [旋转调试] 逆时针旋转函数被调用');
-    console.log('🔄 [旋转调试] 当前选中点数量:', selectedPoints.length);
-    console.log('🔄 [旋转调试] 选中点ID列表:', selectedPoints);
+    if (isDev) console.log('🔄 [旋转调试] 逆时针旋转函数被调用');
+    if (isDev) console.log('🔄 [旋转调试] 当前选中点数量:', selectedPoints.length);
+    if (isDev) console.log('🔄 [旋转调试] 选中点ID列表:', selectedPoints);
     
     if (selectedPoints.length === 0) {
-      console.log('🔄 [旋转调试] 没有选中点，退出旋转');
+      if (isDev) console.log('🔄 [旋转调试] 没有选中点，退出旋转');
       return;
     }
     
     // 计算选中点的中心点
     const selectedPointsData = mapPoints.filter(point => selectedPoints.includes(point.id));
-    console.log('🔄 [旋转调试] 选中点数据:', selectedPointsData);
+    if (isDev) console.log('🔄 [旋转调试] 选中点数据:', selectedPointsData);
     
     if (selectedPointsData.length === 0) {
-      console.log('🔄 [旋转调试] 没有找到选中点数据，退出旋转');
+      if (isDev) console.log('🔄 [旋转调试] 没有找到选中点数据，退出旋转');
       return;
     }
     
     const centerX = selectedPointsData.reduce((sum, point) => sum + point.x, 0) / selectedPointsData.length;
     const centerY = selectedPointsData.reduce((sum, point) => sum + point.y, 0) / selectedPointsData.length;
     
-    console.log('🔄 [旋转调试] 旋转中心点:', { centerX, centerY });
+    if (isDev) console.log('🔄 [旋转调试] 旋转中心点:', { centerX, centerY });
     
     // 更新点的位置（逆时针旋转90度）
     setMapPoints(prevPoints => {
@@ -1281,7 +1282,7 @@ const MapManagement: React.FC = () => {
             direction: newDirection
           };
           
-          console.log('🔄 [旋转调试] 点坐标变换:', {
+          if (isDev) console.log('🔄 [旋转调试] 点坐标变换:', {
             pointId: point.id,
             原坐标: { x: point.x, y: point.y },
             新坐标: { x: newPoint.x, y: newPoint.y },
@@ -1296,7 +1297,7 @@ const MapManagement: React.FC = () => {
       
       // 更新选中框位置
       setTimeout(() => {
-        console.log('🔄 [旋转调试] 逆时针旋转完成，更新选中框位置');
+        if (isDev) console.log('🔄 [旋转调试] 逆时针旋转完成，更新选中框位置');
         if (selectedPoints.length > 0) {
           const rotatedSelectedPoints = updatedPoints.filter(point => selectedPoints.includes(point.id));
           if (rotatedSelectedPoints.length > 0) {
@@ -1310,7 +1311,7 @@ const MapManagement: React.FC = () => {
             const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
             const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
             
-            console.log('🔄 [旋转调试] 新选中框位置:', {
+            if (isDev) console.log('🔄 [旋转调试] 新选中框位置:', {
               start: newSelectionStart,
               end: newSelectionEnd
             });
@@ -1607,7 +1608,7 @@ const MapManagement: React.FC = () => {
       
       // 调试信息
       const targetGroup = updatedGroups.find(g => g.id === groupId);
-      console.log(`路网组可见性切换:`, {
+      if (isDev) console.log(`路网组可见性切换:`, {
         groupId,
         groupName: targetGroup?.name,
         newVisible: targetGroup?.visible,
@@ -1661,7 +1662,7 @@ const MapManagement: React.FC = () => {
       networkGroupForm.resetFields();
       setEditingNetworkGroup(null);
     } catch (error) {
-      console.error('保存失败:', error);
+      if (isDev) console.error('保存失败:', error);
     }
   };
 
@@ -1702,7 +1703,7 @@ const MapManagement: React.FC = () => {
       
       message.success('路网组创建成功');
     } catch (error) {
-      console.error('创建路网组失败:', error);
+      if (isDev) console.error('创建路网组失败:', error);
       message.error('创建路网组失败');
     } finally {
       setAddNetworkGroupLoading(false);
@@ -1795,7 +1796,7 @@ const MapManagement: React.FC = () => {
       pathGroupForm.resetFields();
       setEditingPathGroup(null);
     } catch (error) {
-      console.error('保存失败:', error);
+      if (isDev) console.error('保存失败:', error);
     }
   };
 
@@ -1854,7 +1855,7 @@ const MapManagement: React.FC = () => {
         opacity: 0.3
       };
       
-      console.log('🎯 [区域绘制] 完成区域绘制', {
+      if (isDev) console.log('🎯 [区域绘制] 完成区域绘制', {
         区域ID: newArea.id,
         区域名称: newArea.name,
         点数: newArea.points.length,
@@ -2101,7 +2102,7 @@ const MapManagement: React.FC = () => {
       
       handleClosePathGroupSelect();
     } catch (error) {
-      console.error('加入路径组失败:', error);
+      if (isDev) console.error('加入路径组失败:', error);
     }
   };
 
@@ -2164,7 +2165,7 @@ const MapManagement: React.FC = () => {
       
       handleCloseNetworkGroupSelect();
     } catch (error) {
-      console.error('加入路网组失败:', error);
+      if (isDev) console.error('加入路网组失败:', error);
     }
   };
 
@@ -2221,7 +2222,7 @@ const MapManagement: React.FC = () => {
     const relativeX = screenX - rect.left;
     const relativeY = screenY - rect.top;
     
-    console.log('🔄 [坐标转换] screenToCanvasCoordinates 输入参数:', {
+    if (isDev) console.log('🔄 [坐标转换] screenToCanvasCoordinates 输入参数:', {
       '1_屏幕坐标': { screenX, screenY },
       '2_画布元素rect': { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
       '3_相对坐标': { relativeX, relativeY },
@@ -2235,7 +2236,7 @@ const MapManagement: React.FC = () => {
     const canvasX = (relativeX - canvasOffset.x * canvasScale) / canvasScale;
     const canvasY = (relativeY - canvasOffset.y * canvasScale) / canvasScale;
     
-    console.log('🎯 [坐标转换] screenToCanvasCoordinates 转换结果:', {
+    if (isDev) console.log('🎯 [坐标转换] screenToCanvasCoordinates 转换结果:', {
       '1_计算过程': {
         'relativeX - canvasOffset.x * canvasScale': relativeX - canvasOffset.x * canvasScale,
         'X轴除以 canvasScale': canvasScale,
@@ -2259,7 +2260,7 @@ const MapManagement: React.FC = () => {
   //   
   //   const rect = canvasRef.current.getBoundingClientRect();
   //   
-  //   console.log('🔄 [坐标转换] canvasToScreenCoordinates 输入参数:', {
+  //   if (isDev) console.log('🔄 [坐标转换] canvasToScreenCoordinates 输入参数:', {
   //     '1_画布坐标': { canvasX, canvasY },
   //     '2_画布元素rect': { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
   //     '3_画布状态': { canvasScale, canvasOffset }
@@ -2270,7 +2271,7 @@ const MapManagement: React.FC = () => {
   //   const screenX = (canvasX * canvasScale) + (canvasOffset.x * canvasScale) + rect.left;
   //   const screenY = (canvasY * canvasScale) + (canvasOffset.y * canvasScale) + rect.top;
   //   
-  //   console.log('🎯 [坐标转换] canvasToScreenCoordinates 转换结果:', {
+  //   if (isDev) console.log('🎯 [坐标转换] canvasToScreenCoordinates 转换结果:', {
   //     '1_计算过程': {
   //       'canvasX * canvasScale': canvasX * canvasScale,
   //       'canvasOffset.x * canvasScale': canvasOffset.x * canvasScale,
@@ -2289,7 +2290,7 @@ const MapManagement: React.FC = () => {
 
   // 根据ID获取点数据
   const getPointById = (pointId: string) => {
-    console.log('🔍 [getPointById] 查找点数据', {
+    if (isDev) console.log('🔍 [getPointById] 查找点数据', {
       searchingForId: pointId,
       mapPointsLength: mapPoints.length,
       mapPointsIds: mapPoints.map(p => p.id),
@@ -2299,7 +2300,7 @@ const MapManagement: React.FC = () => {
     
     const foundPoint = mapPoints.find(point => point.id === pointId);
     
-    console.log('🎯 [getPointById] 查找结果', {
+    if (isDev) console.log('🎯 [getPointById] 查找结果', {
       searchingForId: pointId,
       foundPoint: foundPoint ? { id: foundPoint.id, name: foundPoint.name, x: foundPoint.x, y: foundPoint.y } : null,
       found: !!foundPoint
@@ -2878,7 +2879,7 @@ const MapManagement: React.FC = () => {
           setSelectedMap(parsedData[0]);
         }
       } catch (error) {
-        console.error('解析localStorage数据失败:', error);
+        if (isDev) console.error('解析localStorage数据失败:', error);
         setMapData(defaultMapData);
         setSelectedMap(defaultMapData[0]);
         localStorage.setItem('mapData', JSON.stringify(defaultMapData));
@@ -3225,7 +3226,7 @@ const MapManagement: React.FC = () => {
   };
 
   const handleSettings = (record: MapData) => {
-    console.log('地图设置:', record);
+    if (isDev) console.log('地图设置:', record);
   };
 
   const handleMapSync = (record: MapData) => {
@@ -3434,7 +3435,7 @@ const MapManagement: React.FC = () => {
   };
 
   const handleDetail = (file: MapFile) => {
-    console.log('🔧 [地图文件编辑标识] 开始编辑地图文件:', {
+    if (isDev) console.log('🔧 [地图文件编辑标识] 开始编辑地图文件:', {
       '文件ID': file.id,
       '文件名称': file.name,
       '文件状态': file.status,
@@ -3443,13 +3444,13 @@ const MapManagement: React.FC = () => {
     
     // 设置当前编辑的地图文件
     setCurrentEditFile(file);
-    console.log('🔧 [地图文件编辑标识] 设置currentEditFile完成:', file);
+    if (isDev) console.log('🔧 [地图文件编辑标识] 设置currentEditFile完成:', file);
     
     setMapFileUploadedImage({
       url: file.thumbnail,
       name: file.name
     });
-    console.log('🔧 [地图文件编辑标识] 设置mapFileUploadedImage完成:', {
+    if (isDev) console.log('🔧 [地图文件编辑标识] 设置mapFileUploadedImage完成:', {
       url: file.thumbnail,
       name: file.name
     });
@@ -3480,7 +3481,7 @@ const MapManagement: React.FC = () => {
       
       // 加载区域数据
       if (file.topologyData.areas) {
-        console.log('🔄 [编辑模式] 预加载区域数据:', file.topologyData.areas);
+        if (isDev) console.log('🔄 [编辑模式] 预加载区域数据:', file.topologyData.areas);
         setMapAreas(file.topologyData.areas);
         // 更新区域计数器
         const maxAreaNumber = file.topologyData.areas.reduce((max: number, area: MapArea) => {
@@ -3489,7 +3490,7 @@ const MapManagement: React.FC = () => {
         }, 0);
         setAreaCounter(maxAreaNumber + 1);
       } else {
-        console.log('⚠️ [编辑模式] 没有区域数据');
+        if (isDev) console.log('⚠️ [编辑模式] 没有区域数据');
         setMapAreas([]);
       }
       
@@ -3520,7 +3521,7 @@ const MapManagement: React.FC = () => {
         }
       }
     } else {
-      console.log('⚠️ [编辑模式] 没有拓扑数据');
+      if (isDev) console.log('⚠️ [编辑模式] 没有拓扑数据');
       setMapPoints([]);
       setMapLines([]);
       setMapAreas([]);
@@ -3593,7 +3594,7 @@ const MapManagement: React.FC = () => {
   };
 
   const handleEnableFile = (file: MapFile, mapId: string) => {
-    console.log('启用文件:', file);
+    if (isDev) console.log('启用文件:', file);
     
     // 更新地图文件状态，确保只有一个文件启用
     setMapFiles(prev => {
@@ -3770,7 +3771,7 @@ const MapManagement: React.FC = () => {
 
   // 处理切图功能
   const handleSliceMap = (file: MapFile) => {
-    console.log('切图地图文件:', file);
+    if (isDev) console.log('切图地图文件:', file);
     
     // 设置切图的地图文件
     setSlicingMapFile(file);
@@ -3950,7 +3951,7 @@ const MapManagement: React.FC = () => {
 
 
   const handleAddMapFileSubmit = async (values: any) => {
-    console.log('🔧 [地图文件重复] 进入 handleAddMapFileSubmit 函数', {
+    if (isDev) console.log('🔧 [地图文件重复] 进入 handleAddMapFileSubmit 函数', {
       currentEditFile,
       values,
       selectedMap
@@ -3959,7 +3960,7 @@ const MapManagement: React.FC = () => {
       setSubmitAndNextLoading(true);
       
       if (currentEditFile) {
-        console.log('🔧 [地图文件重复] 编辑模式下更新文件', currentEditFile);
+        if (isDev) console.log('🔧 [地图文件重复] 编辑模式下更新文件', currentEditFile);
         // 编辑模式：直接保存并退出
         const updatedMapFile: MapFile = {
           ...currentEditFile,
@@ -4006,14 +4007,14 @@ const MapManagement: React.FC = () => {
         message.success('地图文件更新成功！');
         
         // 重置状态并退出
-        console.log('🔧 [地图文件重复] 编辑模式保存成功，重置状态');
+        if (isDev) console.log('🔧 [地图文件重复] 编辑模式保存成功，重置状态');
         setAddMapFileDrawerVisible(false);
         addMapFileForm.resetFields();
         setMapFileUploadedImage(null);
         setAddMapFileStep(1);
         setCurrentEditFile(null);
       } else {
-        console.log('🔧 [地图文件重复] 新增模式下创建文件');
+        if (isDev) console.log('🔧 [地图文件重复] 新增模式下创建文件');
         // 新增模式：检查唯一性并进入下一步
         if (selectedMap) {
           const currentMapFiles = mapFiles[selectedMap.id] || [];
@@ -4034,7 +4035,7 @@ const MapManagement: React.FC = () => {
         // 模拟API调用
         await new Promise(resolve => setTimeout(resolve, 500));
         
-        console.log('📝 [基本信息提交] 地图文件基本信息已保存:', {
+        if (isDev) console.log('📝 [基本信息提交] 地图文件基本信息已保存:', {
           '地图文件名': values.mapFileName,
           '描述': values.description
         });
@@ -4053,13 +4054,13 @@ const MapManagement: React.FC = () => {
 
   // 提交并下一步：创建地图文件并进入地图编辑器
   const handleSubmitAndNext = async () => {
-    console.log('🚀 [地图文件编辑] handleSubmitAndNext 函数被调用');
-    console.log('📝 [地图文件编辑] 当前编辑文件:', currentEditFile);
-    console.log('📝 [地图文件编辑] 是否为编辑模式:', !!currentEditFile);
+    if (isDev) console.log('🚀 [地图文件编辑] handleSubmitAndNext 函数被调用');
+    if (isDev) console.log('📝 [地图文件编辑] 当前编辑文件:', currentEditFile);
+    if (isDev) console.log('📝 [地图文件编辑] 是否为编辑模式:', !!currentEditFile);
     
     try {
       const values = await addMapFileForm.validateFields();
-      console.log('📝 [地图文件编辑] 表单验证通过，获取到的值:', values);
+      if (isDev) console.log('📝 [地图文件编辑] 表单验证通过，获取到的值:', values);
       
       // 检查地图文件名称唯一性
       if (selectedMap) {
@@ -4084,7 +4085,7 @@ const MapManagement: React.FC = () => {
       
       if (currentEditFile) {
         // 编辑模式：更新现有地图文件
-        console.log('✏️ [地图文件编辑] 编辑模式：更新现有地图文件');
+        if (isDev) console.log('✏️ [地图文件编辑] 编辑模式：更新现有地图文件');
         const updatedMapFile: MapFile = {
           ...currentEditFile,
           name: values.mapFileName,
@@ -4116,7 +4117,7 @@ const MapManagement: React.FC = () => {
         message.success('地图文件更新成功');
       } else {
         // 新增模式：创建新地图文件
-        console.log('➕ [地图文件编辑] 新增模式：创建新地图文件');
+        if (isDev) console.log('➕ [地图文件编辑] 新增模式：创建新地图文件');
         const newMapFile: MapFile = {
           id: `file_${Date.now()}`,
           name: values.mapFileName,
@@ -4166,9 +4167,9 @@ const MapManagement: React.FC = () => {
       
       // 根据模式显示不同的成功消息
       if (currentEditFile) {
-        console.log('✅ [地图文件编辑] 编辑模式：地图文件更新成功，进入编辑器');
+        if (isDev) console.log('✅ [地图文件编辑] 编辑模式：地图文件更新成功，进入编辑器');
       } else {
-        console.log('✅ [地图文件编辑] 新增模式：地图文件创建成功，进入编辑器');
+        if (isDev) console.log('✅ [地图文件编辑] 新增模式：地图文件创建成功，进入编辑器');
       }
     } catch (error) {
       message.error('创建失败，请重试');
@@ -4179,11 +4180,11 @@ const MapManagement: React.FC = () => {
 
   // 提交并退出到地图列表：创建地图文件并退出
   const handleCreateAndExit = async () => {
-    console.log('🚀 [地图文件编辑] handleCreateAndExit 函数被调用');
+    if (isDev) console.log('🚀 [地图文件编辑] handleCreateAndExit 函数被调用');
     try {
       const values = await addMapFileForm.validateFields();
-      console.log('📝 [地图文件编辑] 表单验证通过，获取到的值:', values);
-      console.log('🔍 [地图文件编辑] 当前编辑文件状态:', currentEditFile);
+      if (isDev) console.log('📝 [地图文件编辑] 表单验证通过，获取到的值:', values);
+      if (isDev) console.log('🔍 [地图文件编辑] 当前编辑文件状态:', currentEditFile);
       
       // 检查地图文件名称唯一性
       if (selectedMap) {
@@ -4208,7 +4209,7 @@ const MapManagement: React.FC = () => {
       
       if (currentEditFile) {
         // 编辑模式：更新现有文件
-        console.log('✏️ [地图文件编辑] 编辑模式：更新现有文件');
+        if (isDev) console.log('✏️ [地图文件编辑] 编辑模式：更新现有文件');
         const updatedMapFile: MapFile = {
           ...currentEditFile,
           name: values.mapFileName,
@@ -4245,7 +4246,7 @@ const MapManagement: React.FC = () => {
         message.success('地图文件更新成功！');
       } else {
         // 新增模式：创建新文件
-        console.log('➕ [地图文件编辑] 新增模式：创建新文件');
+        if (isDev) console.log('➕ [地图文件编辑] 新增模式：创建新文件');
         const newMapFile: MapFile = {
           id: `file_${Date.now()}`,
           name: values.mapFileName,
@@ -4384,7 +4385,7 @@ const MapManagement: React.FC = () => {
       title: '确认取消',
       content: '取消后将丢失所有未保存的修改，确定要取消吗？',
       onOk: () => {
-        console.log('🚫 [地图文件编辑] handleCancel 被调用', {
+        if (isDev) console.log('🚫 [地图文件编辑] handleCancel 被调用', {
           '当前编辑文件': currentEditFile,
           '是否为编辑模式': currentEditFile !== null,
           '当前步骤': addMapFileStep
@@ -4395,12 +4396,12 @@ const MapManagement: React.FC = () => {
         
         if (addMapFileStep === 2) {
           // 在地图编辑器（步骤2）中取消：直接退出到地图管理页面
-          console.log('🔄 [地图文件编辑] 地图编辑器中取消：直接退出到地图管理页面');
+          if (isDev) console.log('🔄 [地图文件编辑] 地图编辑器中取消：直接退出到地图管理页面');
           handleCloseAddMapFileDrawer();
           message.info('已取消编辑');
         } else {
           // 在步骤1中取消：也直接退出到地图管理页面
-          console.log('🔄 [地图文件编辑] 基本信息步骤中取消：退出到地图管理页面');
+          if (isDev) console.log('🔄 [地图文件编辑] 基本信息步骤中取消：退出到地图管理页面');
           handleCloseAddMapFileDrawer();
           message.info('已取消编辑');
         }
@@ -4422,15 +4423,15 @@ const MapManagement: React.FC = () => {
       try {
         // 将Canvas内容转换为Base64格式的PNG数据
         pngImageData = pngCanvasRef.current.toDataURL('image/png');
-        console.log('PNG画布数据已获取:', pngImageData ? '数据长度: ' + pngImageData.length : '无数据');
+        if (isDev) console.log('PNG画布数据已获取:', pngImageData ? '数据长度: ' + pngImageData.length : '无数据');
       } catch (error) {
-        console.error('获取PNG画布数据失败:', error);
+        if (isDev) console.error('获取PNG画布数据失败:', error);
         message.warning('PNG画布数据获取失败，但其他数据已保存');
       }
     }
     
     message.success('地图已保存');
-    console.log('保存地图数据:', { 
+    if (isDev) console.log('保存地图数据:', { 
       mapPoints, 
       mapLines, 
       mapAreas,  // 添加区域数据到日志
@@ -4459,7 +4460,7 @@ const MapManagement: React.FC = () => {
     
     const totalCount = selectedPointsData.length + selectedLinesData.length + selectedAreasData.length;
     message.success(`已复制 ${totalCount} 个元素`);
-    console.log('复制元素:', { points: selectedPointsData.length, lines: selectedLinesData.length, areas: selectedAreasData.length });
+    if (isDev) console.log('复制元素:', { points: selectedPointsData.length, lines: selectedLinesData.length, areas: selectedAreasData.length });
   };
 
   // 粘贴复制的元素
@@ -4568,14 +4569,14 @@ const MapManagement: React.FC = () => {
     
     const totalCount = newPoints.length + newLines.length + newAreas.length;
     message.success(`已粘贴 ${totalCount} 个元素`);
-    console.log('粘贴元素:', { points: newPoints.length, lines: newLines.length, areas: newAreas.length });
+    if (isDev) console.log('粘贴元素:', { points: newPoints.length, lines: newLines.length, areas: newAreas.length });
   };
   
   // handleSubmit函数已移除
   
   const handleSubmitAndExit = async () => {
     try {
-      console.log('地图文件重复：进入 handleSubmitAndExit 函数', {
+      if (isDev) console.log('地图文件重复：进入 handleSubmitAndExit 函数', {
         '当前编辑文件': currentEditFile,
         '表单数据': addMapFileForm.getFieldsValue(),
         '选中地图': selectedMap,
@@ -4594,14 +4595,14 @@ const MapManagement: React.FC = () => {
           const values = await addMapFileForm.validateFields();
           mapFileName = values.mapFileName;
         } catch (error) {
-          console.error('❌ [地图文件保存] 表单验证失败:', error);
+          if (isDev) console.error('❌ [地图文件保存] 表单验证失败:', error);
           message.error('请填写地图文件名称');
           setSubmitAndExitLoading(false);
           return;
         }
       }
       
-      console.log('📝 [地图文件保存] 获取到的地图文件名称:', {
+      if (isDev) console.log('📝 [地图文件保存] 获取到的地图文件名称:', {
         '从mapInfo获取': mapInfo.mapName,
         '最终使用': mapFileName
       });
@@ -4611,15 +4612,15 @@ const MapManagement: React.FC = () => {
       try {
         if (pngCanvasRef.current) {
           pngImageData = pngCanvasRef.current.toDataURL('image/png');
-          console.log('📸 [PNG数据获取] 成功获取PNG画布数据:', {
+          if (isDev) console.log('📸 [PNG数据获取] 成功获取PNG画布数据:', {
             '数据长度': pngImageData.length,
             '数据前缀': pngImageData.substring(0, 50) + '...'
           });
         } else {
-          console.warn('⚠️ [PNG数据获取] PNG画布引用不存在');
+          if (isDev) console.warn('⚠️ [PNG数据获取] PNG画布引用不存在');
         }
       } catch (pngError) {
-        console.error('❌ [PNG数据获取] 获取PNG数据失败:', pngError);
+        if (isDev) console.error('❌ [PNG数据获取] 获取PNG数据失败:', pngError);
       }
       
       // 生成包含拓扑数据的缩略图
@@ -4628,7 +4629,7 @@ const MapManagement: React.FC = () => {
       // 模拟API调用
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      console.log('💾 [地图文件保存] 保存数据:', {
+      if (isDev) console.log('💾 [地图文件保存] 保存数据:', {
         '地图文件名': mapFileName,
         'PNG数据': pngImageData ? '已获取' : '未获取',
         '笔画数据': allStrokes.length + ' 条笔画',
@@ -4637,7 +4638,7 @@ const MapManagement: React.FC = () => {
       });
       
       if (currentEditFile) {
-        console.log('地图文件重复：编辑模式下更新文件', {
+        if (isDev) console.log('地图文件重复：编辑模式下更新文件', {
           '编辑文件ID': currentEditFile.id,
           '新文件名': mapFileName,
           '原文件名': currentEditFile.name
@@ -4679,7 +4680,7 @@ const MapManagement: React.FC = () => {
             
             // 更新当前编辑的文件
         const fileIndex = currentMapFiles.findIndex(f => f.id === currentEditFile.id);
-        console.log('🗺️ [地图文件编辑] 更新现有文件索引查找', {
+        if (isDev) console.log('🗺️ [地图文件编辑] 更新现有文件索引查找', {
           '文件ID': currentEditFile.id,
           '找到的索引': fileIndex,
           '当前文件列表长度': currentMapFiles.length
@@ -4687,7 +4688,7 @@ const MapManagement: React.FC = () => {
         
         if (fileIndex !== -1) {
           currentMapFiles[fileIndex] = updatedMapFile;
-          console.log('🗺️ [地图文件编辑] 文件更新完成', {
+          if (isDev) console.log('🗺️ [地图文件编辑] 文件更新完成', {
             '更新的文件': updatedMapFile,
             '文件名称': updatedMapFile.name,
             'mapInfo中的mapName': updatedMapFile.mapInfo?.mapName
@@ -4701,12 +4702,12 @@ const MapManagement: React.FC = () => {
     
     message.success('地图文件更新成功！');
       } else {
-        console.log('地图文件重复：新增模式下创建文件', {
+        if (isDev) console.log('地图文件重复：新增模式下创建文件', {
           '新文件名': mapFileName,
           '选中地图ID': selectedMap?.id
         });
         // 新增模式：创建新文件或覆盖同名文件
-        console.log('🗺️ [地图文件编辑] 创建新文件对象', {
+        if (isDev) console.log('🗺️ [地图文件编辑] 创建新文件对象', {
           '表单文件名': mapFileName,
           '当前mapInfo': mapInfo,
           '即将设置的mapName': mapFileName
@@ -4732,7 +4733,7 @@ const MapManagement: React.FC = () => {
           }
         };
         
-        console.log('🗺️ [地图文件编辑] 新文件对象创建完成', {
+        if (isDev) console.log('🗺️ [地图文件编辑] 新文件对象创建完成', {
           '新文件': newMapFile,
           '文件名称': newMapFile.name,
           'mapInfo中的mapName': newMapFile.mapInfo?.mapName
@@ -4765,7 +4766,7 @@ const MapManagement: React.FC = () => {
         }
       }
       
-      console.log('地图文件重复：保存成功，准备重置状态', {
+      if (isDev) console.log('地图文件重复：保存成功，准备重置状态', {
         '编辑模式': !!currentEditFile,
         '当前编辑文件': currentEditFile
       });
@@ -4824,11 +4825,11 @@ const MapManagement: React.FC = () => {
         const currentFileName = currentEditFile ? currentEditFile.name : '';
         
         // 重置编辑状态
-        console.log('地图文件重复：重置编辑状态，设置 currentEditFile 为 null');
+        if (isDev) console.log('地图文件重复：重置编辑状态，设置 currentEditFile 为 null');
         setCurrentEditFile(null);
         
         // 重置地图信息（保留当前地图文件名称）
-        console.log('🗺️ [地图文件编辑] 重置mapInfo状态', {
+        if (isDev) console.log('🗺️ [地图文件编辑] 重置mapInfo状态', {
           '当前文件名': currentFileName,
           '是否编辑模式': !!currentEditFile,
           '重置前mapInfo': mapInfo
@@ -4847,7 +4848,7 @@ const MapManagement: React.FC = () => {
             resolution: 0.05
           };
           
-          console.log('🗺️ [地图文件编辑] mapInfo重置完成', {
+          if (isDev) console.log('🗺️ [地图文件编辑] mapInfo重置完成', {
             '新mapInfo': newMapInfo,
             '新mapName': newMapInfo.mapName
           });
@@ -4857,7 +4858,7 @@ const MapManagement: React.FC = () => {
       }, 1000);
       
     } catch (error) {
-      console.error('保存失败:', error);
+      if (isDev) console.error('保存失败:', error);
       message.error(currentEditFile ? '更新失败，请重试' : '创建失败，请重试');
     } finally {
       setSubmitAndExitLoading(false);
@@ -4922,7 +4923,7 @@ const MapManagement: React.FC = () => {
   // 搜索处理函数
   const handleSearch = (value: string) => {
     setSearchValue(value);
-    console.log(`搜索${searchType === 'line' ? '线' : '点'}:`, value);
+    if (isDev) console.log(`搜索${searchType === 'line' ? '线' : '点'}:`, value);
     // 这里可以添加实际的搜索逻辑
   };
   
@@ -5136,13 +5137,13 @@ const MapManagement: React.FC = () => {
       event.preventDefault();
       const distance = getTouchDistance(event.touches);
       setLastTouchDistance(distance);
-      console.log('👆 [双指缩放] 开始双指操作，初始距离:', distance);
+      if (isDev) console.log('👆 [双指缩放] 开始双指操作，初始距离:', distance);
     }
   };
   
   const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
     // 基础触摸事件调试 - 无条件触发
-    console.log('🔥 [触摸事件] TouchMove被触发!', {
+    if (isDev) console.log('🔥 [触摸事件] TouchMove被触发!', {
       touchCount: event.touches.length,
       timestamp: new Date().toLocaleTimeString()
     });
@@ -5156,27 +5157,27 @@ const MapManagement: React.FC = () => {
         const newScale = Math.max(0.1, Math.min(3, canvasScale * scale));
         setCanvasScale(newScale);
         setLastTouchDistance(currentDistance);
-        console.log('🔍 [双指缩放] 缩放中，当前比例:', newScale);
+        if (isDev) console.log('🔍 [双指缩放] 缩放中，当前比例:', newScale);
       }
     }
   };
   
   const handleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
     // 基础触摸事件调试 - 无条件触发
-    console.log('🔥 [触摸事件] TouchEnd被触发!', {
+    if (isDev) console.log('🔥 [触摸事件] TouchEnd被触发!', {
       touchCount: event.touches.length,
       timestamp: new Date().toLocaleTimeString()
     });
     
     if (event.touches.length < 2) {
       setLastTouchDistance(null);
-      console.log('✋ [双指缩放] 结束双指操作');
+      if (isDev) console.log('✋ [双指缩放] 结束双指操作');
     }
   };
 
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     // 鼠标滚轮缩放 - 作为触摸缩放的替代方案
-    console.log('🖱️ [滚轮缩放] 滚轮事件触发', {
+    if (isDev) console.log('🖱️ [滚轮缩放] 滚轮事件触发', {
       deltaY: event.deltaY,
       isCanvasClicked,
       isSpacePressed,
@@ -5189,7 +5190,7 @@ const MapManagement: React.FC = () => {
       const scaleFactor = event.deltaY > 0 ? 0.9 : 1.1;
       const newScale = Math.max(0.1, Math.min(3, canvasScale * scaleFactor));
       setCanvasScale(newScale);
-      console.log('🔍 [滚轮缩放] 缩放比例:', newScale);
+      if (isDev) console.log('🔍 [滚轮缩放] 缩放比例:', newScale);
     }
   };
   
@@ -5203,13 +5204,13 @@ const MapManagement: React.FC = () => {
 
   // 工具选择处理
   const handleToolSelect = (toolType: string) => {
-    console.log('🔧 [工具选择] 选择工具:', toolType);
+    if (isDev) console.log('🔧 [工具选择] 选择工具:', toolType);
     
     // 在黑白底图模式下，只允许选择特定工具
     if (mapType === 'grayscale') {
       const allowedTools = ['select', 'brush', 'eraser'];
       if (!allowedTools.includes(toolType)) {
-        console.log('🚫 [工具限制] 黑白底图模式下不允许使用工具:', toolType);
+        if (isDev) console.log('🚫 [工具限制] 黑白底图模式下不允许使用工具:', toolType);
         return; // 阻止选择不允许的工具
       }
     }
@@ -5294,7 +5295,7 @@ const MapManagement: React.FC = () => {
   
   // 画布点击处理
   const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    console.log('🎯 [区域调试-画布点击调试] handleCanvasClick函数被调用', {
+    if (isDev) console.log('🎯 [区域调试-画布点击调试] handleCanvasClick函数被调用', {
       当前工具: selectedTool,
       选中的区域数量: selectedAreas.length,
       选中的区域列表: selectedAreas,
@@ -5317,7 +5318,7 @@ const MapManagement: React.FC = () => {
     // 防抖逻辑 - 防止React.StrictMode导致的重复点击
     const currentTime = Date.now();
     if (currentTime - lastClickTime.current < 100) { // 100ms内的重复点击将被忽略
-      console.log('🚫 [防抖] 检测到重复点击，忽略此次点击', {
+      if (isDev) console.log('🚫 [防抖] 检测到重复点击，忽略此次点击', {
         时间间隔: currentTime - lastClickTime.current,
         上次点击时间: lastClickTime.current,
         当前点击时间: currentTime
@@ -5328,7 +5329,7 @@ const MapManagement: React.FC = () => {
     
     // 如果点击的是地图点或区域，不处理画布点击
     const clickedElement = event.target as Element;
-    console.log('🔍 [画布点击调试] 检查点击目标', {
+    if (isDev) console.log('🔍 [画布点击调试] 检查点击目标', {
       目标元素: clickedElement.tagName,
       目标类名: clickedElement.className,
       是否为地图点: !!clickedElement.closest('.map-point'),
@@ -5337,24 +5338,24 @@ const MapManagement: React.FC = () => {
     });
     
     if (clickedElement.closest('.map-point')) {
-      console.log('🔍 [画布点击调试] 点击了地图点，忽略画布点击');
+      if (isDev) console.log('🔍 [画布点击调试] 点击了地图点，忽略画布点击');
       return;
     }
     
     // 如果点击的是控制手柄按钮，不处理画布点击
     if (clickedElement.closest('.control-handle') || clickedElement.closest('.control-button')) {
-      console.log('🔍 [画布点击调试] 点击了控制手柄，忽略画布点击');
+      if (isDev) console.log('🔍 [画布点击调试] 点击了控制手柄，忽略画布点击');
       return;
     }
     
     // 如果点击的是区域polygon，不处理画布点击
     if (clickedElement.tagName === 'polygon') {
-      console.log('🔍 [画布点击调试] 点击了区域polygon，忽略画布点击');
+      if (isDev) console.log('🔍 [画布点击调试] 点击了区域polygon，忽略画布点击');
       return;
     }
     
     // 如果是选择工具且刚刚完成了框选操作，需要特殊处理
-    console.log('🎯 [区域调试-框选检查] 检查是否刚完成框选', {
+    if (isDev) console.log('🎯 [区域调试-框选检查] 检查是否刚完成框选', {
       当前工具: selectedTool,
       是否为选择工具: selectedTool === 'select',
       wasJustSelecting状态: wasJustSelecting.current,
@@ -5362,7 +5363,7 @@ const MapManagement: React.FC = () => {
     });
     
     if (selectedTool === 'select' && wasJustSelecting.current) {
-      console.log('🎯 [区域调试-框选检查] 刚完成框选，重置标记并返回');
+      if (isDev) console.log('🎯 [区域调试-框选检查] 刚完成框选，重置标记并返回');
       wasJustSelecting.current = false;
       
       // 即使刚完成框选，也要清除线的选中状态（如果有的话）
@@ -5375,7 +5376,7 @@ const MapManagement: React.FC = () => {
         setSelectedAreas([]);
       }
       
-      console.log('🎯 [区域调试-框选检查] 框选完成处理结束，保留点的选中状态');
+      if (isDev) console.log('🎯 [区域调试-框选检查] 框选完成处理结束，保留点的选中状态');
       return; // 直接返回，不执行后续的清除逻辑
     }
     
@@ -5383,7 +5384,7 @@ const MapManagement: React.FC = () => {
       const canvasElement = event.currentTarget;
       
       // 详细的坐标转换调试
-      console.log('🎯 [完整坐标流程] handleCanvasClick开始', {
+      if (isDev) console.log('🎯 [完整坐标流程] handleCanvasClick开始', {
         原始事件坐标: { 
           clientX: event.clientX, 
           clientY: event.clientY,
@@ -5404,7 +5405,7 @@ const MapManagement: React.FC = () => {
       
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       
-      console.log('🎯 [完整坐标流程] 坐标转换完成', {
+      if (isDev) console.log('🎯 [完整坐标流程] 坐标转换完成', {
         输入屏幕坐标: { clientX: event.clientX, clientY: event.clientY },
         输出画布坐标: { x, y },
         即将创建点的位置: { x, y },
@@ -5435,7 +5436,7 @@ const MapManagement: React.FC = () => {
       const canvasElement = event.currentTarget;
       
       // 详细的坐标转换调试
-      console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制站点', {
+      if (isDev) console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制站点', {
         原始事件坐标: { 
           clientX: event.clientX, 
           clientY: event.clientY,
@@ -5456,7 +5457,7 @@ const MapManagement: React.FC = () => {
       
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       
-      console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制站点', {
+      if (isDev) console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制站点', {
         输入屏幕坐标: { clientX: event.clientX, clientY: event.clientY },
         输出画布坐标: { x, y },
         即将创建站点的位置: { x, y },
@@ -5487,7 +5488,7 @@ const MapManagement: React.FC = () => {
       const canvasElement = event.currentTarget;
       
       // 详细的坐标转换调试
-      console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制停靠点', {
+      if (isDev) console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制停靠点', {
         原始事件坐标: { 
           clientX: event.clientX, 
           clientY: event.clientY,
@@ -5508,7 +5509,7 @@ const MapManagement: React.FC = () => {
       
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       
-      console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制停靠点', {
+      if (isDev) console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制停靠点', {
         输入屏幕坐标: { clientX: event.clientX, clientY: event.clientY },
         输出画布坐标: { x, y },
         即将创建停靠点的位置: { x, y },
@@ -5539,7 +5540,7 @@ const MapManagement: React.FC = () => {
       const canvasElement = event.currentTarget;
       
       // 详细的坐标转换调试
-      console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制充电点', {
+      if (isDev) console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制充电点', {
         原始事件坐标: { 
           clientX: event.clientX, 
           clientY: event.clientY,
@@ -5560,7 +5561,7 @@ const MapManagement: React.FC = () => {
       
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       
-      console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制充电点', {
+      if (isDev) console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制充电点', {
         输入屏幕坐标: { clientX: event.clientX, clientY: event.clientY },
         输出画布坐标: { x, y },
         即将创建充电点的位置: { x, y },
@@ -5591,7 +5592,7 @@ const MapManagement: React.FC = () => {
       const canvasElement = event.currentTarget;
       
       // 详细的坐标转换调试
-      console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制临停点', {
+      if (isDev) console.log('🎯 [完整坐标流程] handleCanvasClick开始 - 绘制临停点', {
         原始事件坐标: { 
           clientX: event.clientX, 
           clientY: event.clientY,
@@ -5612,7 +5613,7 @@ const MapManagement: React.FC = () => {
       
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       
-      console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制临停点', {
+      if (isDev) console.log('🎯 [完整坐标流程] 坐标转换完成 - 绘制临停点', {
         输入屏幕坐标: { clientX: event.clientX, clientY: event.clientY },
         输出画布坐标: { x, y },
         即将创建临停点的位置: { x, y },
@@ -5644,7 +5645,7 @@ const MapManagement: React.FC = () => {
       const canvasElement = event.currentTarget;
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       
-      console.log('🎯 [区域绘制] 添加点', {
+      if (isDev) console.log('🎯 [区域绘制] 添加点', {
         画布坐标: { x, y },
         当前区域点数: currentAreaPoints.length,
         是否正在绘制: isDrawingArea
@@ -5670,7 +5671,7 @@ const MapManagement: React.FC = () => {
       
       // 如果已有3个或更多点，可以完成区域绘制（双击或右键完成）
       if (updatedAreaPoints.length >= 3) {
-        console.log('🎯 [区域绘制] 已有足够点数，可以完成区域绘制', {
+        if (isDev) console.log('🎯 [区域绘制] 已有足够点数，可以完成区域绘制', {
           点数: updatedAreaPoints.length,
           提示: '双击或右键完成区域绘制'
         });
@@ -5680,7 +5681,7 @@ const MapManagement: React.FC = () => {
       const canvasElement = event.currentTarget;
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       
-      console.log('🎯 [线工具-自动创建点] 开始处理', {
+      if (isDev) console.log('🎯 [线工具-自动创建点] 开始处理', {
         工具类型: selectedTool,
         点击坐标: { x, y },
         是否正在连线: isConnecting,
@@ -5707,7 +5708,7 @@ const MapManagement: React.FC = () => {
         direction: 0
       };
       
-      console.log('🎯 [线工具-自动创建点] 创建新点', {
+      if (isDev) console.log('🎯 [线工具-自动创建点] 创建新点', {
         新点信息: newPoint,
         当前点计数器: pointCounter
       });
@@ -5721,7 +5722,7 @@ const MapManagement: React.FC = () => {
       
       // 自动开始连线逻辑
       setTimeout(() => {
-        console.log('🎯 [线工具-自动创建点] 开始连线逻辑', {
+        if (isDev) console.log('🎯 [线工具-自动创建点] 开始连线逻辑', {
           新点ID: newPoint.id,
           当前连线状态: {
             isConnecting,
@@ -5735,7 +5736,7 @@ const MapManagement: React.FC = () => {
       }, 10); // 短暂延迟确保状态更新完成
       
     } else if (selectedTool === 'select') {
-      console.log('🎯 [区域调试-选择工具调试] 进入选择工具处理逻辑', {
+      if (isDev) console.log('🎯 [区域调试-选择工具调试] 进入选择工具处理逻辑', {
         是否正在框选: isSelecting,
         选中点数量: selectedPoints.length,
         选中线数量: selectedLines.length,
@@ -5745,14 +5746,14 @@ const MapManagement: React.FC = () => {
       });
       
       // 选择工具：在非框选状态下，点击空白区域清除所有选中状态
-      console.log('🎯 [区域调试-选择工具调试] 检查是否进入清除逻辑', {
+      if (isDev) console.log('🎯 [区域调试-选择工具调试] 检查是否进入清除逻辑', {
         isSelecting值: isSelecting,
         取反后: !isSelecting,
         条件判断结果: !isSelecting ? '将进入清除逻辑' : '不会进入清除逻辑'
       });
       
       if (!isSelecting) {
-        console.log('🎯 [区域调试-选择工具调试] 非框选状态，点击空白区域清除所有选中状态', {
+        if (isDev) console.log('🎯 [区域调试-选择工具调试] 非框选状态，点击空白区域清除所有选中状态', {
           当前选中区域数量: selectedAreas.length,
           当前选中区域列表: selectedAreas,
           即将执行清除操作: true
@@ -5760,41 +5761,41 @@ const MapManagement: React.FC = () => {
         
         // 清除点的选中状态
         if (selectedPoints.length > 0) {
-          console.log('🎯 [区域调试-选择工具调试] 清除点的选中状态');
+          if (isDev) console.log('🎯 [区域调试-选择工具调试] 清除点的选中状态');
           setSelectedPoints([]);
         }
         
         // 清除线的选中状态
         if (selectedLines.length > 0) {
-          console.log('🎯 [区域调试-选择工具调试] 清除线的选中状态');
+          if (isDev) console.log('🎯 [区域调试-选择工具调试] 清除线的选中状态');
           setSelectedLines([]);
         }
         
         // 清除区域的选中状态
         if (selectedAreas.length > 0) {
-          console.log('🎯 [区域调试-选择工具调试] 清除区域的选中状态', {
+          if (isDev) console.log('🎯 [区域调试-选择工具调试] 清除区域的选中状态', {
             清除前区域数量: selectedAreas.length,
             清除前区域列表: selectedAreas,
             执行setSelectedAreas: '[]'
           });
           setSelectedAreas([]);
-          console.log('🎯 [区域调试-选择工具调试] 区域选中状态已清除');
+          if (isDev) console.log('🎯 [区域调试-选择工具调试] 区域选中状态已清除');
         } else {
-          console.log('🎯 [区域调试-选择工具调试] 没有选中的区域需要清除', {
+          if (isDev) console.log('🎯 [区域调试-选择工具调试] 没有选中的区域需要清除', {
             当前区域数量: selectedAreas.length
           });
         }
         
         // 清除顶点的选中状态
         if (selectedVertices.length > 0) {
-          console.log('🎯 [区域调试-选择工具调试] 清除顶点的选中状态');
+          if (isDev) console.log('🎯 [区域调试-选择工具调试] 清除顶点的选中状态');
           setSelectedVertices([]);
         }
         
         setSelectionStart(null);
         setSelectionEnd(null);
       } else {
-        console.log('🎯 [区域调试-选择工具调试] 框选进行中，不做处理');
+        if (isDev) console.log('🎯 [区域调试-选择工具调试] 框选进行中，不做处理');
       }
       // 框选进行中时不做任何处理
     } else {
@@ -5818,7 +5819,7 @@ const MapManagement: React.FC = () => {
     if (canvasElement) {
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       setLastClickPosition({ x, y });
-      console.log('🎯 [点击调试] handlePointClick 记录位置:', { x: x.toFixed(2), y: y.toFixed(2) });
+      if (isDev) console.log('🎯 [点击调试] handlePointClick 记录位置:', { x: x.toFixed(2), y: y.toFixed(2) });
     }
     
     // 连线工具模式处理
@@ -5864,7 +5865,7 @@ const MapManagement: React.FC = () => {
          const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
          const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
          
-         console.log('🎯 [选中点框选] 设置框选坐标', {
+         if (isDev) console.log('🎯 [选中点框选] 设置框选坐标', {
            选中点数量: newSelectedPoints.length,
            画布坐标范围: { pointMinX, pointMaxX, pointMinY, pointMaxY },
            框选起始坐标: newSelectionStart,
@@ -6123,7 +6124,7 @@ const MapManagement: React.FC = () => {
         setSelectedLines(linesInSelection.map(line => line.id));
         
         // 调试日志
-        console.log('📦 [框选调试] 选中结果:', {
+        if (isDev) console.log('📦 [框选调试] 选中结果:', {
           '选中点数量': pointsInSelection.length,
           '选中线数量': linesInSelection.length,
           '选中点ID': pointsInSelection.map(p => p.id),
@@ -6182,7 +6183,7 @@ const MapManagement: React.FC = () => {
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       
       // 调试日志 - 框选开始
-      console.log('📦 [框选调试] handleSelectionStart 详细数据:', {
+      if (isDev) console.log('📦 [框选调试] handleSelectionStart 详细数据:', {
         '1_鼠标屏幕坐标': `{clientX: ${event.clientX}, clientY: ${event.clientY}}`,
         '2_转换后画布坐标': `{x: ${x.toFixed(2)}, y: ${y.toFixed(2)}}`,
         '3_画布状态': `{scale: ${canvasScale.toFixed(3)}, offset: {x: ${canvasOffset.x.toFixed(2)}, y: ${canvasOffset.y.toFixed(2)}}}`,
@@ -6210,7 +6211,7 @@ const MapManagement: React.FC = () => {
            
            // 调试日志 - 框选移动（减少频繁输出）
            if (Math.random() < 0.1) { // 只输出10%的调用
-             console.log('📦 [框选调试] handleGlobalMouseMove 详细数据:', {
+             if (isDev) console.log('📦 [框选调试] handleGlobalMouseMove 详细数据:', {
                '1_鼠标屏幕坐标': `{clientX: ${e.clientX}, clientY: ${e.clientY}}`,
                '2_转换后画布坐标': `{x: ${newX.toFixed(2)}, y: ${newY.toFixed(2)}}`,
                '3_框选起始点': `{x: ${capturedSelectionStart.x.toFixed(2)}, y: ${capturedSelectionStart.y.toFixed(2)}}`,
@@ -6698,7 +6699,7 @@ const MapManagement: React.FC = () => {
   // 键盘事件处理
   const handleKeyDown = (event: KeyboardEvent) => {
     // 添加基础键盘事件调试日志
-    console.log('🎹 [键盘事件] 按键触发', {
+    if (isDev) console.log('🎹 [键盘事件] 按键触发', {
       按键: event.key,
       当前工具: selectedTool,
       是否正在绘制区域: isDrawingArea,
@@ -6804,7 +6805,7 @@ const MapManagement: React.FC = () => {
           exitConnectingMode();
         }
         // 切换到选择工具
-        console.log('⌨️ [工具切换] 检测到ESC键，切换到选择工具');
+        if (isDev) console.log('⌨️ [工具切换] 检测到ESC键，切换到选择工具');
         setSelectedTool('select');
       }
       return;
@@ -6815,7 +6816,7 @@ const MapManagement: React.FC = () => {
       // 如果在地图编辑模式下且为编辑模式且正在绘制区域
       if (addMapFileDrawerVisible && currentMode === 'edit' && isDrawingArea && currentAreaPoints.length >= 3) {
         event.preventDefault();
-        console.log('⌨️ [区域绘制] 检测到Enter键，完成区域绘制');
+        if (isDev) console.log('⌨️ [区域绘制] 检测到Enter键，完成区域绘制');
         
         // 完成区域绘制
          const newArea: MapArea = {
@@ -6911,7 +6912,7 @@ const MapManagement: React.FC = () => {
       event.preventDefault();
       setIsSpacePressed(true);
 
-      console.log('🚀 [空格键拖动] 空格键按下，启用拖动模式');
+      if (isDev) console.log('🚀 [空格键拖动] 空格键按下，启用拖动模式');
       return;
     }
     
@@ -6969,86 +6970,86 @@ const MapManagement: React.FC = () => {
         switch (event.key.toLowerCase()) {
           case 'v':
             event.preventDefault();
-            console.log('⌨️ [工具切换] 快捷键V - 切换到选择工具');
+            if (isDev) console.log('⌨️ [工具切换] 快捷键V - 切换到选择工具');
             setSelectedTool('select');
             break;
           case 'p':
             // 在黑白底图模式下屏蔽绘制节点工具的快捷键
-            console.log('🔍 [快捷键调试] P键按下', {
+            if (isDev) console.log('🔍 [快捷键调试] P键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
               当前工具: selectedTool
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键P - 切换到绘制节点工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键P - 切换到绘制节点工具');
               setSelectedTool('point');
             } else {
-              console.log('🚫 [快捷键屏蔽] P键在黑白底图模式下被屏蔽');
+              if (isDev) console.log('🚫 [快捷键屏蔽] P键在黑白底图模式下被屏蔽');
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 't':
             // 在黑白底图模式下屏蔽绘制站点工具的快捷键
-            console.log('🔍 [快捷键调试] T键按下', {
+            if (isDev) console.log('🔍 [快捷键调试] T键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
               当前工具: selectedTool
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键T - 切换到绘制站点工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键T - 切换到绘制站点工具');
               setSelectedTool('station');
             } else {
-              console.log('🚫 [快捷键屏蔽] T键在黑白底图模式下被屏蔽');
+              if (isDev) console.log('🚫 [快捷键屏蔽] T键在黑白底图模式下被屏蔽');
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 'd':
             // 在黑白底图模式下屏蔽双向直线工具的快捷键
-            console.log('🔍 [快捷键调试] D键按下', {
+            if (isDev) console.log('🔍 [快捷键调试] D键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
               当前工具: selectedTool
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键D - 切换到双向直线工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键D - 切换到双向直线工具');
               setSelectedTool('double-line');
             } else {
-              console.log('🚫 [快捷键屏蔽] D键在黑白底图模式下被屏蔽');
+              if (isDev) console.log('🚫 [快捷键屏蔽] D键在黑白底图模式下被屏蔽');
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 's':
             // 在黑白底图模式下屏蔽单向直线工具的快捷键
-            console.log('🔍 [快捷键调试] S键按下', {
+            if (isDev) console.log('🔍 [快捷键调试] S键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
               当前工具: selectedTool
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键S - 切换到单向直线工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键S - 切换到单向直线工具');
               setSelectedTool('single-line');
             } else {
-              console.log('🚫 [快捷键屏蔽] S键在黑白底图模式下被屏蔽');
+              if (isDev) console.log('🚫 [快捷键屏蔽] S键在黑白底图模式下被屏蔽');
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 'a':
             // 在黑白底图模式下屏蔽绘制调速区域工具的快捷键
-            console.log('🔍 [快捷键调试] A键按下', {
+            if (isDev) console.log('🔍 [快捷键调试] A键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
               当前工具: selectedTool
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键A - 切换到绘制调速区域工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键A - 切换到绘制调速区域工具');
               setSelectedTool('area');
             } else {
-              console.log('🚫 [快捷键屏蔽] A键在黑白底图模式下被屏蔽');
+              if (isDev) console.log('🚫 [快捷键屏蔽] A键在黑白底图模式下被屏蔽');
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
@@ -7056,76 +7057,76 @@ const MapManagement: React.FC = () => {
             if (isGrayscaleMode()) {
               // 在黑白底图模式下，B键切换到画笔工具
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键B - 切换到画笔工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键B - 切换到画笔工具');
               setSelectedTool('brush');
             } else {
               // 在拓扑地图模式下，B键切换到双向贝塞尔曲线工具
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键B - 切换到双向贝塞尔曲线工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键B - 切换到双向贝塞尔曲线工具');
               setSelectedTool('double-bezier');
             }
             break;
           case 'c':
             // 在黑白底图模式下屏蔽单向贝塞尔曲线工具的快捷键
-            console.log('🔍 [快捷键调试] C键按下', {
+            if (isDev) console.log('🔍 [快捷键调试] C键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
               当前工具: selectedTool
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键C - 切换到单向贝塞尔曲线工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键C - 切换到单向贝塞尔曲线工具');
               setSelectedTool('single-bezier');
             } else {
-              console.log('🚫 [快捷键屏蔽] C键在黑白底图模式下被屏蔽');
+              if (isDev) console.log('🚫 [快捷键屏蔽] C键在黑白底图模式下被屏蔽');
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 'k':
             // 在黑白底图模式下屏蔽绘制停靠点工具的快捷键
-            console.log('🔍 [快捷键调试] K键按下', {
+            if (isDev) console.log('🔍 [快捷键调试] K键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
               当前工具: selectedTool
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键K - 切换到绘制停靠点工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键K - 切换到绘制停靠点工具');
               setSelectedTool('dock');
             } else {
-              console.log('🚫 [快捷键屏蔽] K键在黑白底图模式下被屏蔽');
+              if (isDev) console.log('🚫 [快捷键屏蔽] K键在黑白底图模式下被屏蔽');
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 'h':
             // 在黑白底图模式下屏蔽绘制充电点工具的快捷键
-            console.log('🔍 [快捷键调试] H键按下', {
+            if (isDev) console.log('🔍 [快捷键调试] H键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
               当前工具: selectedTool
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键H - 切换到绘制充电点工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键H - 切换到绘制充电点工具');
               setSelectedTool('charge');
             } else {
-              console.log('🚫 [快捷键屏蔽] H键在黑白底图模式下被屏蔽');
+              if (isDev) console.log('🚫 [快捷键屏蔽] H键在黑白底图模式下被屏蔽');
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
           case 'm':
             // 在黑白底图模式下屏蔽绘制临停点工具的快捷键
-            console.log('🔍 [快捷键调试] M键按下', {
+            if (isDev) console.log('🔍 [快捷键调试] M键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
               当前工具: selectedTool
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键M - 切换到绘制临停点工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键M - 切换到绘制临停点工具');
               setSelectedTool('temp');
             } else {
-              console.log('🚫 [快捷键屏蔽] M键在黑白底图模式下被屏蔽');
+              if (isDev) console.log('🚫 [快捷键屏蔽] M键在黑白底图模式下被屏蔽');
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
@@ -7133,23 +7134,23 @@ const MapManagement: React.FC = () => {
             // 在黑白底图模式下，E键切换到橡皮擦工具
             if (isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键E - 切换到橡皮擦工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键E - 切换到橡皮擦工具');
               setSelectedTool('eraser');
             }
             break;
           case 'f':
             // 在黑白底图模式下屏蔽绘制禁行区域工具的快捷键
-            console.log('🔍 [快捷键调试] F键按下', {
+            if (isDev) console.log('🔍 [快捷键调试] F键按下', {
               mapType: mapType,
               isGrayscaleMode: isGrayscaleMode(),
               currentTool: selectedTool
             });
             if (!isGrayscaleMode()) {
               event.preventDefault();
-              console.log('⌨️ [工具切换] 快捷键F - 切换到绘制禁行区域工具');
+              if (isDev) console.log('⌨️ [工具切换] 快捷键F - 切换到绘制禁行区域工具');
               handleToolSelect('forbidden-area');
             } else {
-              console.log('🚫 [快捷键屏蔽] F键在黑白底图模式下被屏蔽');
+              if (isDev) console.log('🚫 [快捷键屏蔽] F键在黑白底图模式下被屏蔽');
               event.preventDefault(); // 阻止默认行为但不切换工具
             }
             break;
@@ -7165,7 +7166,7 @@ const MapManagement: React.FC = () => {
       setIsSpacePressed(false);
       setIsCanvasClicked(false); // 重置画布点击状态，需要重新点击画布才能使用双指缩放
 
-      console.log('🛑 [空格键拖动] 空格键释放，禁用拖动模式和双指缩放');
+      if (isDev) console.log('🛑 [空格键拖动] 空格键释放，禁用拖动模式和双指缩放');
     }
   };
 
@@ -7319,7 +7320,7 @@ const MapManagement: React.FC = () => {
   // 渲染连线的SVG路径
   // 绘制箭头的辅助函数
   const renderArrow = (x: number, y: number, angle: number, color: string, key?: string) => {
-    console.log('🏹 renderArrow called:', { x, y, angle, color, key });
+    if (isDev) console.log('🏹 renderArrow called:', { x, y, angle, color, key });
     const arrowSize = 7; // 箭头尺寸（缩小）
     const offset = 8; // 增加箭头向后偏移距离，让尖端更明显地显示在目标点前方
     
@@ -7333,7 +7334,7 @@ const MapManagement: React.FC = () => {
     const x2 = arrowX - arrowSize * Math.cos(angle + Math.PI / 6);
     const y2 = arrowY - arrowSize * Math.sin(angle + Math.PI / 6);
     
-    console.log('🏹 Arrow points:', { originalX: x, originalY: y, arrowX, arrowY, x1, y1, x2, y2 });
+    if (isDev) console.log('🏹 Arrow points:', { originalX: x, originalY: y, arrowX, arrowY, x1, y1, x2, y2 });
     
     return (
       <polygon
@@ -7431,13 +7432,13 @@ const MapManagement: React.FC = () => {
       return null;
     }
     
-    console.log('🔗 renderLine called:', line);
+    if (isDev) console.log('🔗 renderLine called:', line);
     const startPoint = getPointById(line.startPointId);
     const endPoint = getPointById(line.endPointId);
-    console.log('🔗 Points found:', { startPoint, endPoint });
+    if (isDev) console.log('🔗 Points found:', { startPoint, endPoint });
     
     if (!startPoint || !endPoint) {
-      console.warn('连线渲染失败：找不到起始点或结束点', { line, startPoint, endPoint });
+      if (isDev) console.warn('连线渲染失败：找不到起始点或结束点', { line, startPoint, endPoint });
       return null;
     }
 
@@ -7445,7 +7446,7 @@ const MapManagement: React.FC = () => {
     const startCoords = { x: startPoint.x, y: startPoint.y };
     const endCoords = { x: endPoint.x, y: endPoint.y };
     
-    console.log('🔗 [连线坐标] 详细数据:', {
+    if (isDev) console.log('🔗 [连线坐标] 详细数据:', {
       '1_起始点画布坐标': `{x: ${startCoords.x.toFixed(2)}, y: ${startCoords.y.toFixed(2)}}`,
       '2_结束点画布坐标': `{x: ${endCoords.x.toFixed(2)}, y: ${endCoords.y.toFixed(2)}}`,
       '3_当前画布状态': {
@@ -7722,7 +7723,7 @@ const MapManagement: React.FC = () => {
     
     // 详细的事件调试信息    // 检查是否找到了对应的线
     if (!clickedLine) {
-      console.error('❌ [线点击埋点] 未找到对应的线数据', { lineId, availableLines: mapLines.map(l => l.id) });
+      if (isDev) console.error('❌ [线点击埋点] 未找到对应的线数据', { lineId, availableLines: mapLines.map(l => l.id) });
       return;
     }
     
@@ -7731,7 +7732,7 @@ const MapManagement: React.FC = () => {
     if (canvasElement) {
       const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
       setLastClickPosition({ x, y });
-      console.log('📍 [线点击] 记录鼠标位置到lastClickPosition:', { x: x.toFixed(2), y: y.toFixed(2) });
+      if (isDev) console.log('📍 [线点击] 记录鼠标位置到lastClickPosition:', { x: x.toFixed(2), y: y.toFixed(2) });
     }
     
     event.stopPropagation();
@@ -7741,7 +7742,7 @@ const MapManagement: React.FC = () => {
       if (event.shiftKey) {
         // 获取点击位置的画布坐标
         if (!canvasRef.current) {
-          console.error('❌ [插入节点] 未找到画布元素');
+          if (isDev) console.error('❌ [插入节点] 未找到画布元素');
           return;
         }
         
@@ -7752,7 +7753,7 @@ const MapManagement: React.FC = () => {
         const endPoint = mapPoints.find(p => p.id === clickedLine.endPointId);
         
         if (!startPoint || !endPoint) {
-          console.error('❌ [插入节点] 未找到线的起点或终点', { startPointId: clickedLine.startPointId, endPointId: clickedLine.endPointId });
+          if (isDev) console.error('❌ [插入节点] 未找到线的起点或终点', { startPointId: clickedLine.startPointId, endPointId: clickedLine.endPointId });
           return;
         }
         
@@ -7817,7 +7818,7 @@ const MapManagement: React.FC = () => {
         setSelectedPoints([newPointId]);
         setSelectedLines([]);
         
-        console.log('✅ [插入节点] 成功在线上插入节点', {
+        if (isDev) console.log('✅ [插入节点] 成功在线上插入节点', {
           originalLine: clickedLine.name,
           newPoint: newPoint.name,
           newLine1: newLine1.name,
@@ -8379,9 +8380,11 @@ const MapManagement: React.FC = () => {
           height: isSmallScreen ? 'auto' : 'calc(100vh - 120px)',
           minHeight: isSmallScreen ? 'calc(100vh - 120px)' : 'auto'
         }}
-        bodyStyle={{ 
-          padding: 16, 
-          height: isSmallScreen ? 'auto' : 'calc(100% - 57px)'
+        styles={{ 
+          body: {
+            padding: 16, 
+            height: isSmallScreen ? 'auto' : 'calc(100% - 57px)'
+          }
         }}
       >
         <Row gutter={16} style={{ height: isSmallScreen ? 'auto' : '100%' }}>
@@ -8476,12 +8479,14 @@ const MapManagement: React.FC = () => {
               </div>
               <Card
                 size="small"
-                bodyStyle={{ 
-                  padding: 0, 
-                  flex: isSmallScreen ? 'none' : 1, 
-                  overflow: isSmallScreen ? 'visible' : 'auto',
-                  display: 'flex',
-                  flexDirection: 'column'
+                styles={{ 
+                  body: {
+                    padding: 0, 
+                    flex: isSmallScreen ? 'none' : 1, 
+                    overflow: isSmallScreen ? 'visible' : 'auto',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }
                 }}
                 style={{ flex: isSmallScreen ? 'none' : 1, display: 'flex', flexDirection: 'column' }}
               >
@@ -8730,12 +8735,14 @@ const MapManagement: React.FC = () => {
                ) : (
                  <Card
                    size="small"
-                   bodyStyle={{
-                     display: 'flex',
-                     alignItems: 'center',
-                     justifyContent: 'center',
-                     flex: 1,
-                     minHeight: '200px'
+                   styles={{
+                     body: {
+                       display: 'flex',
+                       alignItems: 'center',
+                       justifyContent: 'center',
+                       flex: 1,
+                       minHeight: '200px'
+                     }
                    }}
                    style={{ flex: 1 }}
                  >
@@ -8762,7 +8769,7 @@ const MapManagement: React.FC = () => {
            setUploadedFile(null);
          }}
          open={drawerVisible}
-         bodyStyle={{ paddingBottom: 80 }}
+         styles={{ body: { paddingBottom: 80 } }}
          footer={
            <div style={{ textAlign: 'center' }}>
              <Button 
@@ -8883,7 +8890,7 @@ const MapManagement: React.FC = () => {
            setEditingMap(null);
          }}
          open={editDrawerVisible}
-         bodyStyle={{ paddingBottom: 80 }}
+         styles={{ body: { paddingBottom: 80 } }}
          footer={
            <div style={{ textAlign: 'center' }}>
              <Button 
@@ -9003,7 +9010,7 @@ const MapManagement: React.FC = () => {
            // 不清空选中的机器人，保持选中状态
          }}
          open={robotDrawerVisible}
-         bodyStyle={{ padding: '24px' }}
+         styles={{ body: { padding: '24px' } }}
          footer={
            <div style={{ textAlign: 'center' }}>
              <Button 
@@ -9146,7 +9153,7 @@ const MapManagement: React.FC = () => {
                              (selectedRobot === robot.id ? '0 4px 12px rgba(24,144,255,0.15)' : '0 2px 8px rgba(0,0,0,0.1)'),
                            filter: isSliding ? 'brightness(0.95)' : 'brightness(1)'
                          }}
-                         bodyStyle={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}
+                         styles={{ body: { padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' } }}
                          hoverable
                          onClick={() => setSelectedRobot(robot.id)}
                          onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
@@ -9294,7 +9301,7 @@ const MapManagement: React.FC = () => {
                              position: 'relative',
                              height: '100px'
                            }}
-                           bodyStyle={{ padding: '16px', height: '100%', display: 'flex', flexDirection: 'column' }}
+                           styles={{ body: { padding: '16px', height: '100%', display: 'flex', flexDirection: 'column' } }}
                            hoverable
                            onClick={() => {
                              const newSelected = selectedRobotMaps.includes(mapName)
@@ -9540,7 +9547,7 @@ const MapManagement: React.FC = () => {
            setLocalImportFile(null);
          }}
          open={localImportDrawerVisible}
-         bodyStyle={{ paddingBottom: 80 }}
+         styles={{ body: { paddingBottom: 80 } }}
          footer={
            <div style={{ textAlign: 'center' }}>
              <Button 
@@ -9673,7 +9680,7 @@ const MapManagement: React.FC = () => {
            setSelectedSyncMapFiles([]);
          }}
          open={mapSyncDrawerVisible}
-         bodyStyle={{ padding: '24px' }}
+         styles={{ body: { padding: '24px' } }}
          footer={
            <div style={{ textAlign: 'center' }}>
              <Button 
@@ -9844,7 +9851,7 @@ const MapManagement: React.FC = () => {
                                (selectedSyncRobots.includes(robot.id) ? '0 4px 12px rgba(24,144,255,0.15)' : '0 2px 8px rgba(0,0,0,0.1)'),
                              filter: isSliding ? 'brightness(0.95)' : 'brightness(1)'
                            }}
-                           bodyStyle={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}
+                           styles={{ body: { padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' } }}
                            hoverable
                            onClick={() => {
                              setSelectedSyncRobots(prev => 
@@ -10187,7 +10194,7 @@ const MapManagement: React.FC = () => {
          placement="right"
          onClose={handleCloseSliceProgress}
          open={sliceProgressModalVisible}
-         bodyStyle={{ padding: '24px' }}
+         styles={{ body: { padding: '24px' } }}
          footer={
            allSliceCompleted ? (
              <div style={{ textAlign: 'center' }}>
@@ -10295,7 +10302,7 @@ const MapManagement: React.FC = () => {
            setSelectedSliceMapFiles([]);
          }}
          open={mapSliceDrawerVisible}
-         bodyStyle={{ padding: '24px' }}
+         styles={{ body: { padding: '24px' } }}
          footer={
            <div style={{ textAlign: 'center' }}>
              <Button 
@@ -10466,7 +10473,7 @@ const MapManagement: React.FC = () => {
                                (selectedSliceRobots.includes(robot.id) ? '0 4px 12px rgba(24,144,255,0.15)' : '0 2px 8px rgba(0,0,0,0.1)'),
                              filter: isSliding ? 'brightness(0.95)' : 'brightness(1)'
                            }}
-                           bodyStyle={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}
+                           styles={{ body: { padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' } }}
                            hoverable
                            onClick={() => {
                              setSelectedSliceRobots(prev => 
@@ -10674,7 +10681,7 @@ const MapManagement: React.FC = () => {
         width="100vw"
         open={addMapFileDrawerVisible}
         onClose={handleCloseAddMapFileDrawer}
-        destroyOnClose
+        destroyOnHidden
         keyboard={false} // 禁用ESC键关闭抽屉
         styles={{
           body: { padding: 0 },
@@ -10983,11 +10990,11 @@ const MapManagement: React.FC = () => {
                     <Button 
                       type={mapType === 'topology' ? 'primary' : 'text'}
                       onClick={() => {
-                        console.log('🔄 [地图切换] 切换到拓扑地图');
+                        if (isDev) console.log('🔄 [地图切换] 切换到拓扑地图');
                         setMapType('topology');
                         // 从黑白底图切换到拓扑地图时，工具切换到选择工具
                         if (currentMode === 'edit') {
-                          console.log('🔄 [工具切换] 拓扑地图模式下自动切换到选择工具');
+                          if (isDev) console.log('🔄 [工具切换] 拓扑地图模式下自动切换到选择工具');
                           setSelectedTool('select');
                         }
                       }}
@@ -11032,7 +11039,7 @@ const MapManagement: React.FC = () => {
                     <Button 
                       type={mapType === 'grayscale' ? 'primary' : 'text'}
                       onClick={() => {
-                        console.log('🔄 [地图切换] 切换到黑白底图，当前工具:', selectedTool);
+                        if (isDev) console.log('🔄 [地图切换] 切换到黑白底图，当前工具:', selectedTool);
                         setMapType('grayscale');
                         if (currentMode === 'edit') {
                           setActiveTabKey('tools'); // 自动切换到绘图工具tab
@@ -11042,17 +11049,17 @@ const MapManagement: React.FC = () => {
                           
                           if (topologyTools.includes(selectedTool)) {
                             // 如果当前工具是拓扑绘图工具，先切换到选择工具（模拟ESC键效果）
-                            console.log('🔄 [工具切换] 检测到拓扑绘图工具，先切换到选择工具完成连续操作');
+                            if (isDev) console.log('🔄 [工具切换] 检测到拓扑绘图工具，先切换到选择工具完成连续操作');
                             setSelectedTool('select');
                             
                             // 然后切换到画笔工具
                             setTimeout(() => {
-                              console.log('🔄 [工具切换] 黑白底图模式下自动切换到画笔工具');
+                              if (isDev) console.log('🔄 [工具切换] 黑白底图模式下自动切换到画笔工具');
                               setSelectedTool('brush');
                             }, 100);
                           } else {
                             // 如果当前工具不是拓扑绘图工具，直接切换到画笔
-                            console.log('🔄 [工具切换] 黑白底图模式下自动切换到画笔工具');
+                            if (isDev) console.log('🔄 [工具切换] 黑白底图模式下自动切换到画笔工具');
                             setSelectedTool('brush');
                           }
                         }
@@ -11888,17 +11895,17 @@ const MapManagement: React.FC = () => {
                       }}
                       onClick={(e) => {
                         // 检查区域点击标记，如果刚刚点击了区域，则跳过SVG事件处理
-                        console.log('🔍 [SVG点击调试] 检查区域点击标记', {
+                        if (isDev) console.log('🔍 [SVG点击调试] 检查区域点击标记', {
                           标记状态: areaClickedFlag.current,
                           时间戳: new Date().toISOString()
                         });
                         
                         if (areaClickedFlag.current) {
-                          console.log('🔍 [SVG点击调试] 检测到区域点击标记，跳过SVG事件处理');
+                          if (isDev) console.log('🔍 [SVG点击调试] 检测到区域点击标记，跳过SVG事件处理');
                           return;
                         }
                         
-                        console.log('🔍 [SVG点击调试] SVG onClick事件触发', {
+                        if (isDev) console.log('🔍 [SVG点击调试] SVG onClick事件触发', {
                           目标元素: (e.target as Element).tagName,
                           目标类名: (e.target as Element).className,
                           是否为SVG本身: e.target === e.currentTarget,
@@ -11918,7 +11925,7 @@ const MapManagement: React.FC = () => {
                         // 只有点击SVG本身（空白区域）才触发画布点击
                         const isClickingSVGBackground = e.target === e.currentTarget;
                         
-                        console.log('🔍 [SVG点击调试] 点击区域判断', {
+                        if (isDev) console.log('🔍 [SVG点击调试] 点击区域判断', {
                           点击目标: target.tagName,
                           是否为区域元素: isAreaElement,
                           是否为点元素: isPointElement,
@@ -11931,16 +11938,16 @@ const MapManagement: React.FC = () => {
                         if (!isClickingSVGBackground) {
                           // 检查是否点击了区域元素且当前工具不是选择工具
                           if (isAreaElement && selectedTool !== 'select') {
-                            console.log('🔍 [SVG点击调试] 点击了区域元素但当前工具不是选择工具，允许事件冒泡以支持在区域内绘制');
+                            if (isDev) console.log('🔍 [SVG点击调试] 点击了区域元素但当前工具不是选择工具，允许事件冒泡以支持在区域内绘制');
                             // 在非选择工具模式下，允许在区域内绘制点和线
                             // 不阻止事件冒泡，让事件传递到画布容器处理
                           } else {
-                            console.log('🔍 [SVG点击调试] 点击了SVG子元素，阻止事件冒泡到画布容器');
+                            if (isDev) console.log('🔍 [SVG点击调试] 点击了SVG子元素，阻止事件冒泡到画布容器');
                             // 只有在选择工具模式下点击区域，或点击其他SVG子元素时才阻止事件冒泡
                             e.stopPropagation();
                           }
                         } else {
-                          console.log('🔍 [SVG点击调试] 点击SVG空白区域，让事件冒泡到画布容器处理');
+                          if (isDev) console.log('🔍 [SVG点击调试] 点击SVG空白区域，让事件冒泡到画布容器处理');
                         }
                       }}
                       onMouseDown={(e) => {
@@ -12202,7 +12209,7 @@ const MapManagement: React.FC = () => {
                                 filter: isSelected ? `drop-shadow(0 0 8px ${getShadowColor(areaColors.strokeColor)})` : 'none'
                               }}
                               onClick={(e) => {
-                                console.log('🔍 [区域点击调试] 区域被点击', {
+                                if (isDev) console.log('🔍 [区域点击调试] 区域被点击', {
                                   区域ID: area.id,
                                   区域名称: area.name,
                                   当前工具: selectedTool,
@@ -12213,19 +12220,19 @@ const MapManagement: React.FC = () => {
                                 
                                 // 只有在选择工具模式下才阻止事件传播和处理区域选择
                                 if (selectedTool === 'select') {
-                                  console.log('🔍 [区域点击调试] 选择工具模式 - 阻止事件传播');
+                                  if (isDev) console.log('🔍 [区域点击调试] 选择工具模式 - 阻止事件传播');
                                   
                                   // 记录鼠标点击位置到lastClickPosition
                                   const canvasElement = e.currentTarget.closest('.map-canvas') as HTMLDivElement;
                                   if (canvasElement) {
                                     const { x, y } = screenToCanvasCoordinates(e.clientX, e.clientY, canvasElement);
                                     setLastClickPosition({ x, y });
-                                    console.log('🔍 [区域点击调试] 记录鼠标位置:', { x, y });
+                                    if (isDev) console.log('🔍 [区域点击调试] 记录鼠标位置:', { x, y });
                                   }
                                   
                                   // 立即设置区域点击标记，阻止SVG事件触发
                                   areaClickedFlag.current = true;
-                                  console.log('🔍 [区域点击调试] 设置区域点击标记为true');
+                                  if (isDev) console.log('🔍 [区域点击调试] 设置区域点击标记为true');
                                   
                                   e.stopPropagation();
                                   e.preventDefault();
@@ -12238,7 +12245,7 @@ const MapManagement: React.FC = () => {
                                       ? []  // 如果已选中，取消选中（点击已选中区域取消选择）
                                       : [area.id];  // 如果未选中，只选中当前区域（取消其他区域的选择）
                                     
-                                    console.log('🔍 [区域选择状态调试] 区域单选状态变化', {
+                                    if (isDev) console.log('🔍 [区域选择状态调试] 区域单选状态变化', {
                                       区域ID: area.id,
                                       区域名称: area.name,
                                       之前是否选中: isCurrentlySelected,
@@ -12254,12 +12261,12 @@ const MapManagement: React.FC = () => {
                                   // 短暂标记重置时间，避免影响框选功能
                                   setTimeout(() => {
                                     areaClickedFlag.current = false;
-                                    console.log('🔍 [区域点击调试] 重置区域点击标记为false');
+                                    if (isDev) console.log('🔍 [区域点击调试] 重置区域点击标记为false');
                                   }, 50);
                                   
                                   return;
                                 } else {
-                                  console.log('🔍 [区域点击调试] 非选择工具模式 - 允许事件传播到画布');
+                                  if (isDev) console.log('🔍 [区域点击调试] 非选择工具模式 - 允许事件传播到画布');
                                   // 在其他工具模式下，允许事件传播到画布，这样可以在区域内绘制点和线
                                   // 不调用 e.stopPropagation()，让事件继续冒泡到SVG的onClick处理
                                 }
@@ -12331,7 +12338,7 @@ const MapManagement: React.FC = () => {
                                   }}
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    console.log(`🎯 [区域顶点] 点击了区域 ${area.id} 的第 ${index} 个顶点`, point);
+                                    if (isDev) console.log(`🎯 [区域顶点] 点击了区域 ${area.id} 的第 ${index} 个顶点`, point);
                                     
                                     // 实现顶点选中逻辑
                                     const vertexKey = { areaId: area.id, vertexIndex: index };
@@ -12365,7 +12372,7 @@ const MapManagement: React.FC = () => {
                                       // 注意：不清除区域选中状态，允许顶点选择和区域选择同时存在
                                     }
                                     
-                                    console.log('🔄 [区域顶点] 顶点选中状态更新', {
+                                    if (isDev) console.log('🔄 [区域顶点] 顶点选中状态更新', {
                                        areaId: area.id,
                                        vertexIndex: index,
                                        isSelected: !isVertexSelected,
@@ -12403,7 +12410,7 @@ const MapManagement: React.FC = () => {
                             );
                             
                             // 调试信息
-                            console.log(`路径 ${line.id} (${line.name}):`, {
+                            if (isDev) console.log(`路径 ${line.id} (${line.name}):`, {
                               containingNetworkGroup: containingNetworkGroup ? {
                                 id: containingNetworkGroup.id,
                                 name: containingNetworkGroup.name,
@@ -12421,7 +12428,7 @@ const MapManagement: React.FC = () => {
                             return containingNetworkGroup.visible;
                           });
                           
-                          console.log('可见路径数量:', visibleLines.length, '总路径数量:', mapLines.length);
+                          if (isDev) console.log('可见路径数量:', visibleLines.length, '总路径数量:', mapLines.length);
                           
                           return visibleLines.map(line => renderLine(line));
                         })()}
@@ -12653,7 +12660,7 @@ const MapManagement: React.FC = () => {
                           );
                           
                           // 调试信息
-                          console.log(`点 ${point.id} 被路径 ${line.id} 使用:`, {
+                          if (isDev) console.log(`点 ${point.id} 被路径 ${line.id} 使用:`, {
                             containingNetworkGroup: containingNetworkGroup ? {
                               id: containingNetworkGroup.id,
                               name: containingNetworkGroup.name,
@@ -12679,7 +12686,7 @@ const MapManagement: React.FC = () => {
                         return !isPointUsedByAnyPath || isPointUsedByVisiblePath;
                       });
                       
-                      console.log('可见点数量:', visiblePoints.length, '总点数量:', mapPoints.length);
+                      if (isDev) console.log('可见点数量:', visiblePoints.length, '总点数量:', mapPoints.length);
                       
                       return visiblePoints.map((point) => {
                         // 直接使用画布坐标，因为父容器已经应用了CSS transform
@@ -14527,10 +14534,12 @@ const MapManagement: React.FC = () => {
           ] : [])
         ]}
         width={500}
-        bodyStyle={{
-          maxHeight: '70vh',
-          overflowY: 'auto',
-          padding: '24px'
+        styles={{
+          body: {
+            maxHeight: '70vh',
+            overflowY: 'auto',
+            padding: '24px'
+          }
         }}
       >
         <Form
@@ -14941,10 +14950,12 @@ const MapManagement: React.FC = () => {
           ])
         ]}
         width={500}
-        bodyStyle={{
-          maxHeight: '70vh',
-          overflowY: 'auto',
-          padding: '24px'
+        styles={{
+          body: {
+            maxHeight: '70vh',
+            overflowY: 'auto',
+            padding: '24px'
+          }
         }}
       >
         <Form
@@ -15364,10 +15375,12 @@ const MapManagement: React.FC = () => {
           ])
         ]}
         width={500}
-        bodyStyle={{
-          maxHeight: '70vh',
-          overflowY: 'auto',
-          padding: '24px'
+        styles={{
+          body: {
+            maxHeight: '70vh',
+            overflowY: 'auto',
+            padding: '24px'
+          }
         }}
       >
 
@@ -15485,7 +15498,7 @@ const MapManagement: React.FC = () => {
            networkGroupForm.validateFields().then(() => {
              handleSaveNetworkGroup();
            }).catch((info: any) => {
-             console.log('Validate Failed:', info);
+             if (isDev) console.log('Validate Failed:', info);
            });
         }}
         onCancel={() => {
@@ -15494,7 +15507,7 @@ const MapManagement: React.FC = () => {
           networkGroupForm.resetFields();
         }}
         width={400}
-        destroyOnClose
+        destroyOnHidden
         style={{ top: 20 }}
         zIndex={3000}
       >
@@ -15544,7 +15557,7 @@ const MapManagement: React.FC = () => {
            pathGroupForm.validateFields().then(() => {
              handleSavePathGroup();
            }).catch((info: any) => {
-             console.log('Validate Failed:', info);
+             if (isDev) console.log('Validate Failed:', info);
            });
         }}
         onCancel={() => {
@@ -15553,7 +15566,7 @@ const MapManagement: React.FC = () => {
           pathGroupForm.resetFields();
         }}
         width={400}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={pathGroupForm}
@@ -15878,7 +15891,7 @@ const MapManagement: React.FC = () => {
               onChange={(value: string) => {
                 // 当区域改变时，清空路网组选择
                 networkGroupSelectForm.setFieldsValue({ networkGroupId: undefined });
-                console.log('选择的区域ID:', value); // 使用value参数避免未使用警告
+                if (isDev) console.log('选择的区域ID:', value); // 使用value参数避免未使用警告
               }}
             >
               {mapAreas

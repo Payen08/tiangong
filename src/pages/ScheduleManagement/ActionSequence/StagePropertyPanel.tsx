@@ -20,6 +20,7 @@ import {
   DeleteOutlined,
   SettingOutlined
 } from '@ant-design/icons';
+import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 const { TabPane } = Tabs;
@@ -404,7 +405,7 @@ const StagePropertyPanel: React.FC<StagePropertyPanelProps> = ({
       message.success('阶段属性保存成功');
       onClose();
     } catch (error) {
-      console.error('保存失败:', error);
+      if (isDev) console.error('保存失败:', error);
     }
   };
 

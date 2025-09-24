@@ -863,7 +863,7 @@ const SubCanvas: React.FC<SubCanvasProps> = ({
       onCancel={onClose}
       width="90%"
       style={{ top: 20 }}
-      bodyStyle={{ height: 'calc(100vh - 200px)', padding: 0 }}
+      styles={{ body: { height: 'calc(100vh - 200px)', padding: 0 } }}
       footer={[
         <Button key="cancel" onClick={onClose}>
           取消

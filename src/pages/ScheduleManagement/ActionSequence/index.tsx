@@ -29,6 +29,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
+import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 const { confirm } = Modal;
@@ -241,7 +242,7 @@ const ActionSequence: React.FC = () => {
         },
       });
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
     }
   };
 

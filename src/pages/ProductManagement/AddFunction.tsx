@@ -18,6 +18,7 @@ import {
   PlusOutlined,
   DeleteOutlined,
 } from '@ant-design/icons';
+import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 const { Text } = Typography;
@@ -114,8 +115,18 @@ interface AddFunctionProps {
 
 const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, productProtocol = 'modbus_tcp', editingFunction, isEdit = false }) => {
   const [form] = Form.useForm();
+  const [protocolForm] = Form.useForm(); // 为协议配置步骤创建独立的form实例
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
+
+  // 当Drawer关闭时重置表单
+  useEffect(() => {
+    if (!visible) {
+      form.resetFields();
+      protocolForm.resetFields();
+      setCurrentStep(0);
+    }
+  }, [visible, form, protocolForm]);
   const [dataType, setDataType] = useState<string>('text');
   const [valueConfigItems, setValueConfigItems] = useState<ValueConfigItem[]>([
     { id: '1', value: '', description: '默认值配置' }
@@ -425,7 +436,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
               parsedValueConfig = JSON.parse(editingFunction.valueConfig);
 
             } catch (error) {
-              console.warn('Failed to parse valueConfig string:', error);
+              if (isDev) console.warn('Failed to parse valueConfig string:', error);
               parsedValueConfig = [];
             }
           } else if (Array.isArray(editingFunction.valueConfig)) {
@@ -906,7 +917,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       
       setCurrentStep(1);
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
       message.error('请完善基本信息');
     }
   };
@@ -997,7 +1008,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       onClose();
       message.success(isEdit ? '功能更新成功' : '功能添加成功');
     } catch (error) {
-      console.error('保存功能失败:', error);
+      if (isDev) console.error('保存功能失败:', error);
       message.error('保存功能失败');
     } finally {
       setLoading(false);
@@ -1237,7 +1248,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         handleClose();
       }, 100);
     } catch (error) {
-      console.error('保存失败:', error);
+      if (isDev) console.error('保存失败:', error);
       message.error('保存失败，请检查表单');
     } finally {
       setLoading(false);
@@ -1801,7 +1812,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
     return (
       <Form
-        form={form}
+        form={protocolForm}
         layout="vertical"
         initialValues={{
           isComposite: false,

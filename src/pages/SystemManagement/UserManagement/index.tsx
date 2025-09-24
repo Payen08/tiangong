@@ -23,6 +23,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import { isDev } from '@/lib/utils';
 
 interface User {
   id: string;
@@ -418,7 +419,7 @@ const UserManagement: React.FC = () => {
       setIsModalVisible(false);
       form.resetFields();
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
     } finally {
       setLoading(false);
     }
@@ -624,7 +625,7 @@ const UserManagement: React.FC = () => {
         onClose={handleDrawerClose}
         open={isDrawerVisible}
         width={isMobile ? '100%' : 600}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={form}
@@ -643,7 +644,7 @@ const UserManagement: React.FC = () => {
               setIsDrawerVisible(false);
               form.resetFields();
             } catch (error) {
-              console.error('更新失败:', error);
+              if (isDev) console.error('更新失败:', error);
             } finally {
               setLoading(false);
             }
@@ -733,7 +734,7 @@ const UserManagement: React.FC = () => {
         onClose={handleAddDrawerClose}
         open={isAddDrawerVisible}
         width={isMobile ? '100%' : 600}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={form}
@@ -756,7 +757,7 @@ const UserManagement: React.FC = () => {
               setIsAddDrawerVisible(false);
               form.resetFields();
             } catch (error) {
-              console.error('添加失败:', error);
+              if (isDev) console.error('添加失败:', error);
             } finally {
               setLoading(false);
             }

@@ -24,6 +24,7 @@ import {
 import AddFunction from './AddFunction';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
+import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 
@@ -38,12 +39,21 @@ interface ProductFunction {
   valueConfig: string; // 值配置
   // 配置映射相关字段
   isComposite?: boolean;
+  compositeType?: 'multi-register' | 'multi-pin'; // 组合类型
   protocol?: string;
   registerAddress?: string;
   functionCode?: string;
   modbusDataType?: string;
   byteOrder?: 'big-endian' | 'little-endian' | '';
   registerType?: 'coil' | 'discrete-input' | 'input-register' | 'holding-register';
+  // 墨影采集卡协议相关字段
+  moyingChannelType?: 'report' | 'control';
+  moyingMacAddress?: string;
+  moyingFunctionId?: string;
+  moyingPinType?: 'input' | 'output';
+  moyingPinNumber?: string;
+  moyingPinValue?: string;
+  moyingDataPath?: string;
 }
 
 // 产品类型与协议映射
@@ -152,6 +162,31 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
 
   // 编辑功能
   const handleEditFunction = (record: ProductFunction) => {
+    // 解析valueConfig，支持简单格式和复杂JSON格式
+    let parsedValueConfig = [];
+    if (record.valueConfig) {
+      try {
+        // 尝试解析JSON格式（包含registerMappings或pinMappings的复杂格式）
+        const jsonConfig = JSON.parse(record.valueConfig);
+        if (Array.isArray(jsonConfig)) {
+          parsedValueConfig = jsonConfig;
+        } else {
+          // 如果不是数组，转换为数组格式
+          parsedValueConfig = [jsonConfig];
+        }
+      } catch (e) {
+        // 如果JSON解析失败，使用简单的分号分隔格式
+        parsedValueConfig = record.valueConfig.split(';').map((item, index) => {
+          const [value, description] = item.split(':');
+          return {
+            id: `${index}`,
+            value: value || '',
+            description: description || ''
+          };
+        });
+      }
+    }
+
     // 将ProductFunction转换为FunctionConfig格式
     const functionConfig = {
       id: record.id, // 保持原有ID
@@ -160,22 +195,24 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
       functionType: record.functionType,
       readWriteMode: record.readWriteMode || '读写' as const,
       dataType: record.dataType || 'text' as const,
-      valueConfig: record.valueConfig ? record.valueConfig.split(';').map((item, index) => {
-        const [value, description] = item.split(':');
-        return {
-          id: `${index}`,
-          value: value || '',
-          description: description || ''
-        };
-      }) : [],
+      valueConfig: parsedValueConfig,
       // 配置映射相关字段
       isComposite: record.isComposite || false,
+      compositeType: (record as any).compositeType || 'multi-register', // 添加compositeType支持
       protocol: record.protocol || 'modbus_tcp',
       registerAddress: record.registerAddress || '',
       functionCode: record.functionCode || '',
       modbusDataType: record.modbusDataType || '',
       byteOrder: record.byteOrder || '',
       registerType: record.registerType || 'holding-register',
+      // 墨影采集卡协议相关字段
+      moyingChannelType: (record as any).moyingChannelType,
+      moyingMacAddress: (record as any).moyingMacAddress,
+      moyingFunctionId: (record as any).moyingFunctionId,
+      moyingPinType: (record as any).moyingPinType,
+      moyingPinNumber: (record as any).moyingPinNumber,
+      moyingPinValue: (record as any).moyingPinValue,
+      moyingDataPath: (record as any).moyingDataPath,
     };
     
     setEditingFunction(functionConfig);
@@ -206,6 +243,21 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
 
   // 保存功能（新增或编辑）
   const handleSaveFunction = (functionData: any) => {
+    // 处理valueConfig，支持复杂JSON格式和简单字符串格式
+    const processValueConfig = (valueConfig: any[], isComposite: boolean) => {
+      if (!valueConfig || valueConfig.length === 0) {
+        return '';
+      }
+      
+      // 如果是组合模式且包含registerMappings或pinMappings，保存为JSON格式
+      if (isComposite && valueConfig.some(item => item.registerMappings || item.pinMappings)) {
+        return JSON.stringify(valueConfig);
+      }
+      
+      // 否则保存为简单的分号分隔格式
+      return valueConfig.map((item: any) => `${item.value}:${item.description}`).join(';');
+    };
+
     if (isEditMode && editingFunction) {
       // 编辑模式：更新现有功能
       const updatedFunction: ProductFunction = {
@@ -215,15 +267,24 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
         functionType: functionData.functionType,
         readWriteMode: functionData.readWriteMode,
         dataType: functionData.dataType,
-        valueConfig: functionData.valueConfig?.map((item: any) => `${item.value}:${item.description}`).join(';') || '',
+        valueConfig: processValueConfig(functionData.valueConfig, functionData.isComposite),
         // 配置映射相关字段
         isComposite: functionData.isComposite,
+        compositeType: functionData.compositeType, // 添加compositeType支持
         protocol: functionData.protocol,
         registerAddress: functionData.registerAddress,
         functionCode: functionData.functionCode,
         modbusDataType: functionData.modbusDataType,
         byteOrder: functionData.byteOrder,
         registerType: functionData.registerType,
+        // 墨影采集卡协议相关字段
+        moyingChannelType: functionData.moyingChannelType,
+        moyingMacAddress: functionData.moyingMacAddress,
+        moyingFunctionId: functionData.moyingFunctionId,
+        moyingPinType: functionData.moyingPinType,
+        moyingPinNumber: functionData.moyingPinNumber,
+        moyingPinValue: functionData.moyingPinValue,
+        moyingDataPath: functionData.moyingDataPath,
       };
       
       setFunctions(prevFunctions => {
@@ -243,15 +304,24 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
         functionType: functionData.functionType,
         readWriteMode: functionData.readWriteMode,
         dataType: functionData.dataType,
-        valueConfig: functionData.valueConfig?.map((item: any) => `${item.value}:${item.description}`).join(';') || '',
+        valueConfig: processValueConfig(functionData.valueConfig, functionData.isComposite),
         // 配置映射相关字段
         isComposite: functionData.isComposite,
+        compositeType: functionData.compositeType, // 添加compositeType支持
         protocol: functionData.protocol,
         registerAddress: functionData.registerAddress,
         functionCode: functionData.functionCode,
         modbusDataType: functionData.modbusDataType,
         byteOrder: functionData.byteOrder,
         registerType: functionData.registerType,
+        // 墨影采集卡协议相关字段
+        moyingChannelType: functionData.moyingChannelType,
+        moyingMacAddress: functionData.moyingMacAddress,
+        moyingFunctionId: functionData.moyingFunctionId,
+        moyingPinType: functionData.moyingPinType,
+        moyingPinNumber: functionData.moyingPinNumber,
+        moyingPinValue: functionData.moyingPinValue,
+        moyingDataPath: functionData.moyingDataPath,
       };
       
       setFunctions(prevFunctions => {
@@ -274,7 +344,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
       setBasicInfoData(values);
       setCurrentStep(1);
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
       message.error('请完善产品基本信息');
     }
   };
@@ -331,7 +401,7 @@ const AddProduct: React.FC<AddProductProps> = ({ onClose, onProductCreated, edit
         setIsEditMode(false);
       }
     } catch (error) {
-      console.error(editingProduct ? '编辑失败:' : '创建失败:', error);
+      if (isDev) console.error(editingProduct ? '编辑失败:' : '创建失败:', error);
       message.error(editingProduct ? '编辑失败，请重试' : '创建失败，请重试');
     } finally {
       setLoading(false);

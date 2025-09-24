@@ -26,6 +26,7 @@ import {
   CopyOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 
@@ -67,16 +68,124 @@ interface Product {
   functions?: ProductFunction[];
 }
 
+// 内部表单组件，确保useForm只在Modal可见时才被创建
+const ProductForm = React.forwardRef<
+  { validateAndSubmit: () => Promise<void> },
+  {
+    editingProduct: Product | null,
+    onFinish: (values: any) => void,
+    loading: boolean
+  }
+>(({ editingProduct, onFinish, loading }, ref) => {
+  const [form] = Form.useForm();
+
+  // 当编辑产品变化时，设置表单值
+  React.useEffect(() => {
+    if (editingProduct) {
+      form.setFieldsValue({
+        productName: editingProduct.productName,
+        productKey: editingProduct.productKey,
+        productType: editingProduct.productType,
+        protocol: editingProduct.protocol,
+      });
+    } else {
+      form.resetFields();
+    }
+  }, [editingProduct, form]);
+
+  // 暴露表单验证和提交方法给父组件
+  React.useImperativeHandle(ref, () => ({
+    validateAndSubmit: async () => {
+      try {
+        const values = await form.validateFields();
+        onFinish(values);
+      } catch (error) {
+        // 开发环境下输出调试信息，Ant Design会自动显示表单验证错误
+        if (process.env.NODE_ENV === 'development') {
+          console.error('表单验证失败:', error);
+        }
+        throw error;
+      }
+    }
+  }));
+
+  // 产品类型选项
+  const productTypes = ['机器人产品', '生产产品', '电梯产品', '自动门产品', '虚拟产品'];
+  const protocols = ['Mqtt', 'http', 'Modbus', '墨影采集卡'];
+
+  return (
+    <Form form={form} layout="vertical">
+      <Row gutter={16}>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+          <Form.Item
+            label="产品名称"
+            name="productName"
+            rules={[
+              { required: true, message: '请输入产品名称' },
+              { max: 50, message: '产品名称不能超过50个字符' },
+            ]}
+          >
+            <Input placeholder="请输入产品名称" />
+          </Form.Item>
+        </Col>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+          <Form.Item
+            label="产品Key"
+            name="productKey"
+            rules={[
+              { required: true, message: '请输入产品Key' },
+              { pattern: /^[a-zA-Z0-9_]+$/, message: '产品Key只能包含字母、数字和下划线' },
+            ]}
+          >
+            <Input placeholder="请输入产品Key" />
+          </Form.Item>
+        </Col>
+      </Row>
+      <Row gutter={16}>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+          <Form.Item
+            label="产品类型"
+            name="productType"
+            rules={[{ required: true, message: '请选择产品类型' }]}
+          >
+            <Select placeholder="请选择产品类型">
+              {productTypes.map((type) => (
+                <Option key={type} value={type}>
+                  {type}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+        </Col>
+        <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+          <Form.Item
+            label="通讯协议"
+            name="protocol"
+            rules={[{ required: true, message: '请选择通讯协议' }]}
+          >
+            <Select placeholder="请选择通讯协议">
+              {protocols.map((protocol) => (
+                <Option key={protocol} value={protocol}>
+                  {protocol}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+        </Col>
+      </Row>
+    </Form>
+   );
+ });
+
 const ProductManagement: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [selectedType, setSelectedType] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [form] = Form.useForm();
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [isEditDrawerVisible, setIsEditDrawerVisible] = useState(false);
-
+  const productFormRef = React.useRef<any>(null);
 
   // 模拟数据
   const [products, setProducts] = useState<Product[]>([
@@ -193,6 +302,23 @@ const ProductManagement: React.FC = () => {
           modbusDataType: '',
           byteOrder: '',
           registerType: 'holding-register',
+        },
+        {
+          id: '5a',
+          name: '环境状态',
+          identifier: 'env_status',
+          functionType: '属性（动态）',
+          readWriteMode: '只读',
+          dataType: 'enum',
+          valueConfig: '[{"id":"1","value":"0","description":"正常","registerMappings":[{"id":"1","registerAddress":"0x0020","registerType":"input-register","functionCode":"04","dataType":"uint16","byteOrder":"big-endian","description":"温度寄存器"},{"id":"2","registerAddress":"0x0021","registerType":"input-register","functionCode":"04","dataType":"uint16","byteOrder":"big-endian","description":"湿度寄存器"}]},{"id":"2","value":"1","description":"警告","registerMappings":[{"id":"3","registerAddress":"0x0020","registerType":"input-register","functionCode":"04","dataType":"uint16","byteOrder":"big-endian","description":"温度寄存器"},{"id":"4","registerAddress":"0x0021","registerType":"input-register","functionCode":"04","dataType":"uint16","byteOrder":"big-endian","description":"湿度寄存器"}]},{"id":"3","value":"2","description":"异常","registerMappings":[{"id":"5","registerAddress":"0x0020","registerType":"input-register","functionCode":"04","dataType":"uint16","byteOrder":"big-endian","description":"温度寄存器"},{"id":"6","registerAddress":"0x0021","registerType":"input-register","functionCode":"04","dataType":"uint16","byteOrder":"big-endian","description":"湿度寄存器"}]}]',
+          isComposite: true,
+          compositeType: 'multi-register',
+          protocol: 'modbus_tcp',
+          registerAddress: '',
+          functionCode: '',
+          modbusDataType: '',
+          byteOrder: '',
+          registerType: 'input-register',
         },
       ],
     },
@@ -802,45 +928,46 @@ const ProductManagement: React.FC = () => {
 
 
 
+  const handleFormFinish = (values: any) => {
+    setLoading(true);
+    
+    // 模拟API调用
+    setTimeout(() => {
+      if (editingProduct) {
+        // 编辑
+        setProducts(
+          products.map((p) =>
+            p.id === editingProduct.id
+              ? {
+                  ...p,
+                  ...values,
+                  updateTime: new Date().toLocaleString('zh-CN'),
+                  updatedBy: '当前用户',
+                }
+              : p
+          )
+        );
+        message.success('编辑成功');
+      } else {
+        // 新增
+        const newProduct: Product = {
+          id: Date.now().toString(),
+          ...values,
+          deviceCount: 0,
+          updateTime: new Date().toLocaleString('zh-CN'),
+          updatedBy: '当前用户',
+        };
+        setProducts([...products, newProduct]);
+        message.success('新增成功');
+      }
+      setIsModalVisible(false);
+      setLoading(false);
+    }, 1000);
+  };
+
   const handleModalOk = async () => {
-    try {
-      const values = await form.validateFields();
-      setLoading(true);
-      
-      // 模拟API调用
-      setTimeout(() => {
-        if (editingProduct) {
-          // 编辑
-          setProducts(
-            products.map((p) =>
-              p.id === editingProduct.id
-                ? {
-                    ...p,
-                    ...values,
-                    updateTime: new Date().toLocaleString('zh-CN'),
-                    updatedBy: '当前用户',
-                  }
-                : p
-            )
-          );
-          message.success('编辑成功');
-        } else {
-          // 新增
-          const newProduct: Product = {
-            id: Date.now().toString(),
-            ...values,
-            deviceCount: 0,
-            updateTime: new Date().toLocaleString('zh-CN'),
-            updatedBy: '当前用户',
-          };
-          setProducts([...products, newProduct]);
-          message.success('新增成功');
-        }
-        setIsModalVisible(false);
-        setLoading(false);
-      }, 1000);
-    } catch (error) {
-      console.error('表单验证失败:', error);
+    if (productFormRef.current) {
+      await productFormRef.current.validateAndSubmit();
     }
   };
 
@@ -1247,69 +1374,12 @@ const ProductManagement: React.FC = () => {
         confirmLoading={loading}
         width={isLargeScreen ? 800 : isMobile ? '90vw' : 600}
       >
-        <Form
-          form={form}
-          layout="vertical"
-        >
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="产品名称"
-                name="productName"
-                rules={[
-                  { required: true, message: '请输入产品名称' },
-                  { max: 50, message: '产品名称不能超过50个字符' },
-                ]}
-              >
-                <Input placeholder="请输入产品名称" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="产品Key"
-                name="productKey"
-                rules={[
-                  { required: true, message: '请输入产品Key' },
-                  { pattern: /^[a-zA-Z0-9_]+$/, message: '产品Key只能包含字母、数字和下划线' },
-                ]}
-              >
-                <Input placeholder="请输入产品Key" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="产品类型"
-                name="productType"
-                rules={[{ required: true, message: '请选择产品类型' }]}
-              >
-                <Select placeholder="请选择产品类型">
-                  {productTypes.map((type) => (
-                    <Option key={type} value={type}>
-                      {type}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="通讯协议"
-                name="protocol"
-                rules={[{ required: true, message: '请选择通讯协议' }]}
-              >
-                <Select placeholder="请选择通讯协议">
-                  {protocols.map((protocol) => (
-                    <Option key={protocol} value={protocol}>
-                      {protocol}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-        </Form>
+        <ProductForm
+          ref={productFormRef}
+          editingProduct={editingProduct}
+          onFinish={handleFormFinish}
+          loading={loading}
+        />
       </Modal>
         
         {/* 新增产品抽屉 */}

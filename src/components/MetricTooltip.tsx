@@ -56,7 +56,7 @@ const MetricTooltip: React.FC<MetricTooltipProps> = ({
     <Tooltip
       title={tooltipContent}
       placement={placement}
-      overlayStyle={{ maxWidth: '350px' }}
+      styles={{ root: { maxWidth: '350px' } }}
       color="rgba(0, 0, 0, 0.85)"
     >
       {icon}

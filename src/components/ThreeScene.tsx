@@ -12,7 +12,10 @@ export interface ThreeSceneRef {
 }
 
 const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
-  console.log('[ThreeScene] 组件开始渲染');
+  // 开发模式标志
+  const isDev = import.meta.env.DEV;
+  
+  if (isDev) console.log('[ThreeScene] 组件开始渲染');
   const mountRef = useRef<HTMLDivElement>(null);
   const animationIdRef = useRef<number | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -27,7 +30,7 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
   const initialCameraTarget = { x: 0, y: 27.5, z: 0 }; // 目标点设为二楼中心位置
 
   useEffect(() => {
-    console.log('[ThreeScene] useEffect 开始执行');
+    if (isDev) console.log('[ThreeScene] useEffect 开始执行');
     if (!mountRef.current) return;
 
     const mountNode = mountRef.current;
@@ -424,8 +427,8 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
       createStationNode('transfer_2', new THREE.Vector3(20, nodeY, -37.5), '中转站点2');
       createStationNode('elevator_inside', new THREE.Vector3(60, nodeY, 0), '电梯内站点');
       
-      console.log('路径网络初始化完成，创建了', stationNodes.length, '个站点节点');
-      console.log('站点节点列表:', stationNodes.map(node => node.id));
+      if (isDev) console.log('路径网络初始化完成，创建了', stationNodes.length, '个站点节点');
+      if (isDev) console.log('站点节点列表:', stationNodes.map(node => node.id));
     };
 
     // 初始化路径网络 - 创建站点节点
@@ -542,15 +545,15 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
 
     // 申请路径资源 - 参考视图场控页面的路径资源申请逻辑
     const requestPathResources = (robotId: string, currentIndex: number): string[] => {
-      console.log('申请路径资源 - robotId:', robotId, 'currentIndex:', currentIndex);
-      console.log('pathSegments数组状态:', {
+      if (isDev) console.log('申请路径资源 - robotId:', robotId, 'currentIndex:', currentIndex);
+      if (isDev) console.log('pathSegments数组状态:', {
         length: pathSegments.length,
         ids: pathSegments.map(p => p.id),
         occupied: pathSegments.map(p => ({ id: p.id, isOccupied: p.isOccupied }))
       });
       
       if (pathSequence.length === 0) {
-        console.log('路径序列为空，无法申请资源');
+        if (isDev) console.log('路径序列为空，无法申请资源');
         return [];
       }
       
@@ -559,19 +562,19 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
       const nextIndex = (currentIndex + 1) % pathSequence.length;
       const nextPathId = pathSequence[nextIndex].nextLineId;
       
-      console.log('尝试申请路径资源:', { currentPathId, nextPathId, currentIndex, nextIndex });
+      if (isDev) console.log('尝试申请路径资源:', { currentPathId, nextPathId, currentIndex, nextIndex });
       
       // 检查路径是否已被占用
       const isPathOccupied = (pathId: string) => {
         const segment = pathSegments.find(p => p.id === pathId);
         const occupied = segment ? segment.isOccupied : false;
-        console.log('检查路径占用状态:', pathId, '是否找到路径段:', !!segment, '是否被占用:', occupied);
+        if (isDev) console.log('检查路径占用状态:', pathId, '是否找到路径段:', !!segment, '是否被占用:', occupied);
         return occupied;
       };
       
       // 如果路径已被占用，返回空数组表示申请失败
       if (isPathOccupied(currentPathId) || isPathOccupied(nextPathId)) {
-        console.warn(`路径资源申请失败：${currentPathId} 或 ${nextPathId} 已被占用`);
+        if (isDev) console.warn(`路径资源申请失败：${currentPathId} 或 ${nextPathId} 已被占用`);
         return [];
       }
       
@@ -579,7 +582,7 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
       occupyPath(currentPathId);
       occupyPath(nextPathId);
       
-      console.log(`路径资源申请成功：${currentPathId}, ${nextPathId}`);
+      if (isDev) console.log(`路径资源申请成功：${currentPathId}, ${nextPathId}`);
       return [currentPathId, nextPathId];
     };
 
@@ -589,7 +592,7 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
     const animateRobotMovement = () => {
       if (robotState.status !== 'running' || pathSequence.length === 0) return;
 
-      console.log('[机器人移动] 当前状态:', {
+      if (isDev) console.log('[机器人移动] 当前状态:', {
         status: robotState.status,
         pathIndex: robotState.pathIndex,
         targetPointId: robotState.targetPointId,
@@ -599,12 +602,12 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
 
       // 获取当前路径点和目标路径点
       const currentPathPoint = pathSequence[robotState.pathIndex];
-      console.log('[机器人移动] 当前路径点:', currentPathPoint);
+      if (isDev) console.log('[机器人移动] 当前路径点:', currentPathPoint);
       
       const currentPoint = stationNodes.find(node => node.id === currentPathPoint.pointId);
       const targetPoint = stationNodes.find(node => node.id === robotState.targetPointId);
       
-      console.log('[机器人移动] 查找站点结果:', {
+      if (isDev) console.log('[机器人移动] 查找站点结果:', {
         currentPointId: currentPathPoint.pointId,
         targetPointId: robotState.targetPointId,
         currentPointFound: !!currentPoint,
@@ -613,10 +616,12 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
       });
       
       if (!currentPoint || !targetPoint) {
-        console.error('无法找到当前站点或目标站点');
-        console.error('当前站点ID:', currentPathPoint.pointId, '找到:', !!currentPoint);
-        console.error('目标站点ID:', robotState.targetPointId, '找到:', !!targetPoint);
-        return;
+          if (isDev) {
+            console.error('无法找到当前站点或目标站点');
+            console.error('当前站点ID:', currentPathPoint.pointId, '找到:', !!currentPoint);
+            console.error('目标站点ID:', robotState.targetPointId, '找到:', !!targetPoint);
+          }
+          return;
       }
 
       // 检查是否有路径资源
@@ -627,7 +632,7 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
         // 如果申请失败，机器人进入等待状态
         if (resources.length === 0) {
           robotState.status = 'waiting';
-          console.log('CRM机器人进入等待状态，路径资源不可用');
+          if (isDev) console.log('CRM机器人进入等待状态，路径资源不可用');
           return;
         }
         
@@ -646,7 +651,7 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
           const pathToRelease = robotState.pathResources.shift();
           if (pathToRelease) {
             releasePath(pathToRelease);
-            console.log(`释放已走完的路径：${pathToRelease}`);
+            if (isDev) console.log(`释放已走完的路径：${pathToRelease}`);
           }
         }
         
@@ -663,7 +668,7 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
           // 申请新路径资源
           if (occupyPath(nextPathId)) {
             robotState.pathResources.push(nextPathId);
-            console.log(`申请新路径资源：${nextPathId}`);
+            if (isDev) console.log(`申请新路径资源：${nextPathId}`);
           }
           
           // 更新路径索引和目标点
@@ -671,12 +676,12 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
           robotState.pathIndex = (robotState.pathIndex + 1) % pathSequence.length;
           robotState.targetPointId = pathSequence[(robotState.pathIndex + 1) % pathSequence.length].pointId;
           
-          console.log(`CRM机器人移动到下一个目标：${robotState.targetPointId}`);
+          if (isDev) console.log(`CRM机器人移动到下一个目标：${robotState.targetPointId}`);
         } else {
           // 如果下一条路径被占用，机器人停在当前位置等待
           robotState.status = 'waiting';
           robotState.animationProgress = 1.0; // 保持在当前位置
-          console.log('CRM机器人等待下一条路径可用');
+          if (isDev) console.log('CRM机器人等待下一条路径可用');
           return;
         }
       }
@@ -710,22 +715,22 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
       if (resources.length > 0) {
         robotState.pathResources = resources;
         robotState.status = 'running';
-        console.log('CRM机器人恢复运行状态');
+        if (isDev) console.log('CRM机器人恢复运行状态');
       }
     };
 
     // 开始路径移动 - 替换原来的随机移动
     const startPathMovement = () => {
       if (robotState.status === 'running') {
-        console.log('CRM机器人已在运行状态，跳过启动');
+        if (isDev) console.log('CRM机器人已在运行状态，跳过启动');
         return;
       }
 
-      console.log('CRM机器人开始沿路径移动');
-      console.log('当前路径序列长度:', pathSequence.length);
-      console.log('当前站点节点数量:', stationNodes.length);
-      console.log('当前路径段数量:', pathSegments.length);
-      console.log('机器人初始状态:', robotState);
+      if (isDev) console.log('CRM机器人开始沿路径移动');
+      if (isDev) console.log('当前路径序列长度:', pathSequence.length);
+      if (isDev) console.log('当前站点节点数量:', stationNodes.length);
+      if (isDev) console.log('当前路径段数量:', pathSegments.length);
+      if (isDev) console.log('机器人初始状态:', robotState);
 
       // 申请初始路径资源
       const initialResources = requestPathResources('crm_robot', robotState.pathIndex);
@@ -734,10 +739,10 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
         robotState.pathResources = initialResources;
         robotState.status = 'running';
         robotState.animationProgress = 0;
-        console.log('CRM机器人开始移动，初始路径资源申请成功，资源:', initialResources);
+        if (isDev) console.log('CRM机器人开始移动，初始路径资源申请成功，资源:', initialResources);
       } else {
         robotState.status = 'waiting';
-        console.log('CRM机器人等待初始路径资源，当前路径索引:', robotState.pathIndex);
+        if (isDev) console.log('CRM机器人等待初始路径资源，当前路径索引:', robotState.pathIndex);
       }
     };
 
@@ -746,10 +751,10 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
 
     // 自动测试机器人移动（延迟3秒以确保所有初始化完成）
     autoTestTimer = setTimeout(() => {
-      console.log('[自动测试] 3秒后自动触发机器人移动测试');
-      console.log('[自动测试] 当前站点节点数量:', stationNodes.length);
-      console.log('[自动测试] 当前路径段数量:', pathSegments.length);
-      console.log('[自动测试] pathSequence长度:', pathSequence.length);
+      if (isDev) console.log('[自动测试] 3秒后自动触发机器人移动测试');
+      if (isDev) console.log('[自动测试] 当前站点节点数量:', stationNodes.length);
+      if (isDev) console.log('[自动测试] 当前路径段数量:', pathSegments.length);
+      if (isDev) console.log('[自动测试] pathSequence长度:', pathSequence.length);
       if (startPathMovementRef.current) {
         startPathMovementRef.current();
       }
@@ -828,7 +833,7 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
       createTopologyLine(elevatorOutsidePoint, elevatorInsidePoint, floor1Group);
       
       // 根据pathSequence创建路径段连接线
-      console.log('[路径段创建] 开始根据pathSequence创建路径段连接线');
+      if (isDev) console.log('[路径段创建] 开始根据pathSequence创建路径段连接线');
       for (let i = 0; i < pathSequence.length - 1; i++) {
         const currentPoint = pathSequence[i];
         const nextPoint = pathSequence[i + 1];
@@ -838,15 +843,15 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
         const nextStation = stationNodes.find(node => node.id === nextPoint.pointId);
         
         if (currentStation && nextStation) {
-          console.log(`[路径段创建] 创建连接线: ${currentPoint.pointId} -> ${nextPoint.pointId}`);
+          if (isDev) console.log(`[路径段创建] 创建连接线: ${currentPoint.pointId} -> ${nextPoint.pointId}`);
           createTopologyLine(currentStation.position, nextStation.position, floor1Group);
         } else {
-          console.warn(`[路径段创建] 无法找到站点: ${currentPoint.pointId}(${!!currentStation}) -> ${nextPoint.pointId}(${!!nextStation})`);
+          if (isDev) console.warn(`[路径段创建] 无法找到站点: ${currentPoint.pointId}(${!!currentStation}) -> ${nextPoint.pointId}(${!!nextStation})`);
         }
       }
       
-      console.log('[路径段创建] 完成，总共创建了', pathSegments.length, '个路径段');
-      console.log('[路径段创建] 路径段列表:', pathSegments.map(p => p.id));
+      if (isDev) console.log('[路径段创建] 完成，总共创建了', pathSegments.length, '个路径段');
+      if (isDev) console.log('[路径段创建] 路径段列表:', pathSegments.map(p => p.id));
     };
 
     createFloor1TopologyGrid();
@@ -1268,7 +1273,7 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
     setFloorView,
     setAllFloorsView,
     testRobotMovement: () => {
-      console.log('手动触发机器人移动测试');
+      if (isDev) console.log('手动触发机器人移动测试');
       if (startPathMovementRef.current) {
         startPathMovementRef.current();
       }

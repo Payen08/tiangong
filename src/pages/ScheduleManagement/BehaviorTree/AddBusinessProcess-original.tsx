@@ -37,6 +37,7 @@ import {
   SortAscendingOutlined,
   DeleteOutlined
 } from '@ant-design/icons';
+import { isDev } from '@/lib/utils';
 // SubCanvas和IndependentSubCanvas导入已移除 - 阶段节点功能已移除
 
 // const { TextArea } = Input;
@@ -638,7 +639,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
 
   // 处理添加节点面板中的节点添加
   const handleAddNodeFromPanel = useCallback((nodeType: NodeType) => {
-    console.log('🎯 [流程画布] handleAddNodeFromPanel 开始', {
+    if (isDev) console.log('🎯 [流程画布] handleAddNodeFromPanel 开始', {
       nodeType,
       dragConnectionStart,
       nodeAddPosition,
@@ -647,14 +648,14 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     });
 
     if (!dragConnectionStart) {
-      console.log('🎯 [流程画布] 普通添加模式，无拖拽连线');
+      if (isDev) console.log('🎯 [流程画布] 普通添加模式，无拖拽连线');
       // 普通添加到指定位置
       addNodeToCanvas(nodeType);
       setShowNodePanel(false);
       return;
     }
 
-    console.log('🎯 [流程画布] 拖拽连线添加模式', {
+    if (isDev) console.log('🎯 [流程画布] 拖拽连线添加模式', {
       dragConnectionStart,
       nodeAddPosition
     });
@@ -731,12 +732,12 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         };
     }
 
-    console.log('🎯 [流程画布] 创建新节点', newNode);
+    if (isDev) console.log('🎯 [流程画布] 创建新节点', newNode);
 
     // 添加新节点
     setNodes(prev => {
       const newNodes = [...prev, newNode];
-      console.log('🎯 [流程画布] 节点列表更新', {
+      if (isDev) console.log('🎯 [流程画布] 节点列表更新', {
         oldCount: prev.length,
         newCount: newNodes.length,
         newNodeId: newNode.id
@@ -748,7 +749,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     const sourceNode = nodes.find(n => n.id === dragConnectionStart.nodeId);
     const sourceSubCanvas = subCanvases.find(sc => sc.id === dragConnectionStart.nodeId);
     
-    console.log('🎯 [流程画布] 查找源节点', {
+    if (isDev) console.log('🎯 [流程画布] 查找源节点', {
       sourceNodeId: dragConnectionStart.nodeId,
       sourceNode: sourceNode ? { id: sourceNode.id, type: sourceNode.type, x: sourceNode.x, y: sourceNode.y } : null,
       sourceSubCanvas: sourceSubCanvas ? { id: sourceSubCanvas.id, x: sourceSubCanvas.x, y: sourceSubCanvas.y } : null
@@ -766,7 +767,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     // 所有节点类型都连接到左侧边缘中间位置
     targetPoint = { x: newNode.x, y: newNode.y + newNode.height / 2 };
 
-    console.log('🎯 [流程画布] 连接点计算', {
+    if (isDev) console.log('🎯 [流程画布] 连接点计算', {
       sourceType,
       sourcePoint: { x: dragConnectionStart.x, y: dragConnectionStart.y },
       targetPoint,
@@ -784,11 +785,11 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       targetType: newNode.type === 'stage' ? 'stage' : 'node'
     };
 
-    console.log('🎯 [流程画布] 创建新连接', newConnection);
+    if (isDev) console.log('🎯 [流程画布] 创建新连接', newConnection);
 
     setConnections(prev => {
       const newConnections = [...prev, newConnection];
-      console.log('🎯 [流程画布] 连接列表更新', {
+      if (isDev) console.log('🎯 [流程画布] 连接列表更新', {
         oldCount: prev.length,
         newCount: newConnections.length,
         newConnectionId: newConnection.id
@@ -801,7 +802,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     setDragConnectionStart(null);
     setDragConnectionEnd(null);
     
-    console.log('🎯 [流程画布] handleAddNodeFromPanel 完成');
+    if (isDev) console.log('🎯 [流程画布] handleAddNodeFromPanel 完成');
     message.success(`${newNode.label}节点添加成功`);
   }, [nodeAddPosition, dragConnectionStart, nodes, subCanvases, connections]);
 
@@ -1302,7 +1303,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       // 成功提示已在父组件中处理，这里不需要重复
       
     } catch (error: any) {
-      console.error('保存业务流程失败:', error);
+      if (isDev) console.error('保存业务流程失败:', error);
       if (error?.errorFields && error.errorFields.length > 0) {
         message.error('请完善所有必填信息');
       } else {
@@ -1817,7 +1818,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         const inputY = subCanvas.y + subCanvas.height / 2;
         const inputDistance = Math.sqrt((x - inputX) ** 2 + (y - inputY) ** 2);
         if (inputDistance <= 12) {
-          console.log('🔗 [连接点检测] 检测到子画布输入连接点', { 
+          if (isDev) console.log('🔗 [连接点检测] 检测到子画布输入连接点', { 
             subCanvasId: subCanvas.id, 
             type: 'input', 
             position: { x: inputX, y: inputY },
@@ -1832,7 +1833,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         const outputY = subCanvas.y + subCanvas.height / 2;
         const outputDistance = Math.sqrt((x - outputX) ** 2 + (y - outputY) ** 2);
         if (outputDistance <= 12) {
-          console.log('🔗 [连接点检测] 检测到子画布输出连接点', { 
+          if (isDev) console.log('🔗 [连接点检测] 检测到子画布输出连接点', { 
             subCanvasId: subCanvas.id, 
             type: 'output', 
             position: { x: outputX, y: outputY },
@@ -1851,7 +1852,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         const outputY = node.y + node.height / 2;
         const distance = Math.sqrt((x - outputX) ** 2 + (y - outputY) ** 2);
         if (distance <= 12) { // 扩大检测范围
-          console.log('🔗 [连接点检测] 检测到开始节点输出连接点', { 
+          if (isDev) console.log('🔗 [连接点检测] 检测到开始节点输出连接点', { 
             nodeId: node.id, 
             type: 'output', 
             position: { x: outputX, y: outputY },
@@ -1866,7 +1867,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         const inputY = node.y + node.height / 2;
         const distance = Math.sqrt((x - inputX) ** 2 + (y - inputY) ** 2);
         if (distance <= 12) { // 扩大检测范围
-          console.log('🔗 [连接点检测] 检测到结束节点输入连接点', { 
+          if (isDev) console.log('🔗 [连接点检测] 检测到结束节点输入连接点', { 
             nodeId: node.id, 
             type: 'input', 
             position: { x: inputX, y: inputY },
@@ -1882,7 +1883,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         const inputY = node.y + node.height / 2; // 使用节点实际高度的一半
         const inputDistance = Math.sqrt((x - inputX) ** 2 + (y - inputY) ** 2);
         if (inputDistance <= 12) {
-          console.log('🔗 [连接点检测] 检测到阶段节点输入连接点', { 
+          if (isDev) console.log('🔗 [连接点检测] 检测到阶段节点输入连接点', { 
             nodeId: node.id, 
             type: 'input', 
             position: { x: inputX, y: inputY },
@@ -1897,7 +1898,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         const outputY = node.y + node.height / 2; // 使用节点实际高度的一半
         const outputDistance = Math.sqrt((x - outputX) ** 2 + (y - outputY) ** 2);
         if (outputDistance <= 12) {
-          console.log('🔗 [连接点检测] 检测到阶段节点输出连接点', { 
+          if (isDev) console.log('🔗 [连接点检测] 检测到阶段节点输出连接点', { 
             nodeId: node.id, 
             type: 'output', 
             position: { x: outputX, y: outputY },
@@ -1913,7 +1914,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         const inputY = node.y + node.height / 2; // 使用节点实际高度的一半
         const inputDistance = Math.sqrt((x - inputX) ** 2 + (y - inputY) ** 2);
         if (inputDistance <= 12) {
-          console.log('🔗 [连接点检测] 检测到业务流程节点输入连接点', { 
+          if (isDev) console.log('🔗 [连接点检测] 检测到业务流程节点输入连接点', { 
             nodeId: node.id, 
             type: 'input', 
             position: { x: inputX, y: inputY },
@@ -1928,7 +1929,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         const outputY = node.y + node.height / 2; // 使用节点实际高度的一半
         const outputDistance = Math.sqrt((x - outputX) ** 2 + (y - outputY) ** 2);
         if (outputDistance <= 12) {
-          console.log('🔗 [连接点检测] 检测到业务流程节点输出连接点', { 
+          if (isDev) console.log('🔗 [连接点检测] 检测到业务流程节点输出连接点', { 
             nodeId: node.id, 
             type: 'output', 
             position: { x: outputX, y: outputY },
@@ -2079,7 +2080,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
     
-    console.log('🖱️ [鼠标按下] 位置信息', {
+    if (isDev) console.log('🖱️ [鼠标按下] 位置信息', {
       clientPos: { x: e.clientX, y: e.clientY },
       canvasPos: { x: canvasPos.x, y: canvasPos.y },
       canvasState: { offsetX: canvasState.offsetX, offsetY: canvasState.offsetY, scale: canvasState.scale }
@@ -2091,7 +2092,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
     const clickedSubCanvas = findSubCanvasAtPosition(canvasPos.x, canvasPos.y);
     const clickedConnection = findConnectionAtPosition(canvasPos.x, canvasPos.y);
     
-    console.log('🔍 [检测结果]', {
+    if (isDev) console.log('🔍 [检测结果]', {
       addButton: !!clickedAddButton,
       connectionPoint: clickedConnectionPoint,
       node: clickedNode ? { id: clickedNode.id, type: clickedNode.type } : null,
@@ -2114,7 +2115,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       return;
     } else if (clickedConnectionPoint) {
       // 点击了连接点，开始拖拽连线
-      console.log('🔗 [拖拽连线] 开始拖拽', { 
+      if (isDev) console.log('🔗 [拖拽连线] 开始拖拽', { 
         from: clickedConnectionPoint,
         mousePos: canvasPos 
       });
@@ -2193,7 +2194,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       // 检测目标连接点
       const targetPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
       if (targetPoint && targetPoint.type === 'input' && dragConnectionStart && targetPoint.nodeId !== dragConnectionStart.nodeId) {
-        console.log('🔗 [拖拽连线] 检测到有效目标', { target: targetPoint });
+        if (isDev) console.log('🔗 [拖拽连线] 检测到有效目标', { target: targetPoint });
       }
     } else if (isDraggingNode && draggedNode) {
       // 拖拽节点
@@ -2335,7 +2336,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
       const targetPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
       
-      console.log('🔗 [拖拽连线] 结束拖拽', { 
+      if (isDev) console.log('🔗 [拖拽连线] 结束拖拽', { 
         from: dragConnectionStart,
         to: targetPoint,
         canvasPos,
@@ -2345,7 +2346,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       });
       
       // 检查是否可以创建连接（从输出连到输入）
-      console.log('🔗 [连接验证] 开始验证', {
+      if (isDev) console.log('🔗 [连接验证] 开始验证', {
         hasTargetPoint: !!targetPoint,
         sourceType: dragConnectionStart.type,
         targetType: targetPoint?.type,
@@ -2357,7 +2358,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           targetPoint.type === 'input' &&
           dragConnectionStart.nodeId !== targetPoint.nodeId) {
         
-        console.log('🔗 [连接验证] 基本验证通过，检查重复连接');
+        if (isDev) console.log('🔗 [连接验证] 基本验证通过，检查重复连接');
         
         // 检查是否已存在相同连接
         const existingConnection = connections.find(conn => 
@@ -2365,7 +2366,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           conn.targetId === targetPoint.nodeId
         );
         
-        console.log('🔗 [连接验证] 重复连接检查', { existingConnection: !!existingConnection });
+        if (isDev) console.log('🔗 [连接验证] 重复连接检查', { existingConnection: !!existingConnection });
         
         if (!existingConnection) {
           // 确定连接类型
@@ -2374,7 +2375,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
           const sourceSubCanvas = subCanvases.find(sc => sc.id === dragConnectionStart.nodeId);
           const targetSubCanvas = subCanvases.find(sc => sc.id === targetPoint.nodeId);
           
-          console.log('🔗 [连接验证] 节点查找结果', {
+          if (isDev) console.log('🔗 [连接验证] 节点查找结果', {
             sourceNode: sourceNode ? { id: sourceNode.id, type: sourceNode.type } : null,
             targetNode: targetNode ? { id: targetNode.id, type: targetNode.type } : null,
             sourceSubCanvas: sourceSubCanvas ? { id: sourceSubCanvas.id } : null,
@@ -2413,16 +2414,16 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
             targetType
           };
           
-          console.log('🔗 [拖拽连线] 创建新连接', { newConnection });
+          if (isDev) console.log('🔗 [拖拽连线] 创建新连接', { newConnection });
           setConnections(prev => [...prev, newConnection]);
           message.success('连接创建成功');
         } else {
-          console.log('🔗 [拖拽连线] 连接已存在', { existingConnection });
+          if (isDev) console.log('🔗 [拖拽连线] 连接已存在', { existingConnection });
           message.warning('连接已存在');
         }
       } else if (!targetPoint && dragConnectionStart.type === 'output') {
         // 拖拽连线到空白处，弹出添加节点面板
-        console.log('🔗 [拖拽连线] 拖拽到空白处，弹出添加节点面板');
+        if (isDev) console.log('🔗 [拖拽连线] 拖拽到空白处，弹出添加节点面板');
         setNodeAddPosition({ x: canvasPos.x, y: canvasPos.y });
         setShowNodePanel(true);
         message.info('请选择要添加的节点类型');
@@ -2432,7 +2433,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
         setDragConnectionEnd(null);
         return; // 提前返回，避免重置dragConnectionStart
       } else {
-        console.log('🔗 [拖拽连线] 无效连接', { 
+        if (isDev) console.log('🔗 [拖拽连线] 无效连接', { 
           reason: !targetPoint ? '无目标点' : 
                   dragConnectionStart.type !== 'output' ? '起点非输出' :
                   targetPoint.type !== 'input' ? '终点非输入' :
@@ -3970,7 +3971,7 @@ const AddBusinessProcess: React.FC<AddBusinessProcessProps> = ({
       width="100vw"
       height="100vh"
       placement="right"
-      destroyOnClose
+      destroyOnHidden
       styles={{
         body: { padding: 0 },
         header: { borderBottom: '1px solid #f0f0f0' }

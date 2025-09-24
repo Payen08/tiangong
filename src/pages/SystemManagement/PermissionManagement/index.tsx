@@ -23,6 +23,7 @@ import {
   SearchOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import { isDev } from '@/lib/utils';
 
 interface Permission {
   id: string;
@@ -482,7 +483,7 @@ const PermissionManagement: React.FC = () => {
       setIsDrawerVisible(false);
       form.resetFields();
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
     } finally {
       setLoading(false);
     }

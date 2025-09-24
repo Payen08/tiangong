@@ -24,6 +24,7 @@ import {
   PlusOutlined,
   DeleteOutlined
 } from '@ant-design/icons';
+import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 const { TextArea } = Input;
@@ -281,7 +282,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
       onSave(updatedNode);
       message.success('节点属性保存成功！');
     } catch (error) {
-      console.error('保存失败:', error);
+      if (isDev) console.error('保存失败:', error);
       message.error('保存失败，请检查输入内容');
     }
   };

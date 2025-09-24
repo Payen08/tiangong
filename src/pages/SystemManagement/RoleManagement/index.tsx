@@ -27,6 +27,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { DataNode } from 'antd/es/tree';
+import { isDev } from '@/lib/utils';
 
 interface Role {
   id: string;
@@ -410,7 +411,7 @@ const RoleManagement: React.FC = () => {
       message.success('添加成功');
       handleAddDrawerClose();
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
     } finally {
       setLoading(false);
     }
@@ -430,7 +431,7 @@ const RoleManagement: React.FC = () => {
         handleEditDrawerClose();
       }
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
     } finally {
       setLoading(false);
     }

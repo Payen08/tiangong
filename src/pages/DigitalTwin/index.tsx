@@ -404,7 +404,9 @@ const DigitalTwin: React.FC = () => {
         justifyContent: 'center',
         height: 'calc(100vh - 112px)'
       }}>
-        <Spin size="large" tip="正在加载3D数字孪生场景..." />
+        <Spin size="large" tip="正在加载3D数字孪生场景...">
+          <div style={{ width: '200px', height: '100px' }} />
+        </Spin>
       </div>
     );
   }

@@ -34,6 +34,7 @@ import {
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps } from 'antd';
+import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 const { confirm } = Modal;
@@ -314,7 +315,7 @@ const BehaviorTree: React.FC = () => {
         },
       });
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
     }
   };
 
@@ -638,7 +639,7 @@ const BehaviorTree: React.FC = () => {
       setEditingRecord(null);
       form.resetFields();
     } catch (error) {
-      console.error('操作失败:', error);
+      if (isDev) console.error('操作失败:', error);
       message.error({
         content: editingRecord ? '编辑行为树失败，请重试' : '创建行为树失败，请重试',
         duration: 4

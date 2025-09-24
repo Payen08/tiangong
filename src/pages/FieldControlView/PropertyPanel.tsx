@@ -10,13 +10,13 @@ interface PropertyPanelProps {
   onSave: (values: any) => void;
 }
 
-const PropertyPanel: React.FC<PropertyPanelProps> = ({
-  visible,
-  onClose,
-  elementType,
-  elementData,
-  // onSave
-}) => {
+// 内部表单组件，只在Modal可见时渲染
+const PropertyForm: React.FC<{
+  elementType: 'point' | 'line' | 'area' | null;
+  elementData: any;
+  onSave: (values: any) => void;
+  onClose: () => void;
+}> = ({ elementType, elementData, onSave, onClose }) => {
   const [form] = Form.useForm();
 
   // 根据元素类型设置表单初始值
@@ -26,17 +26,17 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({
     }
   }, [elementData, form]);
 
-  // 获取弹窗标题
-  const getTitle = () => {
-    switch (elementType) {
-      case 'point':
-        return '查看点属性';
-      case 'line':
-        return '查看路径属性';
-      case 'area':
-        return '查看区域属性';
-      default:
-        return '查看属性';
+  // 处理表单提交
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
+      onSave(values);
+      onClose();
+    } catch (error) {
+      // 开发环境下输出调试信息，Ant Design会自动显示表单验证错误
+      if (process.env.NODE_ENV === 'development') {
+        console.error('表单验证失败:', error);
+      }
     }
   };
 
@@ -400,6 +400,40 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({
   };
 
   return (
+    <Form
+      form={form}
+      layout="vertical"
+    >
+      {elementType === 'point' && renderPointForm()}
+      {elementType === 'line' && renderLineForm()}
+      {elementType === 'area' && renderAreaForm()}
+    </Form>
+  );
+};
+
+// 主组件，只在visible为true时渲染内部表单组件
+const PropertyPanel: React.FC<PropertyPanelProps> = ({
+  visible,
+  onClose,
+  elementType,
+  elementData,
+  onSave
+}) => {
+  // 获取弹窗标题
+  const getTitle = () => {
+    switch (elementType) {
+      case 'point':
+        return '查看点属性';
+      case 'line':
+        return '查看路径属性';
+      case 'area':
+        return '查看区域属性';
+      default:
+        return '查看属性';
+    }
+  };
+
+  return (
     <Modal
       title={getTitle()}
       open={visible}
@@ -419,14 +453,14 @@ const PropertyPanel: React.FC<PropertyPanelProps> = ({
       }}
       zIndex={2000}
     >
-      <Form
-        form={form}
-        layout="vertical"
-      >
-        {elementType === 'point' && renderPointForm()}
-        {elementType === 'line' && renderLineForm()}
-        {elementType === 'area' && renderAreaForm()}
-      </Form>
+      {visible && (
+        <PropertyForm
+          elementType={elementType}
+          elementData={elementData}
+          onSave={onSave}
+          onClose={onClose}
+        />
+      )}
     </Modal>
   );
 };

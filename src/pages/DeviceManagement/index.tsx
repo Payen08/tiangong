@@ -33,6 +33,7 @@ import {
   EnvironmentOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 
@@ -57,6 +58,306 @@ interface Device {
   updatedBy: string;
 }
 
+// 内部DeviceForm组件的props接口
+interface DeviceFormProps {
+  form: any, // 从父组件传入的form实例
+  editingDevice: Device | null,
+  onFinish: (values: any) => void,
+  loading: boolean,
+  productNames: string[],
+  deviceTypeOptions: string[],
+  statusOptions: string[],
+  devices: Device[],
+  selectedDeviceType?: string,
+  getDeviceTypeByProduct: (product: string) => string
+}
+
+// 内部DeviceForm组件
+const DeviceForm = React.forwardRef<{ validateAndSubmit: () => void }, DeviceFormProps>(
+  ({ form, editingDevice, onFinish, loading, productNames, deviceTypeOptions, statusOptions, devices, selectedDeviceType, getDeviceTypeByProduct }, ref) => {
+    const [formValues, setFormValues] = React.useState<any>({});
+    
+    // 使用状态来跟踪表单值，避免useWatch的连接问题
+    const productName = formValues.productName;
+    const deviceType = formValues.deviceType;
+    const isRelatedDevice = formValues.isRelatedDevice;
+    const relatedDeviceType = formValues.relatedDeviceType;
+
+    React.useImperativeHandle(ref, () => ({
+      validateAndSubmit: async () => {
+        try {
+          const values = await form.validateFields();
+          onFinish(values);
+        } catch (error) {
+          // 表单验证失败时，Ant Design会自动显示错误信息，无需额外处理
+          return false;
+        }
+      }
+    }));
+
+    // 当编辑设备信息变化时，更新表单
+    React.useEffect(() => {
+      if (editingDevice) {
+        form.setFieldsValue(editingDevice);
+        setFormValues(editingDevice);
+      } else {
+        form.resetFields();
+        setFormValues({});
+      }
+    }, [editingDevice, form]);
+
+    // 当产品名称变化时，自动设置设备类型
+    React.useEffect(() => {
+      if (productName) {
+        const autoDeviceType = getDeviceTypeByProduct(productName);
+        form.setFieldValue('deviceType', autoDeviceType);
+        setFormValues((prev: any) => ({ ...prev, deviceType: autoDeviceType }));
+      }
+    }, [productName, form, getDeviceTypeByProduct]);
+
+    return (
+      <Form
+        form={form}
+        layout="vertical"
+        onValuesChange={(changedValues: any, allValues: any) => {
+          setFormValues(allValues);
+        }}
+      >
+        <Row gutter={16}>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="设备名称"
+              name="deviceName"
+              rules={[
+                { required: true, message: '请输入设备名称' },
+                { max: 64, message: '设备名称最多输入64个字符' },
+                { pattern: /^[^\s]*$/, message: '设备名称不支持空格' },
+              ]}
+            >
+              <Input placeholder="请输入设备名称（最多64个字符，不支持空格）" maxLength={64} />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="设备Key"
+              name="deviceKey"
+              rules={[
+                { max: 64, message: '设备Key最多输入64个字符' },
+                { pattern: /^[a-zA-Z0-9_]*$/, message: '设备Key只能包含字母、数字和下划线' },
+              ]}
+            >
+              <Input placeholder="请输入设备Key（非必填，系统可自动生成）" maxLength={64} />
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="所属产品"
+              name="productName"
+              rules={[{ required: true, message: '请选择所属产品' }]}
+            >
+              <Select placeholder="请选择所属产品">
+                {productNames.map((product) => (
+                  <Option key={product} value={product}>
+                    {product}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="设备类型"
+              name="deviceType"
+              rules={[{ required: true, message: '请选择设备类型' }]}
+            >
+              <Select 
+                placeholder={deviceType ? `设备类型已固定为${deviceType}` : (selectedDeviceType ? "设备类型将根据标签页自动设置" : "设备类型将根据所属产品自动设置")}
+                disabled={true}
+              >
+                {deviceTypeOptions.map((type) => (
+                  <Option key={type} value={type}>
+                    {type}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Row gutter={16}>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="当前状态"
+              name="currentStatus"
+              rules={[{ required: true, message: '请选择当前状态' }]}
+            >
+              <Select placeholder="请选择当前状态">
+                {statusOptions.map((status) => (
+                  <Option key={status} value={status}>
+                    {status}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="是否在线"
+              name="isOnline"
+              rules={[{ required: true, message: '请选择是否在线' }]}
+            >
+              <Select placeholder="请选择是否在线">
+                <Option value={true}>在线</Option>
+                <Option value={false}>离线</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="关联地图"
+              name="relatedMap"
+              rules={[{ required: true, message: '请选择关联地图' }]}
+            >
+              <Select placeholder="请选择关联地图">
+                <Option value="地图1">地图1</Option>
+                <Option value="地图2">地图2</Option>
+                <Option value="地图3">地图3</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="地图点位"
+              name="mapPosition"
+              rules={[{ required: true, message: '请选择地图点位' }]}
+            >
+              <Select placeholder="请选择地图点位">
+                <Option value="点位1">点位1</Option>
+                <Option value="点位2">点位2</Option>
+                <Option value="点位3">点位3</Option>
+              </Select>
+            </Form.Item>
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="IP地址"
+              name="ipAddress"
+              rules={[
+                { required: true, message: '请输入IP地址' },
+                { pattern: /^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$/, message: 'IP地址格式不正确' },
+              ]}
+            >
+              <Input placeholder="请输入IP地址，如：192.168.1.100" />
+            </Form.Item>
+          </Col>
+          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+            <Form.Item
+              label="端口"
+              name="port"
+              rules={[
+                { required: true, message: '请输入端口' },
+                { pattern: /^([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$/, message: '端口范围为1-65535' },
+              ]}
+            >
+              <Input placeholder="请输入端口，如：8080" />
+            </Form.Item>
+          </Col>
+        </Row>
+        {/* MAC地址独占一行 */}
+        <Row gutter={16}>
+          <Col xs={24}>
+            <Form.Item
+              label="MAC地址"
+              name="macAddress"
+              rules={[
+                { required: true, message: '请输入MAC地址' },
+                { pattern: /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/, message: 'MAC地址格式不正确' },
+              ]}
+            >
+              <Input placeholder="请输入MAC地址，如：00:1B:44:11:3A:B7" />
+            </Form.Item>
+          </Col>
+        </Row>
+        
+        {/* 是否关联设备字段 - 仅在设备类型为虚拟设备时显示 */}
+        {deviceType === '虚拟设备' && (
+          <Row gutter={16}>
+            <Col xs={24}>
+              <Form.Item
+                label="是否关联设备"
+                name="isRelatedDevice"
+                initialValue={false}
+              >
+                <Select placeholder="请选择是否关联设备">
+                  <Option value={true}>是</Option>
+                  <Option value={false}>否</Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+        )}
+        
+        {/* 关联设备类型和关联设备 - 仅在选择关联设备时显示 */}
+        {deviceType === '虚拟设备' && isRelatedDevice && (
+          <Row gutter={16}>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="关联设备类型"
+                name="relatedDeviceType"
+                rules={[{ required: true, message: '请选择关联设备类型' }]}
+              >
+                <Select 
+                  placeholder="请选择要关联的设备类型"
+                  onChange={() => {
+                    // 清空关联设备选择
+                    form.setFieldsValue({ relatedDeviceId: undefined });
+                  }}
+                >
+                  {deviceTypeOptions
+                    .filter(type => type !== '虚拟设备')
+                    .map(type => (
+                      <Option key={type} value={type}>
+                        {type}
+                      </Option>
+                    ))
+                  }
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+              <Form.Item
+                label="关联设备"
+                name="relatedDeviceId"
+                rules={[{ required: relatedDeviceType, message: '请选择关联设备' }]}
+              >
+                <Select 
+                  placeholder={relatedDeviceType ? `请选择要关联的${relatedDeviceType}` : '请先选择关联设备类型'}
+                  disabled={!relatedDeviceType}
+                >
+                  {devices
+                    .filter(device => device.deviceType === relatedDeviceType)
+                    .map(device => (
+                      <Option key={device.id} value={device.id}>
+                        {device.deviceName}
+                      </Option>
+                    ))
+                  }
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+        )}
+      </Form>
+    );
+  }
+);
+
 const DeviceManagement: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<string | undefined>(undefined);
@@ -65,16 +366,15 @@ const DeviceManagement: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
-  const [form] = Form.useForm();
   const [isEditingDeviceKey, setIsEditingDeviceKey] = useState(false);
   const [editingDeviceKeyRecord, setEditingDeviceKeyRecord] = useState<Device | null>(null);
-  const [deviceKeyForm] = Form.useForm();
   
-  // 监听表单字段变化
-  const productName = Form.useWatch('productName', form);
-  const deviceType = Form.useWatch('deviceType', form);
-  const isRelatedDevice = Form.useWatch('isRelatedDevice', form);
-  const relatedDeviceType = Form.useWatch('relatedDeviceType', form);
+  // 修复Hooks规则违反：直接在组件顶层调用useForm
+  const [deviceKeyForm] = Form.useForm();
+  const [deviceForm] = Form.useForm();
+  
+  // 创建DeviceForm的ref
+  const deviceFormRef = React.useRef<{ validateAndSubmit: () => void }>(null);
 
   // 产品与设备类型的对应关系
   const getDeviceTypeByProduct = (product: string): string => {
@@ -99,13 +399,58 @@ const DeviceManagement: React.FC = () => {
 
 
 
-  // 当选择产品时，自动设置对应的设备类型
+  // 使用ref跟踪组件挂载状态
+  const isMountedRef = React.useRef(true);
+  
   React.useEffect(() => {
-    if (productName) {
-      const correspondingDeviceType = getDeviceTypeByProduct(productName);
-      form.setFieldsValue({ deviceType: correspondingDeviceType });
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // 当Modal/Drawer关闭时重置表单 - 使用安全的重置方法
+  React.useEffect(() => {
+    if (!isModalVisible) {
+      // 延迟重置，确保组件完全卸载后再重置
+      const timer = setTimeout(() => {
+        // 检查组件是否仍然挂载且Form实例有效
+        if (isMountedRef.current && deviceForm) {
+          try {
+            // 使用更安全的方式检查Form是否可用
+            const formInstance = deviceForm.getInternalHooks?.();
+            if (formInstance && typeof deviceForm.resetFields === 'function') {
+              deviceForm.resetFields();
+            }
+          } catch (error) {
+            // 静默处理错误，避免控制台警告
+          }
+        }
+      }, 300); // 进一步增加延迟时间
+      return () => clearTimeout(timer);
     }
-  }, [productName, form]);
+  }, [isModalVisible, deviceForm]);
+
+  // 当设备Key编辑Modal关闭时重置表单 - 使用安全的重置方法
+  React.useEffect(() => {
+    if (!isEditingDeviceKey) {
+      // 延迟重置，确保组件完全卸载后再重置
+      const timer = setTimeout(() => {
+        // 检查组件是否仍然挂载且Form实例有效
+        if (isMountedRef.current && deviceKeyForm) {
+          try {
+            // 使用更安全的方式检查Form是否可用
+            const formInstance = deviceKeyForm.getInternalHooks?.();
+            if (formInstance && typeof deviceKeyForm.resetFields === 'function') {
+              deviceKeyForm.resetFields();
+            }
+          } catch (error) {
+            // 静默处理错误，避免控制台警告
+          }
+        }
+      }, 300); // 进一步增加延迟时间
+      return () => clearTimeout(timer);
+    }
+  }, [isEditingDeviceKey, deviceKeyForm]);
 
   // 当设备类型改变时的处理逻辑（已禁用产品清空功能）
   // React.useEffect(() => {
@@ -531,21 +876,11 @@ const DeviceManagement: React.FC = () => {
 
   const handleAdd = () => {
     setEditingDevice(null);
-    form.resetFields();
-    
-    // 如果当前选中了特定的设备类型标签页，则预设设备类型
-    if (selectedDeviceType && selectedDeviceType !== '') {
-      form.setFieldsValue({
-        deviceType: selectedDeviceType
-      });
-    }
-    
     setIsModalVisible(true);
   };
 
   const handleEdit = (record: Device) => {
     setEditingDevice(record);
-    form.setFieldsValue(record);
     setIsModalVisible(true);
   };
 
@@ -684,7 +1019,8 @@ const DeviceManagement: React.FC = () => {
         }
       });
     } catch (error) {
-      console.error('表单验证失败:', error);
+      // 表单验证失败时，Ant Design会自动显示错误信息，无需额外处理
+      return;
     }
   };
 
@@ -694,60 +1030,63 @@ const DeviceManagement: React.FC = () => {
     deviceKeyForm.resetFields();
   };
 
-  const handleModalOk = async () => {
-    try {
-      const values = await form.validateFields();
-      setLoading(true);
-      
-      // 模拟API调用
-      setTimeout(() => {
-        if (editingDevice) {
-          // 编辑
-          setDevices(
-            devices.map((d) =>
-              d.id === editingDevice.id
-                ? {
-                    ...d,
-                    ...values,
-                    updateTime: new Date().toLocaleString('zh-CN', {
-                      year: 'numeric',
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                      hour12: false
-                    }).replace(/\//g, '-'),
-                    updatedBy: '当前用户',
-                  }
-                : d
-            )
-          );
-          message.success('编辑成功');
-        } else {
-          // 新增
-          const newDevice: Device = {
-            id: Date.now().toString(),
-            ...values,
-            updateTime: new Date().toLocaleString('zh-CN', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              hour12: false
-            }).replace(/\//g, '-'),
-            updatedBy: '当前用户',
-          };
-          setDevices([newDevice, ...devices]);
-          message.success('新增成功');
-        }
-        setIsModalVisible(false);
-        setLoading(false);
-      }, 1000);
-    } catch (error) {
-      console.error('表单验证失败:', error);
+  // 处理表单提交的函数
+  const handleFormFinish = (values: any) => {
+    setLoading(true);
+    
+    // 模拟API调用
+    setTimeout(() => {
+      if (editingDevice) {
+        // 编辑
+        setDevices(
+          devices.map((d) =>
+            d.id === editingDevice.id
+              ? {
+                  ...d,
+                  ...values,
+                  updateTime: new Date().toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                  }).replace(/\//g, '-'),
+                  updatedBy: '当前用户',
+                }
+              : d
+          )
+        );
+        message.success('编辑成功');
+      } else {
+        // 新增
+        const newDevice: Device = {
+          id: Date.now().toString(),
+          ...values,
+          updateTime: new Date().toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }).replace(/\//g, '-'),
+          updatedBy: '当前用户',
+        };
+        setDevices([newDevice, ...devices]);
+        message.success('新增成功');
+      }
+      setIsModalVisible(false);
+      setLoading(false);
+    }, 1000);
+  };
+
+  // 新的Modal确认处理函数
+  const handleModalOk = () => {
+    if (deviceFormRef.current) {
+      deviceFormRef.current.validateAndSubmit();
     }
   };
 
@@ -1569,241 +1908,19 @@ const DeviceManagement: React.FC = () => {
           </div>
         }
       >
-        <Form
-          form={form}
-          layout="vertical"
-        >
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="设备名称"
-                name="deviceName"
-                rules={[
-                  { required: true, message: '请输入设备名称' },
-                  { max: 64, message: '设备名称最多输入64个字符' },
-                  { pattern: /^[^\s]*$/, message: '设备名称不支持空格' },
-                ]}
-              >
-                <Input placeholder="请输入设备名称（最多64个字符，不支持空格）" maxLength={64} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="设备Key"
-                name="deviceKey"
-                rules={[
-                  { max: 64, message: '设备Key最多输入64个字符' },
-                  { pattern: /^[a-zA-Z0-9_]*$/, message: '设备Key只能包含字母、数字和下划线' },
-                ]}
-              >
-                <Input placeholder="请输入设备Key（非必填，系统可自动生成）" maxLength={64} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="所属产品"
-                name="productName"
-                rules={[{ required: true, message: '请选择所属产品' }]}
-              >
-                <Select placeholder="请选择所属产品">
-                  {productNames.map((product) => (
-                    <Option key={product} value={product}>
-                      {product}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="设备类型"
-                name="deviceType"
-                rules={[{ required: true, message: '请选择设备类型' }]}
-              >
-                <Select 
-                  placeholder={deviceType ? `设备类型已固定为${deviceType}` : (selectedDeviceType ? "设备类型将根据标签页自动设置" : "设备类型将根据所属产品自动设置")}
-                  disabled={true}
-                >
-                  {deviceTypeOptions.map((type) => (
-                    <Option key={type} value={type}>
-                      {type}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="当前状态"
-                name="currentStatus"
-                rules={[{ required: true, message: '请选择当前状态' }]}
-              >
-                <Select placeholder="请选择当前状态">
-                  {statusOptions.map((status) => (
-                    <Option key={status} value={status}>
-                      {status}
-                    </Option>
-                  ))}
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="是否在线"
-                name="isOnline"
-                rules={[{ required: true, message: '请选择是否在线' }]}
-              >
-                <Select placeholder="请选择是否在线">
-                  <Option value={true}>在线</Option>
-                  <Option value={false}>离线</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="关联地图"
-                name="relatedMap"
-                rules={[{ required: true, message: '请选择关联地图' }]}
-              >
-                <Select placeholder="请选择关联地图">
-                  <Option value="地图1">地图1</Option>
-                  <Option value="地图2">地图2</Option>
-                  <Option value="地图3">地图3</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="地图点位"
-                name="mapPosition"
-                rules={[{ required: true, message: '请选择地图点位' }]}
-              >
-                <Select placeholder="请选择地图点位">
-                  <Option value="点位1">点位1</Option>
-                  <Option value="点位2">点位2</Option>
-                  <Option value="点位3">点位3</Option>
-                </Select>
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="IP地址"
-                name="ipAddress"
-                rules={[
-                  { required: true, message: '请输入IP地址' },
-                  { pattern: /^((25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(25[0-5]|2[0-4]\d|[01]?\d\d?)$/, message: 'IP地址格式不正确' },
-                ]}
-              >
-                <Input placeholder="请输入IP地址，如：192.168.1.100" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-              <Form.Item
-                label="端口"
-                name="port"
-                rules={[
-                  { required: true, message: '请输入端口' },
-                  { pattern: /^([1-9]\d{0,3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$/, message: '端口范围为1-65535' },
-                ]}
-              >
-                <Input placeholder="请输入端口，如：8080" />
-              </Form.Item>
-            </Col>
-          </Row>
-          {/* MAC地址独占一行 */}
-          <Row gutter={16}>
-            <Col xs={24}>
-              <Form.Item
-                label="MAC地址"
-                name="macAddress"
-                rules={[
-                  { required: true, message: '请输入MAC地址' },
-                  { pattern: /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/, message: 'MAC地址格式不正确' },
-                ]}
-              >
-                <Input placeholder="请输入MAC地址，如：00:1B:44:11:3A:B7" />
-              </Form.Item>
-            </Col>
-          </Row>
-          
-          {/* 是否关联设备字段 - 仅在设备类型为虚拟设备时显示 */}
-          {deviceType === '虚拟设备' && (
-            <Row gutter={16}>
-              <Col xs={24}>
-                <Form.Item
-                  label="是否关联设备"
-                  name="isRelatedDevice"
-                  initialValue={false}
-                >
-                  <Select placeholder="请选择是否关联设备">
-                    <Option value={true}>是</Option>
-                    <Option value={false}>否</Option>
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-          )}
-          
-          {/* 关联设备类型和关联设备 - 仅在选择关联设备时显示 */}
-          {deviceType === '虚拟设备' && isRelatedDevice && (
-            <Row gutter={16}>
-              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                <Form.Item
-                  label="关联设备类型"
-                  name="relatedDeviceType"
-                  rules={[{ required: true, message: '请选择关联设备类型' }]}
-                >
-                  <Select 
-                    placeholder="请选择要关联的设备类型"
-                    onChange={() => {
-                      // 清空关联设备选择
-                      form.setFieldsValue({ relatedDeviceId: undefined });
-                    }}
-                  >
-                    {deviceTypeOptions
-                      .filter(type => type !== '虚拟设备')
-                      .map(type => (
-                        <Option key={type} value={type}>
-                          {type}
-                        </Option>
-                      ))
-                    }
-                  </Select>
-                </Form.Item>
-              </Col>
-              <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-                <Form.Item
-                  label="关联设备"
-                  name="relatedDeviceId"
-                  rules={[{ required: relatedDeviceType, message: '请选择关联设备' }]}
-                >
-                  <Select 
-                    placeholder={relatedDeviceType ? `请选择要关联的${relatedDeviceType}` : '请先选择关联设备类型'}
-                    disabled={!relatedDeviceType}
-                  >
-                    {devices
-                      .filter(device => device.deviceType === relatedDeviceType)
-                      .map(device => (
-                        <Option key={device.id} value={device.id}>
-                          {device.deviceName}
-                        </Option>
-                      ))
-                    }
-                  </Select>
-                </Form.Item>
-              </Col>
-            </Row>
-          )}
-        </Form>
+        <DeviceForm
+          ref={deviceFormRef}
+          form={deviceForm}
+          editingDevice={editingDevice}
+          onFinish={handleFormFinish}
+          loading={loading}
+          productNames={productNames}
+          deviceTypeOptions={deviceTypeOptions}
+          statusOptions={statusOptions}
+          devices={devices}
+          selectedDeviceType={selectedDeviceType}
+          getDeviceTypeByProduct={getDeviceTypeByProduct}
+        />
       </Drawer>
 
       {/* 设备Key编辑Modal */}

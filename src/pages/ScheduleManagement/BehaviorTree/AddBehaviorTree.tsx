@@ -35,6 +35,7 @@ import {
   SwapOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
+import { isDev } from '@/lib/utils';
 // SubCanvas和IndependentSubCanvas导入已移除 - 阶段节点功能已移除
 
 const { Option } = Select;
@@ -316,6 +317,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const isMountedRef = useRef(true);
   
   // 监听visible变化，重置属性面板状态
   useEffect(() => {
@@ -325,6 +327,13 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       setSelectedBusinessProcessNode(null);
     }
   }, [visible]);
+
+  // 组件卸载时的清理逻辑
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   
   // 主步骤状态
   const [currentStep, setCurrentStep] = useState(0);
@@ -1819,7 +1828,16 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       // 每次打开组件时，如果不是编辑模式，都从第一步开始
       if (!editData) {
         setCurrentStep(0);
-        form.resetFields();
+        // 安全地重置表单字段
+        setTimeout(() => {
+          if (isMountedRef.current && form.getInternalHooks?.()) {
+            try {
+              form.resetFields();
+            } catch (error) {
+              console.warn('Form resetFields failed:', error);
+            }
+          }
+        }, 0);
         setNodes([]);
         setConnections([]);
         setSubCanvases([]);
@@ -1856,7 +1874,16 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       setSelectedStageNode(null);
       setStagePropertyPanelVisible(false);
     } else {
-      form.resetFields();
+      // 安全地重置表单字段
+      setTimeout(() => {
+        if (isMountedRef.current && form.getInternalHooks?.()) {
+          try {
+            form.resetFields();
+          } catch (error) {
+            console.warn('Form resetFields failed:', error);
+          }
+        }
+      }, 0);
       setCurrentStep(0);
       // 重置画布数据
       setNodes([]);
@@ -2086,7 +2113,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       // 成功提示已在父组件中处理，这里不需要重复
       
     } catch (error: any) {
-      console.error('保存业务流程失败:', error);
+      if (isDev) console.error('保存业务流程失败:', error);
       if (error?.errorFields && error.errorFields.length > 0) {
         message.error('请完善所有必填信息');
       } else {
@@ -3228,7 +3255,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
           };
           
           // 记录连接创建日志
-          console.log('Connection created:', {
+          if (isDev) console.log('Connection created:', {
             connectionId: newConnection.id,
             sourceType,
             targetType,
@@ -5660,7 +5687,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       width="100vw"
       height="100vh"
       placement="right"
-      destroyOnClose
+      destroyOnHidden
       styles={{
         body: { padding: 0 },
         header: { borderBottom: '1px solid #f0f0f0' }

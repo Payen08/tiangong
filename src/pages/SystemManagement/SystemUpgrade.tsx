@@ -348,10 +348,12 @@ const SystemUpgrade: React.FC = () => {
               flexDirection: 'column',
               minHeight: '650px',
             }}
-            bodyStyle={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
+            styles={{
+              body: {
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+              }
             }}
           >
             <div>
@@ -475,11 +477,13 @@ const SystemUpgrade: React.FC = () => {
               display: 'flex',
               flexDirection: 'column',
             }}
-            bodyStyle={{
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column',
-              padding: '16px',
+            styles={{
+              body: {
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '16px',
+              }
             }}
           >
             <Table

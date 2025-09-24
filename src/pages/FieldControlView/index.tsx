@@ -17,6 +17,7 @@ import {
   FullscreenExitOutlined,
 } from '@ant-design/icons';
 import PropertyPanel from './PropertyPanel';
+import { isDev } from '@/lib/utils';
 
 const { Text } = Typography;
 const { Option } = Select;
@@ -930,7 +931,7 @@ const FieldControlView: React.FC = () => {
     }
     const devicePixelRatio = window.devicePixelRatio || 1;
     
-    console.log('Canvas debug info:', {
+    if (isDev) console.log('Canvas debug info:', {
       displayWidth,
       displayHeight,
       canvasWidth: canvas.width,

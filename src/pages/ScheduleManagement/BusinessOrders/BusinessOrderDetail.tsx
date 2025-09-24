@@ -293,7 +293,7 @@ const BusinessOrderDetail: React.FC<BusinessOrderDetailProps> = ({
       width={600}
       open={visible}
       onClose={onClose}
-      destroyOnClose
+      destroyOnHidden
     >
       <div style={{ padding: '0 8px' }}>
         {/* 基本信息 */}

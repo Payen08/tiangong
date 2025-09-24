@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Drawer, Form, Input, Select, Button, message, Row, Col, Tooltip, Modal, Card } from 'antd';
 import { UndoOutlined, RedoOutlined, ZoomInOutlined, ZoomOutOutlined, HomeOutlined } from '@ant-design/icons';
+import { isDev } from '@/lib/utils';
 
 // 地图选择卡片悬停效果样式
 const mapSelectionCardStyle = `
@@ -803,7 +804,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     
     // 绘制正在绘制的曲线
     if (curveDrawingState.isDrawing && curveDrawingState.startPoint && curveDrawingState.currentPoint) {
-      console.log('✏️ Drawing temporary curve:', {
+      if (isDev) console.log('✏️ Drawing temporary curve:', {
         startPoint: curveDrawingState.startPoint,
         currentPoint: curveDrawingState.currentPoint,
         isDrawing: curveDrawingState.isDrawing
@@ -924,15 +925,15 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
 
   // 保存楼层输入并退出编辑状态
   const saveFloorInputAndExit = useCallback(() => {
-    console.log('🟡 saveFloorInputAndExit 开始执行');
+    if (isDev) console.log('🟡 saveFloorInputAndExit 开始执行');
     
     // 使用函数式更新来获取最新状态，避免依赖项问题
     setFloorInputState(currentState => {
-      console.log('🟡 saveFloorInputAndExit 内部状态:', currentState);
+      if (isDev) console.log('🟡 saveFloorInputAndExit 内部状态:', currentState);
       
       // 检查当前状态，避免重复调用
       if (!currentState.isEditing) {
-        console.log('🟡 当前不在编辑状态，无需保存');
+        if (isDev) console.log('🟡 当前不在编辑状态，无需保存');
         return currentState;
       }
       
@@ -943,7 +944,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
             ? { ...card, floor: currentState.inputValue }
             : card
         );
-        console.log('🟡 更新地图卡片数据:', updated);
+        if (isDev) console.log('🟡 更新地图卡片数据:', updated);
         
         // 如果输入了有效的楼层信息，重置校验状态
         if (currentState.inputValue && currentState.inputValue.trim() !== '') {
@@ -959,12 +960,12 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         editingCardId: null,
         inputValue: ''
       };
-      console.log('🟡 设置新的非编辑状态:', newState);
+      if (isDev) console.log('🟡 设置新的非编辑状态:', newState);
       
       return newState;
     });
     
-    console.log('🟡 saveFloorInputAndExit 执行完成');
+    if (isDev) console.log('🟡 saveFloorInputAndExit 执行完成');
   }, []);
   
   // 检测鼠标是否在连接圆圈上
@@ -975,7 +976,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     const worldX = (mouseX - canvasState.offsetX) / canvasState.scale;
     const worldY = (mouseY - canvasState.offsetY) / canvasState.scale;
     
-    console.log('🎯 检测连接圆圈:', { mouseX, mouseY, worldX, worldY });
+    if (isDev) console.log('🎯 检测连接圆圈:', { mouseX, mouseY, worldX, worldY });
     
     for (const mapCard of mapCards) {
       const cardWidth = 200;
@@ -1019,7 +1020,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     
     // 简化日志输出
     if (connections.length > 0) {
-      console.log('🔍 检测连线点击:', { connectionsCount: connections.length });
+      if (isDev) console.log('🔍 检测连线点击:', { connectionsCount: connections.length });
     }
     
     for (const connection of connections) {
@@ -1068,7 +1069,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
           const param = dotProduct / squaredLength;
           
           if (param >= 0 && param <= 1 && distance <= 5) { // 5像素的点击容差
-            console.log('🎯 选中连线:', connection.id);
+            if (isDev) console.log('🎯 选中连线:', connection.id);
             return connection;
           }
         }
@@ -1189,7 +1190,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
 
   // 监听selectedConnectionId变化，立即重绘画布以显示选中效果
   useEffect(() => {
-    console.log('🔄 [状态变化] selectedConnectionId更新:', {
+    if (isDev) console.log('🔄 [状态变化] selectedConnectionId更新:', {
       newValue: selectedConnectionId,
       timestamp: new Date().toISOString()
     });
@@ -1255,7 +1256,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
       
       // 删除选中的连线
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedConnectionId && !floorInputState.isEditing) {
-        console.log('🗑️ [删除连线] 开始删除:', {
+        if (isDev) console.log('🗑️ [删除连线] 开始删除:', {
           key: e.key,
           selectedConnectionId,
           connectionsCount: connections.length,
@@ -1266,14 +1267,14 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         
         const connectionToDelete = connections.find(conn => conn.id === selectedConnectionId);
         if (connectionToDelete) {
-          console.log('🗑️ [删除连线] 找到要删除的连线:', connectionToDelete);
+          if (isDev) console.log('🗑️ [删除连线] 找到要删除的连线:', connectionToDelete);
           
           // 保存历史记录
           saveToHistory();
           
           setConnections(prev => {
             const filtered = prev.filter(conn => conn.id !== selectedConnectionId);
-            console.log('🗑️ [删除连线] 删除完成:', {
+            if (isDev) console.log('🗑️ [删除连线] 删除完成:', {
               before: prev.length,
               after: filtered.length,
               removed: prev.length - filtered.length,
@@ -1289,7 +1290,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
             drawCanvas();
           });
         } else {
-          console.log('🗑️ [删除连线] 错误: 未找到要删除的连线，selectedConnectionId:', selectedConnectionId, '可用连线:', connections.map(c => c.id));
+          if (isDev) console.log('🗑️ [删除连线] 错误: 未找到要删除的连线，selectedConnectionId:', selectedConnectionId, '可用连线:', connections.map(c => c.id));
           message.error('删除失败：未找到指定连线');
         }
         return;
@@ -1338,7 +1339,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     const clickedConnection = getConnectionUnderMouse(mouseX, mouseY);
     
     if (clickedConnection && !canvasState.isSpacePressed) {
-      console.log('✅ 选中连线:', {
+      if (isDev) console.log('✅ 选中连线:', {
         clickedId: clickedConnection.id,
         previousSelectedId: selectedConnectionId,
         allConnections: connections.map(c => ({ id: c.id, startCard: c.startCard, endCard: c.endCard }))
@@ -1379,7 +1380,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     const clickedFloorInput = getFloorInputUnderMouse(mouseX, mouseY);
     
     if (clickedFloorInput && !canvasState.isSpacePressed) {
-      console.log('🔵 点击了楼层输入框，卡片ID:', clickedFloorInput.id, '当前编辑状态:', floorInputState);
+      if (isDev) console.log('🔵 点击了楼层输入框，卡片ID:', clickedFloorInput.id, '当前编辑状态:', floorInputState);
       // 如果当前有其他输入框正在编辑，先保存并退出
       if (floorInputState.isEditing && floorInputState.editingCardId !== clickedFloorInput.id) {
         saveFloorInputAndExit();
@@ -1393,7 +1394,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         inputValue: clickedFloorInput.floor || ''
       };
       setFloorInputState(newEditState);
-      console.log('🔵 设置楼层输入框为编辑状态:', newEditState);
+      if (isDev) console.log('🔵 设置楼层输入框为编辑状态:', newEditState);
       return; // 阻止其他事件处理
     }
     
@@ -1435,7 +1436,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
       }
     } else {
       // 点击空白区域
-      console.log('🔴 点击了画布空白区域，当前编辑状态:', floorInputState);
+      if (isDev) console.log('🔴 点击了画布空白区域，当前编辑状态:', floorInputState);
       if (curveDrawingState.isDrawing) {
         // 如果正在绘制曲线，取消绘制
         setCurveDrawingState({
@@ -1447,15 +1448,15 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
       
       if (floorInputState.isEditing) {
         // 如果处于楼层输入编辑模式，结束编辑并保存数据
-        console.log('🔴 检测到楼层输入正在编辑，准备退出编辑模式');
+        if (isDev) console.log('🔴 检测到楼层输入正在编辑，准备退出编辑模式');
         saveFloorInputAndExit();
-        console.log('🔴 saveFloorInputAndExit 已调用');
+        if (isDev) console.log('🔴 saveFloorInputAndExit 已调用');
       }
       
       // 清除所有选中状态
       setSelectedCardId(null);
       if (selectedConnectionId) {
-        console.log('🔄 [取消选中] 清除连线选中状态:', selectedConnectionId);
+        if (isDev) console.log('🔄 [取消选中] 清除连线选中状态:', selectedConnectionId);
         setSelectedConnectionId(null);
         // 立即重绘画布以更新视觉效果
         requestAnimationFrame(() => {
@@ -1753,8 +1754,8 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (currentStep === 1 && selectedCardId) {
         if (event.key === 'Delete' || event.key === 'Backspace') {
-          console.log('🗑️ Deleting card:', selectedCardId);
-          console.log('📊 Before deletion - mapCards:', mapCards.length, 'connections:', connections.length);
+          if (isDev) console.log('🗑️ Deleting card:', selectedCardId);
+          if (isDev) console.log('📊 Before deletion - mapCards:', mapCards.length, 'connections:', connections.length);
           
           // 保存历史记录
           saveToHistory();
@@ -1762,7 +1763,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
           // 删除选中的卡片
           setMapCards(prev => {
             const filtered = prev.filter(card => card.id !== selectedCardId);
-            console.log('📊 After mapCards filter:', filtered.length);
+            if (isDev) console.log('📊 After mapCards filter:', filtered.length);
             return filtered;
           });
           
@@ -1771,7 +1772,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
             const filtered = prev.filter(conn => 
               conn.startCard !== selectedCardId && conn.endCard !== selectedCardId
             );
-            console.log('📊 After connections filter:', filtered.length);
+            if (isDev) console.log('📊 After connections filter:', filtered.length);
             return filtered;
           });
           
@@ -1781,7 +1782,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
           setMousePosition({ x: -1, y: -1 });
           
           // 立即强制重绘画布
-          console.log('🎨 Forcing canvas redraw after deletion');
+          if (isDev) console.log('🎨 Forcing canvas redraw after deletion');
           requestAnimationFrame(() => {
             drawCanvas();
           });
@@ -1821,7 +1822,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
 
   // 监听mapCards变化，立即重绘画布（用于删除卡片后的即时更新）
   useEffect(() => {
-    console.log('📊 mapCards useEffect triggered:', {
+    if (isDev) console.log('📊 mapCards useEffect triggered:', {
       visible,
       currentStep,
       mapCardsCount: mapCards.length,
@@ -1829,7 +1830,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
     });
     
     if (visible && currentStep === 1) {
-      console.log('🎨 Calling drawCanvas from mapCards useEffect');
+      if (isDev) console.log('🎨 Calling drawCanvas from mapCards useEffect');
       // 使用requestAnimationFrame避免循环依赖，不将drawCanvas放入依赖项
       requestAnimationFrame(() => {
         drawCanvas();
@@ -1921,7 +1922,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
         status: 'active'
       };
       
-      console.log('保存跨地图连接数据:', saveData);
+      if (isDev) console.log('保存跨地图连接数据:', saveData);
       
       // 调用父组件的保存方法
       onSave(saveData);
@@ -1929,7 +1930,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
       message.success(editData ? '跨地图连接更新成功' : '跨地图连接创建成功');
       
     } catch (error) {
-      console.error('表单验证失败:', error);
+      if (isDev) console.error('表单验证失败:', error);
       message.error('请完善所有必填信息');
     }
   };
@@ -1953,7 +1954,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
       width="100vw"
       height="100vh"
       placement="right"
-      destroyOnClose
+      destroyOnHidden
       styles={{
         body: { padding: 0 },
         header: { borderBottom: '1px solid #f0f0f0' }
@@ -2192,7 +2193,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
                      setSelectedMapPosition(null);
                      message.success(`已添加地图: ${mapItem.name}`);
                    } else {
-                     console.error(`🐛 跨地图连接 - 没有选择位置信息`);
+                     if (isDev) console.error(`🐛 跨地图连接 - 没有选择位置信息`);
                      message.error('请先双击画布选择位置');
                    }
                    
@@ -2200,7 +2201,7 @@ const AddCrossMapConnection: React.FC<AddCrossMapConnectionProps> = ({
                    
                    // 地图选择弹窗已关闭
                  }}
-                 bodyStyle={{ padding: '8px' }}
+                 styles={{ body: { padding: '8px' } }}
                  style={{ 
                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
                    transition: 'all 0.3s ease',
