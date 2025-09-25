@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Drawer,
   Steps,
@@ -118,15 +118,84 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
   const [protocolForm] = Form.useForm(); // 为协议配置步骤创建独立的form实例
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
+  const isInitialOpenRef = useRef(true); // 跟踪是否是初始打开
 
-  // 当Drawer关闭时重置表单
+  // 当Drawer关闭时重置表单 - 只在真正关闭且不是编辑模式时重置
   useEffect(() => {
-    if (!visible) {
-      form.resetFields();
-      protocolForm.resetFields();
-      setCurrentStep(0);
+    let timer: NodeJS.Timeout;
+    
+    if (!visible && !isEdit) {
+      // 延迟重置，确保关闭动画完成后再重置
+      timer = setTimeout(() => {
+        form.resetFields();
+        protocolForm.resetFields();
+        setCurrentStep(0);
+        // 重置所有状态
+        setDataType('text');
+        setValueConfigItems([{ id: '1', value: '', description: '默认值配置' }]);
+        setIsComposite(false);
+        setFunctionName('');
+        setCurrentFunctionType('属性（动态）');
+        // 重置协议相关状态
+        setRegisterAddress('');
+        setFunctionCode('');
+        setModbusDataType('');
+        setByteOrder('');
+        setRegisterType('holding-register');
+        setHttpMethod('GET');
+        setHttpUrl('');
+        setHttpHeaders({});
+        setHttpParams({});
+        setHttpDataPath('');
+        setHttpRequestBody('');
+        setMqttTopic('');
+        setMqttQos(0);
+        setMqttRetain(false);
+        setMqttDataPath('');
+        setMqttPayloadFormat('json');
+        setMqttClientId('');
+        setMoyingChannelType('report');
+        setMoyingMacAddress('');
+        setMoyingFunctionId('');
+        setMoyingPinType('input');
+        setMoyingPinNumber('');
+        setMoyingPinValue('');
+        setMoyingDataPath('');
+        setRobotCommandType('move');
+        setRobotDeviceId('');
+        setRobotActionId('');
+        setRobotParameterType('position');
+        setRobotDataFormat('json');
+        setRobotDataPath('');
+        setCompositeType('multi-register');
+        // 重置初始化标志
+        isInitialOpenRef.current = true;
+      }, 300); // 300ms延迟，确保关闭动画完成
     }
-  }, [visible, form, protocolForm]);
+    
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [visible, isEdit, form, protocolForm]);
+
+  // 确保表单数据和组件状态保持同步
+  useEffect(() => {
+    if (visible && !isEdit) {
+      // 在新增模式下，确保表单有初始值
+      const currentValues = form.getFieldsValue();
+      if (!currentValues.name && !currentValues.identifier) {
+        // 只有在表单完全为空时才设置默认值
+        form.setFieldsValue({
+          functionType: '属性（动态）',
+          readWriteMode: '读写',
+          dataType: 'text'
+        });
+      }
+    }
+  }, [visible, isEdit, form]);
+
   const [dataType, setDataType] = useState<string>('text');
   const [valueConfigItems, setValueConfigItems] = useState<ValueConfigItem[]>([
     { id: '1', value: '', description: '默认值配置' }
@@ -189,22 +258,12 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     }
   }, [dataType, isEdit, valueConfigItems.length]);
 
-  // 当协议为modbus_tcp时，检查并重置不支持的数据类型
+  // 当协议为modbus_tcp时，检查并重置不支持的数据类型 - 只在组件初始化或协议变化时执行
   useEffect(() => {
-    if (productProtocol === 'modbus_tcp' && dataType !== 'enum' && dataType !== 'bool') {
-      // 重置为默认的枚举类型
-      setDataType('enum');
-      form.setFieldsValue({ dataType: 'enum' });
-      // 重置值配置
-      setValueConfigItems([
-        { id: '1', value: '', description: '' },
-      ]);
-    }
-    
-    // 当协议为墨影采集卡时，检查并重置不支持的数据类型和功能类型
-    if (productProtocol === '墨影采集卡') {
-      if (dataType !== 'enum') {
-        // 重置为枚举类型
+    // 只在抽屉打开且不是编辑模式时才进行协议相关的数据类型检查和重置
+    if (visible && !isEdit) {
+      if (productProtocol === 'modbus_tcp' && dataType !== 'enum' && dataType !== 'bool') {
+        // 重置为默认的枚举类型
         setDataType('enum');
         form.setFieldsValue({ dataType: 'enum' });
         // 重置值配置
@@ -213,13 +272,26 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         ]);
       }
       
-      if (currentFunctionType !== '属性（动态）') {
-        // 重置为属性（动态）
-        setCurrentFunctionType('属性（动态）');
-        form.setFieldsValue({ functionType: '属性（动态）' });
+      // 当协议为墨影采集卡时，检查并重置不支持的数据类型和功能类型
+      if (productProtocol === '墨影采集卡') {
+        if (dataType !== 'enum') {
+          // 重置为枚举类型
+          setDataType('enum');
+          form.setFieldsValue({ dataType: 'enum' });
+          // 重置值配置
+          setValueConfigItems([
+            { id: '1', value: '', description: '' },
+          ]);
+        }
+        
+        if (currentFunctionType !== '属性（动态）') {
+          // 重置为属性（动态）
+          setCurrentFunctionType('属性（动态）');
+          form.setFieldsValue({ functionType: '属性（动态）' });
+        }
       }
     }
-  }, [productProtocol, dataType, currentFunctionType, form]);
+  }, [productProtocol, visible, isEdit]); // 移除dataType和currentFunctionType依赖，避免循环触发
 
   // 添加寄存器映射项（用于多寄存器组合）
   const addRegisterMapping = (valueConfigItemId: string) => {
@@ -409,7 +481,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   // 当抽屉打开时重置表单或填充编辑数据
   useEffect(() => {
-    if (visible) {
+    if (visible && isInitialOpenRef.current) { // 只在初始打开时执行
+      isInitialOpenRef.current = false; // 标记已经初始化过
       if (isEdit && editingFunction) {
         // 编辑模式：填充现有数据
         form.setFieldsValue({
@@ -615,9 +688,118 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
       }
     }
-  }, [visible, form, isEdit, editingFunction]);
+  }, [visible, isEdit, form]); // 只在抽屉打开状态、编辑模式变化时触发，避免editingFunction变化导致重复重置
 
+  // 专门处理编辑数据变化的useEffect
+  useEffect(() => {
+    if (visible && isEdit && editingFunction && !isInitialOpenRef.current) {
+      // 只有在抽屉已经打开且不是初始打开时，才处理编辑数据的变化
+      // 这避免了与主useEffect的冲突
+      form.setFieldsValue({
+        name: editingFunction.name,
+        identifier: editingFunction.identifier,
+        functionType: editingFunction.functionType,
+        readWriteMode: editingFunction.readWriteMode,
+        dataType: editingFunction.dataType,
+        functionCode: editingFunction.functionCode,
+        byteOrder: editingFunction.byteOrder,
+        mappingFunctionName: editingFunction.name,
+      });
+    }
+  }, [editingFunction, visible, isEdit, form]); // 监听editingFunction变化
 
+  // 专门处理编辑模式下protocolForm的数据预填充
+  useEffect(() => {
+    if (visible && isEdit && editingFunction) {
+      // 设置protocolForm的编辑数据
+      protocolForm.setFieldsValue({
+        // 隐藏字段 - 第一步数据
+        name: editingFunction.name,
+        identifier: editingFunction.identifier,
+        functionType: editingFunction.functionType,
+        readWriteMode: editingFunction.readWriteMode,
+        dataType: editingFunction.dataType,
+        
+        // 第二步表单数据
+        protocol: editingFunction.protocol || productProtocol,
+        isComposite: editingFunction.isComposite || false,
+        mappingFunctionName: editingFunction.name,
+        
+        // Modbus相关字段
+        registerAddress: editingFunction.registerAddress || '',
+        registerType: editingFunction.registerType || 'holding-register',
+        functionCode: editingFunction.functionCode || '',
+        modbusDataType: editingFunction.modbusDataType || 'uint16',
+        byteOrder: editingFunction.byteOrder || '',
+        
+        // HTTP相关字段
+        httpMethod: editingFunction.httpMethod || 'GET',
+        httpUrl: editingFunction.httpUrl || '',
+        httpDataPath: editingFunction.httpDataPath || '',
+        httpRequestBody: editingFunction.httpRequestBody || '',
+        
+        // MQTT相关字段
+        mqttTopic: editingFunction.mqttTopic || '',
+        mqttQos: editingFunction.mqttQos || 0,
+        mqttRetain: editingFunction.mqttRetain || false,
+        mqttDataPath: editingFunction.mqttDataPath || '',
+        mqttPayloadFormat: editingFunction.mqttPayloadFormat || 'json',
+        mqttClientId: editingFunction.mqttClientId || '',
+        
+        // 墨影采集卡相关字段
+        moyingChannelType: editingFunction.moyingChannelType || 'report',
+        moyingMacAddress: editingFunction.moyingMacAddress || '',
+        moyingFunctionId: editingFunction.moyingFunctionId || '',
+        moyingPinType: editingFunction.moyingPinType || 'input',
+        moyingPinNumber: editingFunction.moyingPinNumber || '',
+        moyingPinValue: editingFunction.moyingPinValue || '',
+        moyingDataPath: editingFunction.moyingDataPath || '',
+        
+        // 墨影机器人相关字段
+        robotCommandType: editingFunction.robotCommandType || 'move',
+        robotDeviceId: editingFunction.robotDeviceId || '',
+        robotActionId: editingFunction.robotActionId || '',
+        robotParameterType: editingFunction.robotParameterType || 'position',
+        robotDataFormat: editingFunction.robotDataFormat || 'json',
+        robotDataPath: editingFunction.robotDataPath || ''
+      });
+
+      // 同步状态变量
+      if (editingFunction.isComposite !== undefined) {
+        setIsComposite(editingFunction.isComposite);
+      }
+      if (editingFunction.compositeType) {
+        setCompositeType(editingFunction.compositeType);
+      }
+      if (editingFunction.registerAddress) {
+        setRegisterAddress(editingFunction.registerAddress);
+      }
+      if (editingFunction.registerType) {
+        setRegisterType(editingFunction.registerType);
+      }
+      if (editingFunction.functionCode) {
+        setFunctionCode(editingFunction.functionCode);
+      }
+      if (editingFunction.modbusDataType) {
+        setModbusDataType(editingFunction.modbusDataType);
+      }
+      if (editingFunction.byteOrder) {
+        setByteOrder(editingFunction.byteOrder);
+      }
+      if (editingFunction.httpMethod) {
+        setHttpMethod(editingFunction.httpMethod);
+      }
+      if (editingFunction.httpUrl) {
+        setHttpUrl(editingFunction.httpUrl);
+      }
+      if (editingFunction.httpDataPath) {
+        setHttpDataPath(editingFunction.httpDataPath);
+      }
+      if (editingFunction.httpRequestBody) {
+        setHttpRequestBody(editingFunction.httpRequestBody);
+      }
+    }
+  }, [editingFunction, visible, isEdit, protocolForm, productProtocol]); // 监听编辑数据变化
 
   // 修复状态更新时序问题：确保编辑模式下状态正确同步
   useEffect(() => {
@@ -885,35 +1067,37 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     try {
       const values = await form.validateFields();
 
-      setFunctionName(values.name || ''); // 保存功能名称
+      // 保存功能名称到状态
+      setFunctionName(values.name || '');
+      
+      // 同步组件状态与表单值
+      setCurrentFunctionType(values.functionType);
+      setDataType(values.dataType);
       
       // 如果功能类型是属性（静态），直接保存，不进入配置映射页面
       if (values.functionType === '属性（静态）') {
-
         await handleSaveStaticProperty(values);
         return;
       }
       
-      // 恢复第二步的表单数据（如果之前有填写过）
-      const allValues = form.getFieldsValue();
+      // 保存第一步的数据到表单的隐藏字段中，确保数据不丢失
+      // 直接设置表单值，不使用setTimeout避免异步问题
       form.setFieldsValue({
-        // 保持第一步的数据
+        // 明确保存第一步的所有数据
         name: values.name,
         identifier: values.identifier,
         functionType: values.functionType,
         readWriteMode: values.readWriteMode,
         dataType: values.dataType,
-        // 设置第二步的数据
+        // 设置第二步的数据，保持现有状态
         mappingFunctionName: values.name || '',
-        registerAddress: allValues.registerAddress || registerAddress,
-        functionCode: allValues.functionCode || functionCode || undefined,
-        modbusDataType: allValues.modbusDataType || modbusDataType,
-        byteOrder: allValues.byteOrder || byteOrder || undefined,
-        registerType: allValues.registerType || registerType,
-        isComposite: allValues.isComposite !== undefined ? allValues.isComposite : isComposite
+        registerAddress: registerAddress,
+        functionCode: functionCode || undefined,
+        modbusDataType: modbusDataType,
+        byteOrder: byteOrder || undefined,
+        registerType: registerType,
+        isComposite: isComposite
       });
-      
-
       
       setCurrentStep(1);
     } catch (error) {
@@ -927,27 +1111,35 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     // 从第二步返回第一步时，确保表单数据正确显示
     const allValues = form.getFieldsValue();
     
-    // 确保第一步的数据正确显示（从隐藏字段恢复）
-    const firstStepData = {
+    // 保存第二步的状态数据到组件状态中
+    if (allValues.registerAddress) setRegisterAddress(allValues.registerAddress);
+    if (allValues.functionCode) setFunctionCode(allValues.functionCode);
+    if (allValues.modbusDataType) setModbusDataType(allValues.modbusDataType);
+    if (allValues.byteOrder) setByteOrder(allValues.byteOrder);
+    if (allValues.registerType) setRegisterType(allValues.registerType);
+    if (allValues.isComposite !== undefined) setIsComposite(allValues.isComposite);
+    
+    // 同步组件状态
+    if (allValues.functionType) setCurrentFunctionType(allValues.functionType);
+    if (allValues.dataType) setDataType(allValues.dataType);
+    if (allValues.name) setFunctionName(allValues.name);
+    
+    // 直接设置表单值和切换步骤，不使用setTimeout避免异步问题
+    // 确保第一步的数据正确显示，优先使用表单中保存的数据
+    form.setFieldsValue({
       name: allValues.name || functionName,
       identifier: allValues.identifier,
       functionType: allValues.functionType,
       readWriteMode: allValues.readWriteMode,
-      dataType: allValues.dataType
-    };
-    
-    // 保存第二步的状态数据到表单中，确保数据不丢失
-    form.setFieldsValue({
-      ...firstStepData,
-      registerAddress: registerAddress,
-      functionCode: functionCode || undefined,
-      modbusDataType: modbusDataType,
-      byteOrder: byteOrder || undefined,
-      registerType: registerType,
-      isComposite: isComposite
+      dataType: allValues.dataType,
+      // 保持第二步的数据在表单中，但不显示
+      registerAddress: allValues.registerAddress || registerAddress,
+      functionCode: allValues.functionCode || functionCode || undefined,
+      modbusDataType: allValues.modbusDataType || modbusDataType,
+      byteOrder: allValues.byteOrder || byteOrder || undefined,
+      registerType: allValues.registerType || registerType,
+      isComposite: allValues.isComposite !== undefined ? allValues.isComposite : isComposite
     });
-    
-
     
     setCurrentStep(0);
   };
@@ -1022,30 +1214,34 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       // 获取表单的所有字段值，包括未渲染的字段
       const allValues = form.getFieldsValue();
 
+      // 验证必填字段 - 优先使用表单值，其次使用状态值
+      const finalName = allValues.name || functionName;
+      const finalIdentifier = allValues.identifier;
+      const finalFunctionType = allValues.functionType;
+      const finalReadWriteMode = allValues.readWriteMode;
+      const finalDataType = allValues.dataType;
       
-      // 验证必填字段 - 优先使用functionName状态，其次使用表单值
-      const finalName = functionName || allValues.name;
       if (!finalName || !finalName.trim()) {
         message.error('请输入功能名称');
         setLoading(false);
         return;
       }
-      if (!allValues.identifier || !allValues.identifier.trim()) {
+      if (!finalIdentifier || !finalIdentifier.trim()) {
         message.error('请输入标识符');
         setLoading(false);
         return;
       }
-      if (!allValues.functionType) {
+      if (!finalFunctionType) {
         message.error('请选择功能类型');
         setLoading(false);
         return;
       }
-      if (!allValues.readWriteMode) {
+      if (!finalReadWriteMode) {
         message.error('请选择读写方式');
         setLoading(false);
         return;
       }
-      if (!allValues.dataType) {
+      if (!finalDataType) {
         message.error('请选择数据类型');
         setLoading(false);
         return;
@@ -1174,10 +1370,10 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
       const functionData: FunctionConfig = {
         name: finalName,
-        identifier: allValues.identifier,
-        functionType: allValues.functionType,
-        readWriteMode: allValues.readWriteMode,
-        dataType: allValues.dataType,
+        identifier: finalIdentifier,
+        functionType: finalFunctionType,
+        readWriteMode: finalReadWriteMode,
+        dataType: finalDataType,
         valueConfig: processedValueConfig,
         // 配置映射数据
         isComposite: isComposite,
@@ -1257,6 +1453,8 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
 
   // 关闭抽屉
   const handleClose = () => {
+    // 重置初始打开标志，确保下次打开时能正确初始化
+    isInitialOpenRef.current = true;
     onClose();
   };
 
@@ -1372,12 +1570,18 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
     <Form
       form={form}
       layout="vertical"
-      initialValues={{
-        name: '',
-        identifier: '',
-        functionType: '属性（动态）',
-        readWriteMode: '读写',
-        dataType: 'text',
+      preserve={true}
+      onValuesChange={(changedValues: any, allValues: any) => {
+        if (changedValues.functionType) {
+          setCurrentFunctionType(changedValues.functionType);
+        }
+        if (changedValues.name) {
+          setFunctionName(changedValues.name);
+          // 实时更新映射功能名称字段
+          form.setFieldsValue({
+            mappingFunctionName: changedValues.name
+          });
+        }
       }}
     >
       <Row gutter={16}>
@@ -1389,14 +1593,6 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           >
             <Input 
               placeholder="请输入功能名称" 
-              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                const newName = e.target.value;
-                setFunctionName(newName);
-                // 实时更新映射功能名称字段
-                form.setFieldsValue({
-                  mappingFunctionName: newName
-                });
-              }}
             />
           </Form.Item>
         </Col>
@@ -1423,7 +1619,6 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
           >
             <Select 
               placeholder="请选择功能类型"
-              onChange={(value: string) => setCurrentFunctionType(value)}
             >
               {getFilteredFunctionTypeOptions().map(option => (
                 <Option key={option.value} value={option.value}>{option.label}</Option>
@@ -1814,6 +2009,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       <Form
         form={protocolForm}
         layout="vertical"
+        preserve={true}
         initialValues={{
           isComposite: false,
           protocol: productProtocol,
@@ -2667,8 +2863,12 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
         {/* 主要内容区域 */}
         <div style={{ flex: 1, padding: '24px', overflow: 'auto' }}>
           <Card>
-            {currentStep === 0 && renderBasicInfo()}
-            {currentStep === 1 && renderConfigMapping()}
+            <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
+              {renderBasicInfo()}
+            </div>
+            <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>
+              {renderConfigMapping()}
+            </div>
           </Card>
         </div>
 
