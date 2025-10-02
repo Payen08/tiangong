@@ -586,6 +586,17 @@ const DigitalTwinEditor: React.FC = () => {
         deleteSelectedSegments();
       } else if (selectedWalls.length > 0) {
         // Delete/Backspace键删除选中的墙体
+        // 先清理共享端点
+        walls.forEach(wall => {
+          if (selectedWalls.includes(wall.id) && wall.pointIds) {
+            wall.pointIds.forEach((pointId, index) => {
+              if (pointId) {
+                removeWallFromSharedPoint(pointId, wall.id, index);
+              }
+            });
+          }
+        });
+        
         setWalls(prevWalls => prevWalls.filter(wall => !selectedWalls.includes(wall.id)));
         setSelectedWalls([]);
         message.success(`已删除 ${selectedWalls.length} 个墙体`);
@@ -729,30 +740,40 @@ const DigitalTwinEditor: React.FC = () => {
   }, []);
 
   const updateSharedPoint = useCallback((pointId: string, x: number, y: number) => {
-    // 先获取当前的共享端点信息
-    setSharedPoints(prev => {
-      const currentPoint = prev.get(pointId);
-      if (currentPoint) {
-        // 同步更新所有连接到此共享端点的墙体
-        setWalls(prevWalls => 
-          prevWalls.map(wall => {
-            const connection = currentPoint.connectedWalls.find(conn => conn.wallId === wall.id);
-            if (connection) {
-              const newPoints = [...wall.points];
-              newPoints[connection.pointIndex] = { x, y };
-              return { ...wall, points: newPoints };
-            }
-            return wall;
-          })
-        );
-        
-        // 更新共享端点位置
+    // 使用 ref 获取最新的共享端点信息
+    const currentPoint = sharedPointsRef.current?.get(pointId);
+    
+    if (currentPoint) {
+      // 先更新共享端点位置
+      setSharedPoints(prev => {
         const newMap = new Map(prev);
         newMap.set(pointId, { ...currentPoint, x, y });
         return newMap;
-      }
-      return prev;
-    });
+      });
+      
+      // 然后更新所有连接到此共享端点的墙体
+      setWalls(prevWalls => {
+        return prevWalls.map(wall => {
+          const connection = currentPoint.connectedWalls.find(conn => conn.wallId === wall.id);
+          if (connection) {
+            const newPoints = [...wall.points];
+            newPoints[connection.pointIndex] = { x, y };
+            
+            // 确保 pointIds 数组与 points 数组保持一致
+            const newPointIds = wall.pointIds ? [...wall.pointIds] : new Array(wall.points.length).fill(null);
+            // 确保 pointIds 数组长度与 points 数组一致
+            while (newPointIds.length < newPoints.length) {
+              newPointIds.push(null);
+            }
+            // 保持共享端点的关联关系
+            newPointIds[connection.pointIndex] = pointId;
+            
+            return { ...wall, points: newPoints, pointIds: newPointIds };
+          }
+          return wall;
+        });
+      });
+    }
   }, []);
 
   const addWallToSharedPoint = useCallback((pointId: string, wallId: string, pointIndex: number) => {
@@ -794,8 +815,9 @@ const DigitalTwinEditor: React.FC = () => {
     });
   }, []);
 
-  const getSharedPointId = useCallback((wallId: string, pointIndex: number): string | null => {
-    const wall = walls.find((w: Wall) => w.id === wallId);
+  const getSharedPointId = useCallback((wallId: string, pointIndex: number, currentWalls?: Wall[]): string | null => {
+    const wallsToSearch = currentWalls || walls;
+    const wall = wallsToSearch.find((w: Wall) => w.id === wallId);
     return wall?.pointIds?.[pointIndex] || null;
   }, [walls]);
 
@@ -846,18 +868,38 @@ const DigitalTwinEditor: React.FC = () => {
       setOffsetY(e.clientY - dragStart.y);
     } else if (isDraggingEndpoint && selectedEndpoint) {
       // 拖拽端点 - 支持共享端点
-      const pointId = getSharedPointId(selectedEndpoint.wallId, selectedEndpoint.pointIndex);
+      // 首先检查是否有共享端点与当前拖拽的端点位置匹配
+      let foundSharedPointId: string | null = null;
       
-      if (pointId) {
+      // 遍历所有共享端点，查找与当前端点关联的共享点
+      for (const [pointId, sharedPoint] of sharedPointsRef.current?.entries() || []) {
+        const connection = sharedPoint.connectedWalls.find(
+          conn => conn.wallId === selectedEndpoint.wallId && conn.pointIndex === selectedEndpoint.pointIndex
+        );
+        if (connection) {
+          foundSharedPointId = pointId;
+          break;
+        }
+      }
+      
+      if (foundSharedPointId) {
         // 如果是共享端点，更新共享端点位置，这会自动同步所有相关墙体
-        updateSharedPoint(pointId, point.x, point.y);
+        updateSharedPoint(foundSharedPointId, point.x, point.y);
       } else {
         // 如果不是共享端点，只更新当前墙体
         setWalls(prev => prev.map(wall => {
           if (wall.id === selectedEndpoint.wallId) {
             const newPoints = [...wall.points];
             newPoints[selectedEndpoint.pointIndex] = point;
-            return { ...wall, points: newPoints };
+            
+            // 同步更新pointIds数组，确保与points数组保持一致
+            const newPointIds = wall.pointIds ? [...wall.pointIds] : new Array(newPoints.length).fill(null);
+            // 确保pointIds数组长度与points数组一致
+            while (newPointIds.length < newPoints.length) {
+              newPointIds.push(null);
+            }
+            
+            return { ...wall, points: newPoints, pointIds: newPointIds };
           }
           return wall;
         }));
@@ -1019,14 +1061,11 @@ const DigitalTwinEditor: React.FC = () => {
             return { pointId: existingSharedPoint.id, actualPoint: { x: existingSharedPoint.x, y: existingSharedPoint.y } };
           }
           
-          // 检查是否有其他墙体的端点在这个位置
-          const nearbyWallEndpoint = nearbyEndpoints.find(ep => {
-            const distance = Math.sqrt(
-              Math.pow(ep.point.x - point.x, 2) + 
-              Math.pow(ep.point.y - point.y, 2)
-            );
-            return distance < sharedPointThreshold;
-          });
+          // 实时查找附近的墙体端点（不依赖nearbyEndpoints状态）
+          const nearbyWallEndpoints = findNearbyEndpoints(point, walls, sharedPointThreshold).filter(ep => 
+            ep.wallId !== wallId
+          );
+          const nearbyWallEndpoint = nearbyWallEndpoints.length > 0 ? nearbyWallEndpoints[0] : null;
           
           if (nearbyWallEndpoint) {
             // 创建共享端点并连接现有墙体和新墙体
@@ -1361,7 +1400,25 @@ const DigitalTwinEditor: React.FC = () => {
       title: '确认删除',
       content: `确定要删除选中的 ${selectedWalls.length} 个墙体吗？`,
       onOk: () => {
-        setWalls(prevWalls => prevWalls.filter(wall => !selectedWalls.includes(wall.id)));
+        // 在删除墙体前，先清理相关的共享端点
+        setWalls(prevWalls => {
+          const wallsToDelete = prevWalls.filter(wall => selectedWalls.includes(wall.id));
+          
+          // 清理每个要删除的墙体的共享端点
+          wallsToDelete.forEach(wall => {
+            if (wall.pointIds) {
+              wall.pointIds.forEach((pointId, index) => {
+                if (pointId) {
+                  removeWallFromSharedPoint(pointId, wall.id, index);
+                }
+              });
+            }
+          });
+          
+          // 返回过滤后的墙体数组
+          return prevWalls.filter(wall => !selectedWalls.includes(wall.id));
+        });
+        
         setSelectedWalls([]);
         message.success(`已删除 ${selectedWalls.length} 个墙体`);
       }
