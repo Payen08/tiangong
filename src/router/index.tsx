@@ -53,6 +53,10 @@ export const router = createBrowserRouter([
         element: <DigitalTwin />,
       },
       {
+        path: 'digital-twin/editor',
+        element: <div />, // 占位符，实际由Layout组件处理
+      },
+      {
         path: 'scene',
         children: [
           {

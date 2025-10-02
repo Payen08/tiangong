@@ -21,6 +21,7 @@ import {
   AndroidOutlined,
   VerticalAlignTopOutlined,
   BorderOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import ThreeScene, { ThreeSceneRef } from '@/components/ThreeScene';
 import FloorSelector from '@/components/FloorSelector';
@@ -771,6 +772,25 @@ const DigitalTwin: React.FC = () => {
               title="正视图"
             >
               <span style={{ color: '#e8f4fd' }}>正视图</span>
+            </Button>
+            
+            <Button
+              icon={<EditOutlined />}
+              size="small"
+              type="text"
+              onClick={() => {
+                // 跳转到编辑页面
+                window.location.href = '/digital-twin/editor';
+              }}
+              style={{
+                color: 'rgba(255, 255, 255, 0.7)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                border: 'none',
+                borderRadius: '4px'
+              }}
+              title="编辑模式"
+            >
+              <span style={{ color: '#e8f4fd' }}>编辑</span>
             </Button>
 
           </Space>

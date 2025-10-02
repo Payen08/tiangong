@@ -532,6 +532,7 @@ const MapManagement: React.FC = () => {
   
   // PNG图片擦除相关状态
   const pngCanvasRef = useRef<HTMLCanvasElement>(null);
+  const gridCanvasRef = useRef<HTMLCanvasElement>(null); // 新增网格Canvas引用
   // const [erasedPixels, setErasedPixels] = useState<{x: number, y: number}[]>([]); // 存储被擦除的像素位置
   
   // 控制手柄事件处理函数
@@ -2217,6 +2218,131 @@ const MapManagement: React.FC = () => {
   const svgRef = React.useRef<SVGSVGElement>(null); // SVG元素引用
 
   // 屏幕坐标转画布坐标函数
+  // 新增：绘制动态网格的函数
+  const drawGrid = useCallback(() => {
+    const canvas = gridCanvasRef.current;
+    if (!canvas || !canvasRef.current) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // 获取画布容器尺寸
+    const containerRect = canvasRef.current.getBoundingClientRect();
+    
+    // 确保容器有有效的尺寸，否则延迟绘制
+    if (containerRect.width === 0 || containerRect.height === 0) {
+      if (isDev) console.log('🔍 [网格绘制] 容器尺寸为0，延迟绘制网格');
+      // 延迟重试绘制
+      setTimeout(() => drawGrid(), 50);
+      return;
+    }
+    
+    canvas.width = containerRect.width;
+    canvas.height = containerRect.height;
+    
+    if (isDev) console.log('🎨 [网格绘制] 开始绘制网格:', {
+      '容器尺寸': { width: containerRect.width, height: containerRect.height },
+      '画布缩放': canvasScale,
+      '画布偏移': canvasOffset
+    });
+
+    // 清除画布
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // 设置网格样式
+    ctx.strokeStyle = '#e8e8e8';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.5;
+
+    // 基础网格大小
+    const baseGridSize = 20;
+    
+    // 根据缩放比例调整网格大小
+    let gridSize = baseGridSize * canvasScale;
+    
+    // 当网格太密时，使用更大的网格
+    while (gridSize < 10) {
+      gridSize *= 2;
+    }
+    
+    // 当网格太稀疏时，使用更小的网格
+    while (gridSize > 100) {
+      gridSize /= 2;
+    }
+
+    // 计算画布中心点
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+
+    // 修复网格偏移量计算 - 网格Canvas不受画布变换影响，使用简单的固定网格
+    // 根据画布偏移计算网格起始位置，确保网格与画布内容对齐
+    const offsetX = (centerX + canvasOffset.x) % gridSize;
+    const offsetY = (centerY + canvasOffset.y) % gridSize;
+
+    // 绘制垂直线
+    for (let x = offsetX - gridSize; x < canvas.width + gridSize; x += gridSize) {
+      if (x >= 0 && x <= canvas.width) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+    }
+
+    // 绘制水平线
+    for (let y = offsetY - gridSize; y < canvas.height + gridSize; y += gridSize) {
+      if (y >= 0 && y <= canvas.height) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+    }
+
+    ctx.globalAlpha = 1;
+  }, [canvasScale, canvasOffset]);
+
+  // 组件挂载时初始化网格显示
+  useEffect(() => {
+    // 延迟执行确保DOM元素已经渲染完成
+    const timer = setTimeout(() => {
+      if (isDev) console.log('🚀 [网格初始化] 组件挂载后初始化网格显示');
+      drawGrid();
+    }, 200); // 增加延迟时间确保DOM完全渲染
+    
+    return () => clearTimeout(timer);
+  }, []); // 空依赖数组，只在组件挂载时执行一次
+
+  // 监听画布状态变化，重新绘制网格
+  useEffect(() => {
+    drawGrid();
+  }, [drawGrid]);
+
+  // 监听窗口大小变化，重新绘制网格
+  useEffect(() => {
+    const handleResize = () => {
+      drawGrid();
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [drawGrid]);
+
+  // 监听编辑模式变化，重新绘制网格
+  useEffect(() => {
+    // 当进入编辑模式、编辑地图变化或新增地图进入编辑器时，延迟重绘网格确保DOM已更新
+    const timer = setTimeout(() => {
+      if (isDev) console.log('🔄 [网格重绘] 编辑模式变化，重新绘制网格:', {
+        '当前模式': currentMode,
+        '编辑地图': editingMap?.name || '无',
+        '新增地图步骤': addMapFileStep
+      });
+      drawGrid();
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, [currentMode, editingMap, addMapFileStep, drawGrid]);
+
   const screenToCanvasCoordinates = (screenX: number, screenY: number, canvasElement: HTMLDivElement) => {
     const rect = canvasElement.getBoundingClientRect();
     const relativeX = screenX - rect.left;
@@ -2229,20 +2355,22 @@ const MapManagement: React.FC = () => {
       '4_画布状态': { canvasScale, canvasOffset }
     });
     
-    // CSS transform: scale(canvasScale) translate(canvasOffset.x, canvasOffset.y)
-    // 变换顺序：先缩放，再平移
-    // 正向变换：screenCoord = (canvasCoord * canvasScale) + (canvasOffset * canvasScale)
-    // 逆变换：canvasCoord = (screenCoord - canvasOffset * canvasScale) / canvasScale
-    const canvasX = (relativeX - canvasOffset.x * canvasScale) / canvasScale;
-    const canvasY = (relativeY - canvasOffset.y * canvasScale) / canvasScale;
+    // 修复后的坐标转换实现，匹配新的变换顺序：translate -> scale
+    // 变换顺序：translate(offsetX, offsetY) scale(scale)
+    // 逆变换：先除以缩放，再减去偏移
+    const canvasX = relativeX / canvasScale - canvasOffset.x;
+    const canvasY = relativeY / canvasScale - canvasOffset.y;
     
     if (isDev) console.log('🎯 [坐标转换] screenToCanvasCoordinates 转换结果:', {
       '1_计算过程': {
-        'relativeX - canvasOffset.x * canvasScale': relativeX - canvasOffset.x * canvasScale,
-        'X轴除以 canvasScale': canvasScale,
+        'relativeX': relativeX,
+        'canvasScale': canvasScale,
+        'relativeX / canvasScale': relativeX / canvasScale,
+        'canvasOffset.x': canvasOffset.x,
         '最终 canvasX': canvasX,
-        'relativeY - canvasOffset.y * canvasScale': relativeY - canvasOffset.y * canvasScale,
-        'Y轴除以 canvasScale': canvasScale,
+        'relativeY': relativeY,
+        'relativeY / canvasScale': relativeY / canvasScale,
+        'canvasOffset.y': canvasOffset.y,
         '最终 canvasY': canvasY
       },
       '2_输出画布坐标': { x: canvasX, y: canvasY }
@@ -6560,9 +6688,7 @@ const MapManagement: React.FC = () => {
     event.stopPropagation();
     
     const canvasElement = event.currentTarget;
-    const rect = canvasElement.getBoundingClientRect();
-    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
-    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
     
     setIsDrawing(true);
     setCurrentStroke([{ x, y }]);
@@ -6572,9 +6698,7 @@ const MapManagement: React.FC = () => {
     if (!isDrawing || selectedTool !== 'brush') return;
     
     const canvasElement = event.currentTarget;
-    const rect = canvasElement.getBoundingClientRect();
-    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
-    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
     
     setCurrentStroke(prev => [...prev, { x, y }]);
   };
@@ -6606,9 +6730,7 @@ const MapManagement: React.FC = () => {
     event.stopPropagation();
     
     const canvasElement = event.currentTarget;
-    const rect = canvasElement.getBoundingClientRect();
-    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
-    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
     
     // 创建一个点（小圆圈）
     const newStroke = {
@@ -6631,9 +6753,7 @@ const MapManagement: React.FC = () => {
     event.stopPropagation();
     
     const canvasElement = event.currentTarget;
-    const rect = canvasElement.getBoundingClientRect();
-    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
-    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
     
     setIsErasing(true);
     setCurrentEraserStroke([{ x, y }]);
@@ -6643,9 +6763,7 @@ const MapManagement: React.FC = () => {
     if (!isErasing || selectedTool !== 'eraser') return;
     
     const canvasElement = event.currentTarget;
-    const rect = canvasElement.getBoundingClientRect();
-    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
-    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
     
     setCurrentEraserStroke(prev => [...prev, { x, y }]);
   };
@@ -6677,9 +6795,7 @@ const MapManagement: React.FC = () => {
     event.stopPropagation();
     
     const canvasElement = event.currentTarget;
-    const rect = canvasElement.getBoundingClientRect();
-    const x = (event.clientX - rect.left - canvasOffset.x) / canvasScale;
-    const y = (event.clientY - rect.top - canvasOffset.y) / canvasScale;
+    const { x, y } = screenToCanvasCoordinates(event.clientX, event.clientY, canvasElement);
     
     // 创建一个白色点（小圆圈）
     const newStroke = {
@@ -11599,6 +11715,20 @@ const MapManagement: React.FC = () => {
                     onTouchEnd={handleTouchEnd}
                     onWheel={handleWheel}
                   >
+                    {/* 动态网格背景 - Canvas实现，自动适应缩放 */}
+                    <canvas
+                      ref={gridCanvasRef}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        pointerEvents: 'none',  // 确保网格不会阻挡鼠标事件
+                        zIndex: 1
+                      }}
+                    />
+                    
                     {/* 画布变换容器 */}
                     <div style={{
                       position: 'absolute',
@@ -11606,27 +11736,10 @@ const MapManagement: React.FC = () => {
                       left: 0,
                       width: '100%',
                       height: '100%',
-                      transform: `scale(${canvasScale}) translate(${canvasOffset.x}px, ${canvasOffset.y}px)`,
-                      transformOrigin: 'center center',
+                      transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${canvasScale})`,
+                      transformOrigin: '0 0',
                       transition: isDragging ? 'none' : 'transform 0.2s ease'
                     }}>
-                    
-                    {/* 网格背景 - 在画布变换容器内部，跟随画布缩放 */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '-50%',
-                      left: '-50%',
-                      width: '200%',
-                      height: '200%',
-                      backgroundImage: `
-                        linear-gradient(to right, #e8e8e8 1px, transparent 1px),
-                        linear-gradient(to bottom, #e8e8e8 1px, transparent 1px)
-                      `,
-                      backgroundSize: '20px 20px',
-                      opacity: 0.5,
-                      pointerEvents: 'none',  // 确保网格不会阻挡鼠标事件
-                      zIndex: 20
-                    }}></div>
                     
                     {/* PNG图片背景层 - 在画布变换容器内部，最底层 */}
                     {mapFileUploadedImage && (
@@ -11966,9 +12079,7 @@ const MapManagement: React.FC = () => {
                       }}
                       onMouseMove={(e) => {
                         // 计算鼠标在画布上的位置
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        const x = (e.clientX - rect.left - canvasOffset.x) / canvasScale;
-                        const y = (e.clientY - rect.top - canvasOffset.y) / canvasScale;
+                        const { x, y } = screenToCanvasCoordinates(e.clientX, e.clientY, canvasRef.current!);
                         
                         // 在连线模式下更新鼠标位置
                         const shouldUpdateMousePosition = (isConnecting || continuousConnecting) && (connectingStartPoint || lastConnectedPoint);

@@ -36,6 +36,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore, useAppStore } from '@/store';
 import Breadcrumb from './Breadcrumb';
 import FieldControlView from '@/pages/FieldControlView';
+import DigitalTwinEditor from '@/pages/DigitalTwin/Editor';
 
 const { Header, Sider, Content } = AntLayout;
 
@@ -56,7 +57,7 @@ const Layout: React.FC = () => {
   useEffect(() => {
     if (location.pathname === '/field-control') {
       setActiveTab('field-control');
-    } else if (location.pathname === '/digital-twin') {
+    } else if (location.pathname === '/digital-twin' || location.pathname === '/digital-twin/editor') {
       setActiveTab('digital-twin');
     } else {
       setActiveTab('basic-info');
@@ -322,6 +323,38 @@ const Layout: React.FC = () => {
         </Header>
         <Content className="bg-gray-50 overflow-hidden" style={{ height: 'calc(100vh - 64px)' }}>
           <FieldControlView />
+        </Content>
+      </AntLayout>
+    );
+  }
+
+  // 数字孪生编辑模式 - 移除左侧菜单栏和面包屑，保留顶部Header，直接渲染编辑组件
+  if (activeTab === 'digital-twin' && location.pathname === '/digital-twin/editor') {
+    return (
+      <AntLayout className="h-screen">
+        <Header className="bg-white px-4 flex items-center justify-between border-b border-gray-200">
+          <div className="flex items-center gap-4">
+            <h1 className="font-bold text-lg text-blue-600">管理系统</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <Tabs
+              activeKey={activeTab}
+              onChange={handleTabChange}
+              items={tabItems}
+              size="small"
+              tabBarStyle={{
+                marginBottom: 0,
+                border: 'none'
+              }}
+            />
+            <span className="text-gray-600">欢迎，{user?.name}</span>
+            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+              <Avatar icon={<UserOutlined />} className="cursor-pointer" />
+            </Dropdown>
+          </div>
+        </Header>
+        <Content className="bg-gray-50 overflow-hidden" style={{ height: 'calc(100vh - 64px)' }}>
+          <DigitalTwinEditor />
         </Content>
       </AntLayout>
     );

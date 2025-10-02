@@ -615,11 +615,13 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     const viewportRight = viewportLeft + canvasWidth;
     const viewportBottom = viewportTop + canvasHeight;
 
-    // 计算网格线的起始和结束位置，覆盖整个可视区域
-    const startX = Math.floor(viewportLeft / gridSize) * gridSize;
-    const endX = Math.ceil(viewportRight / gridSize) * gridSize;
-    const startY = Math.floor(viewportTop / gridSize) * gridSize;
-    const endY = Math.ceil(viewportBottom / gridSize) * gridSize;
+    // 扩大网格绘制范围，确保在拖动时也能完全覆盖画布
+    // 使用更大的padding确保在任何缩放和拖动情况下都能完全覆盖
+    const padding = Math.max(canvasWidth, canvasHeight) * 2; // 使用画布尺寸的2倍作为padding
+    const startX = Math.floor((viewportLeft - padding) / gridSize) * gridSize;
+    const endX = Math.ceil((viewportRight + padding) / gridSize) * gridSize;
+    const startY = Math.floor((viewportTop - padding) / gridSize) * gridSize;
+    const endY = Math.ceil((viewportBottom + padding) / gridSize) * gridSize;
 
     // 绘制垂直网格线
     for (let x = startX; x <= endX; x += gridSize) {
@@ -810,7 +812,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     ctx.scale(canvasState.scale, canvasState.scale);
     
     // 绘制网格
-    drawGrid(ctx, canvas.width / canvasState.scale, canvas.height / canvasState.scale);
+    drawGrid(ctx, canvas.width, canvas.height);
     
     // 绘制连接线
     connections.forEach(connection => {
