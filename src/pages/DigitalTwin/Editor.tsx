@@ -511,6 +511,10 @@ const DigitalTwinEditor: React.FC = () => {
   const [continuousConnecting, setContinuousConnecting] = useState(false); // 连续连线模式
   const [connectingStartPoint, setConnectingStartPoint] = useState<WallPoint | null>(null); // 连线起始点
   const [lastConnectedPoint, setLastConnectedPoint] = useState<WallPoint | null>(null); // 最后连接的点
+  
+  // 连线状态的ref引用，用于解决状态更新时序问题
+  const isConnectingRef = useRef(false);
+  const continuousConnectingRef = useRef(false);
 
   // 贝塞尔曲线绘制状态（地图编辑器风格 - 两点绘制模式）
   const [bezierDrawingState, setBezierDrawingState] = useState<{
@@ -549,7 +553,7 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 端点相关状态
   const [hoveredEndpoint, setHoveredEndpoint] = useState<{wallId: string, pointIndex: number} | null>(null);
-  const [showEndpoints, setShowEndpoints] = useState(true); // 是否显示端点
+
   const [nearbyEndpoints, setNearbyEndpoints] = useState<{wallId: string, pointIndex: number, point: WallPoint}[]>([]); // 绘制模式下附近的端点
 
   // 贝塞尔曲线编辑模式状态
@@ -689,52 +693,101 @@ const DigitalTwinEditor: React.FC = () => {
       // Enter键完成当前墙体绘制
       finishCurrentWall();
     } else if (e.key === 'Escape') {
-      if (bezierEditMode.isEditing) {
-        // Escape键退出贝塞尔曲线编辑模式
-        setBezierEditMode({
-          isEditing: false,
-          wallId: null,
-          isDraggingControl: false,
-          activeControlPoint: null
-        });
-        message.info('已退出贝塞尔曲线编辑模式');
-        // 切换到选择工具
-        selectDrawingTool('select-wall');
-      } else if (bezierDrawingState.phase !== 'idle') {
-        // Escape键取消贝塞尔曲线绘制
+      // Escape键完全重置所有编辑状态
+      console.log('🔥 ESC键被按下，开始重置所有状态...');
+      
+      // 记录当前状态
+       console.log('📊 当前状态:', {
+         isDrawingWall,
+         isConnecting,
+         continuousConnecting,
+         bezierEditMode,
+         bezierDrawingState,
+         activeTool: getActiveTool()?.type,
+         selectedWalls: selectedWalls.length,
+         walls: walls.length
+       });
+      
+      // 退出贝塞尔曲线编辑模式
+      console.log('🎯 重置贝塞尔曲线编辑模式...');
+      setBezierEditMode({
+        isEditing: false,
+        wallId: null,
+        isDraggingControl: false,
+        activeControlPoint: null
+      });
+      
+      // 清除贝塞尔曲线绘制状态（包括控制点）
+      console.log('🎯 重置贝塞尔曲线绘制状态...');
+      setBezierDrawingState({
+        phase: 'idle',
+        startPoint: null,
+        endPoint: null,
+        controlPoint1: null,
+        controlPoint2: null,
+        isDraggingControl: false,
+        activeControlPoint: null,
+        continuousMode: false,
+        lastEndPoint: null,
+      });
+      
+      // 取消贝塞尔曲线绘制
+      if (bezierDrawingState.phase !== 'idle') {
+        console.log('🎯 取消贝塞尔曲线绘制...');
         cancelBezierDrawing();
-        // 切换到选择工具
-        selectDrawingTool('select-wall');
-      } else if (isConnecting || continuousConnecting) {
-        // Escape键退出地图编辑器风格的连线模式
-        setIsConnecting(false);
-        setContinuousConnecting(false);
-        setConnectingStartPoint(null);
-        setLastConnectedPoint(null);
-        setMousePosition(null);
-        mousePositionRef.current = null;
-        message.info('已退出连线模式');
-        // 切换到选择工具
-        selectDrawingTool('select-wall');
-      } else if (isDrawingWall) {
-        // Escape键取消当前墙体绘制
-        cancelCurrentWall();
-        message.info('已取消墙体绘制');
-        // 切换到选择工具
-        selectDrawingTool('select-wall');
-      } else if (selectedWalls.length > 0 || isSelecting) {
-        // Escape键取消选择
-        setSelectedWalls([]);
-        setIsSelecting(false);
-        setSelectionStart(null);
-        setSelectionEnd(null);
-        setSelectedEndpoint(null);
-        setIsDraggingEndpoint(false);
-        // 清除墙体的选中状态
-        setWalls(prevWalls => 
-          prevWalls.map(wall => ({ ...wall, selected: false, selectedEndpoints: [] }))
-        );
       }
+      
+      // 退出连线模式
+      console.log('🎯 退出连线模式...');
+      setIsConnecting(false);
+      isConnectingRef.current = false;
+      setContinuousConnecting(false);
+      continuousConnectingRef.current = false;
+      setConnectingStartPoint(null);
+      setLastConnectedPoint(null);
+      
+      // 取消当前墙体绘制
+      if (isDrawingWall) {
+        console.log('🎯 取消当前墙体绘制...');
+        cancelCurrentWall();
+      }
+      
+      // 取消选择状态
+      console.log('🎯 取消选择状态...');
+      setSelectedWalls([]);
+      setIsSelecting(false);
+      setSelectionStart(null);
+      setSelectionEnd(null);
+      setSelectedEndpoint(null);
+      setIsDraggingEndpoint(false);
+      setSelectedSegments([]);
+      
+      // 清除端点相关状态
+      console.log('🎯 清除端点相关状态...');
+      setNearbyEndpoints([]);
+      setHoveredEndpoint(null);
+      
+      // 重置鼠标位置
+      console.log('🎯 重置鼠标位置...');
+      setMousePosition(null);
+      mousePositionRef.current = null;
+      
+      // 清除墙体的选中状态和端点状态
+      console.log('🎯 清除墙体选中状态...');
+      setWalls(prevWalls => 
+        prevWalls.map(wall => ({ 
+          ...wall, 
+          selected: false, 
+          selectedEndpoints: [] 
+        }))
+      );
+      
+      // 切换到选择工具
+      console.log('🎯 切换到选择工具...');
+      selectDrawingTool('select-wall');
+      
+      console.log('✅ ESC键重置完成');
+      message.info('已退出所有编辑模式');
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       if (selectedSegments.length > 0) {
         // Delete/Backspace键删除选中的线段
@@ -890,7 +943,9 @@ const DigitalTwinEditor: React.FC = () => {
            activeControlPoint: null
          });
         setIsConnecting(false);
+        isConnectingRef.current = false;
         setContinuousConnecting(false);
+        continuousConnectingRef.current = false;
         setConnectingStartPoint(null);
         setLastConnectedPoint(null);
         
@@ -1196,7 +1251,9 @@ const DigitalTwinEditor: React.FC = () => {
     // 如果在连续连线模式下，双击结束连线
     if (continuousConnecting && activeTool?.type === 'wall' && activeTool?.subType === 'line') {
       setContinuousConnecting(false);
+      continuousConnectingRef.current = false;
       setIsConnecting(false);
+      isConnectingRef.current = false;
       setConnectingStartPoint(null);
       setLastConnectedPoint(null);
       setMousePosition(null);
@@ -1353,14 +1410,25 @@ const DigitalTwinEditor: React.FC = () => {
       }
       setHoveredEndpoint(foundHoveredEndpoint);
       
-      // 在绘制模式下查找附近端点
-      if (activeTool && activeTool.type === 'wall') {
+      // 只在实际绘制状态下查找附近端点
+      // 使用ref值获取最新状态，避免状态更新时序问题
+      const currentIsConnecting = isConnectingRef.current;
+      const currentContinuousConnecting = continuousConnectingRef.current;
+      
+      console.log('🔍 鼠标移动条件判断:', {
+        activeTool: activeTool?.type,
+        isDrawingWall,
+        isConnecting: currentIsConnecting,
+        continuousConnecting: currentContinuousConnecting,
+        condition: activeTool && activeTool.type === 'wall' && (isDrawingWall || currentIsConnecting || currentContinuousConnecting)
+      });
+      
+      if (activeTool && activeTool.type === 'wall' && (isDrawingWall || currentIsConnecting || currentContinuousConnecting)) {
         const nearby = findNearbyEndpoints(point, walls);
         setNearbyEndpoints(nearby);
-        setShowEndpoints(nearby.length > 0);
+        console.log('🔍 设置附近端点:', { nearbyLength: nearby.length });
       } else {
         setNearbyEndpoints([]);
-        setShowEndpoints(false);
       }
     }
     
@@ -1603,6 +1671,7 @@ const DigitalTwinEditor: React.FC = () => {
         setLastConnectedPoint(actualEndPoint);
         // 启用连续连线模式
         setContinuousConnecting(true);
+        continuousConnectingRef.current = true;
         
       } else {
         // 起始点和结束点相同，不创建连线
@@ -1663,6 +1732,7 @@ const DigitalTwinEditor: React.FC = () => {
       // 开始新的连续绘制序列
       setLastConnectedPoint(point);
       setContinuousConnecting(true);
+      continuousConnectingRef.current = true;
       message.info('已设置起点，继续点击下一个点绘制曲线');
     }
   };
@@ -1725,6 +1795,7 @@ const DigitalTwinEditor: React.FC = () => {
     if (shiftKey) {
       // 连续绘制模式：启用连续连线模式，将当前终点作为下一条曲线的起点
       setContinuousConnecting(true);
+      continuousConnectingRef.current = true;
       setLastConnectedPoint(endPoint);
       setBezierDrawingState({
         phase: 'idle',
@@ -2760,7 +2831,25 @@ const DigitalTwinEditor: React.FC = () => {
       if (!wall) return;
       
       // 只在需要显示端点时绘制
-      if (!wall.completed || showEndpoints || (isDrawingWall && nearbyEndpoints.length > 0) || isSelected || isHovered || isNearby) {
+      // 修复：确保在非绘制状态下，选中墙体或选中端点时显示端点
+      const isEndpointSelected = selectedEndpoint?.wallId === wall.id && selectedEndpoint?.pointIndex === endpoint.pointIndex;
+      const shouldShowEndpoint = isDrawingWall ? 
+        (nearbyEndpoints.length > 0) : // 绘制模式：只显示附近端点
+        (wall.completed && (wall.selected || isEndpointSelected)); // 非绘制模式：选中墙体或选中端点时显示
+      
+      // 调试日志：端点显示条件
+        if (wall.id === walls[0]?.id && endpoint.pointIndex === 0) { // 只为第一个墙体的第一个端点记录日志
+          console.log('🔵 端点显示状态:', {
+            shouldShowEndpoint: shouldShowEndpoint,
+            wallCompleted: wall.completed,
+            wallSelected: wall.selected,
+            isEndpointSelected: isEndpointSelected,
+            isDrawingWall: isDrawingWall,
+            wallId: wall.id
+          });
+        }
+      
+      if (shouldShowEndpoint) {
         // 设置端点样式
         let pointColor = '#1890ff';
         let pointRadius = 4 / scale;
@@ -2982,6 +3071,18 @@ const DigitalTwinEditor: React.FC = () => {
         
         // 在编辑模式下显示调整手柄
         if (bezierEditMode.isEditing && bezierEditMode.wallId === wall.id) {
+          
+          // 调试日志：贝塞尔曲线控制手柄显示条件
+          console.log('🟡 控制手柄显示判断:', {
+            wallId: wall.id,
+            wallType: wall.type,
+            bezierEditModeIsEditing: bezierEditMode.isEditing,
+            bezierEditModeWallId: bezierEditMode.wallId,
+            bezierEditModeActiveControlPoint: bezierEditMode.activeControlPoint,
+            bezierEditModeIsDraggingControl: bezierEditMode.isDraggingControl,
+            wallPointsLength: wall.points?.length,
+            shouldShowControls: true
+          });
           
           if (wall.type === 'bezier' && wall.points && wall.points.length >= 4) {
             // 贝塞尔曲线：绘制控制点和控制线（新格式：points包含[起点, 控制点1, 控制点2, 终点]）
