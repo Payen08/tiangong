@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Button, Select, Space, Typography, Input, List, Card, Divider, Modal, Form, message, Row, Col } from 'antd';
+import { Button, Select, Space, Typography, Input, List, Card, Divider, Modal, Form, message, Row, Col, Slider, ColorPicker } from 'antd';
+import * as THREE from 'three';
 import {
   ReloadOutlined,
   EyeInvisibleOutlined,
@@ -133,6 +134,176 @@ interface FloorScene {
   initializeDevices?: boolean; // 是否初始化地图关联设备
   increaseUpdate?: boolean; // 是否增量更新
 }
+
+// 3D编辑器组件接口
+interface ThreeDEditorProps {
+  walls: Wall[];
+  selectedWall3DProps: {
+    width: number;
+    thickness: number;
+    height: number;
+    color: string;
+    opacity: number;
+  };
+  onWallSelect: (wallId: string) => void;
+  style?: React.CSSProperties;
+}
+
+// 3D编辑器组件
+const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, selectedWall3DProps, onWallSelect, style }) => {
+  const mountRef = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<THREE.Scene>();
+  const rendererRef = useRef<THREE.WebGLRenderer>();
+  const cameraRef = useRef<THREE.PerspectiveCamera>();
+  const wallMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+
+  useEffect(() => {
+    if (!mountRef.current) return;
+
+    // 创建场景
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf5f5f5);
+    sceneRef.current = scene;
+
+    // 创建相机
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      mountRef.current.clientWidth / mountRef.current.clientHeight,
+      0.1,
+      1000
+    );
+    camera.position.set(10, 10, 10);
+    camera.lookAt(0, 0, 0);
+    cameraRef.current = camera;
+
+    // 创建渲染器
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    rendererRef.current = renderer;
+
+    // 添加光源
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 10, 5);
+    directionalLight.castShadow = true;
+    scene.add(directionalLight);
+
+    // 添加地面
+    const groundGeometry = new THREE.PlaneGeometry(20, 20);
+    const groundMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // 添加网格辅助线
+    const gridHelper = new THREE.GridHelper(20, 20, 0x888888, 0xcccccc);
+    scene.add(gridHelper);
+
+    // 添加坐标轴辅助线
+    const axesHelper = new THREE.AxesHelper(5);
+    scene.add(axesHelper);
+
+    mountRef.current.appendChild(renderer.domElement);
+
+    // 渲染循环
+    const animate = () => {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    };
+    animate();
+
+    // 处理窗口大小变化
+    const handleResize = () => {
+      if (!mountRef.current || !camera || !renderer) return;
+      camera.aspect = mountRef.current.clientWidth / mountRef.current.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (mountRef.current && renderer.domElement) {
+        mountRef.current.removeChild(renderer.domElement);
+      }
+      renderer.dispose();
+    };
+  }, []);
+
+  // 更新墙体3D模型
+  useEffect(() => {
+    if (!sceneRef.current) return;
+
+    // 清除现有墙体
+    wallMeshesRef.current.forEach((mesh) => {
+      sceneRef.current!.remove(mesh);
+    });
+    wallMeshesRef.current.clear();
+
+    // 创建新的墙体
+    walls.forEach((wall) => {
+      if (wall.points.length < 2) return;
+
+      for (let i = 0; i < wall.points.length - 1; i++) {
+        const start = wall.points[i];
+        const end = wall.points[i + 1];
+
+        // 计算墙体长度和角度
+        const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)) / 100; // 转换为米
+        const angle = Math.atan2(end.y - start.y, end.x - start.x);
+
+        // 创建墙体几何体
+        const geometry = new THREE.BoxGeometry(
+          length,
+          selectedWall3DProps.height,
+          selectedWall3DProps.thickness
+        );
+
+        // 创建墙体材质
+        const material = new THREE.MeshLambertMaterial({
+          color: selectedWall3DProps.color,
+          transparent: true,
+          opacity: selectedWall3DProps.opacity
+        });
+
+        // 创建墙体网格
+        const mesh = new THREE.Mesh(geometry, material);
+        
+        // 设置墙体位置和旋转
+        const centerX = (start.x + end.x) / 2 / 100; // 转换为米
+        const centerY = selectedWall3DProps.height / 2;
+        const centerZ = (start.y + end.y) / 2 / 100; // 转换为米
+
+        mesh.position.set(centerX, centerY, centerZ);
+        mesh.rotation.y = angle;
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+
+        // 添加点击事件
+        mesh.userData = { wallId: wall.id, segmentIndex: i };
+
+        sceneRef.current!.add(mesh);
+        wallMeshesRef.current.set(`${wall.id}-${i}`, mesh);
+      }
+    });
+  }, [walls, selectedWall3DProps]);
+
+  return (
+    <div
+      ref={mountRef}
+      style={{
+        ...style,
+        backgroundColor: '#f5f5f5'
+      }}
+    />
+  );
+};
 
 // 模拟产品模型数据
 const mockProductModels: ProductModel[] = [
@@ -324,6 +495,21 @@ const DigitalTwinEditor: React.FC = () => {
   const [allPanelsVisible, setAllPanelsVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // 视图模式状态
+  const [viewMode, setViewMode] = useState<'top' | 'perspective'>('top');
+  
+  // 选中墙体的3D属性状态
+  const [selectedWall3DProps, setSelectedWall3DProps] = useState({
+    width: 3, // X轴长度，单位：米
+    thickness: 0.2, // Y轴厚度，单位：米
+    height: 2.8, // Z轴高度，单位：米
+    color: '#cccccc', // 墙体颜色
+    opacity: 1.0 // 透明度
+  });
+
+  // 选中墙体状态
+  const [selectedWallId, setSelectedWallId] = useState<string | null>(null);
+
   // 画布相关状态
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scale, setScale] = useState(1);
@@ -434,63 +620,8 @@ const DigitalTwinEditor: React.FC = () => {
     }
   ]);
 
-  // 墙体相关状态 - 添加示例墙体数据用于测试
-  const [walls, setWalls] = useState<Wall[]>([
-    {
-      id: 'wall-demo-1',
-      type: 'line',
-      points: [
-        { x: 200, y: 200 },
-        { x: 400, y: 200 }
-      ],
-      thickness: 10,
-      color: '#333333',
-      completed: true,
-      width: 10,
-      height: 300
-    },
-    {
-      id: 'wall-demo-2',
-      type: 'line',
-      points: [
-        { x: 400, y: 200 },
-        { x: 400, y: 350 }
-      ],
-      thickness: 10,
-      color: '#333333',
-      completed: true,
-      width: 10,
-      height: 300
-    },
-    {
-      id: 'wall-demo-3',
-      type: 'line',
-      points: [
-        { x: 400, y: 350 },
-        { x: 200, y: 350 }
-      ],
-      thickness: 10,
-      color: '#333333',
-      completed: true,
-      width: 10,
-      height: 300
-    },
-    {
-      id: 'wall-demo-bezier-1',
-      type: 'bezier',
-      points: [
-        { x: 500, y: 200 },  // 起点
-        { x: 550, y: 150 },  // 控制点1
-        { x: 650, y: 150 },  // 控制点2
-        { x: 700, y: 200 }   // 终点
-      ],
-      thickness: 10,
-      color: '#ff4d4f',
-      completed: true,
-      width: 10,
-      height: 300
-    }
-  ]);
+  // 墙体相关状态 - 初始化为空数组
+  const [walls, setWalls] = useState<Wall[]>([]);
   const [currentWall, setCurrentWall] = useState<Wall | null>(null);
   const [isDrawingWall, setIsDrawingWall] = useState(false);
   const [wallStyle, setWallStyle] = useState({
@@ -615,6 +746,60 @@ const DigitalTwinEditor: React.FC = () => {
     }
   };
 
+  // 墙体选择处理函数
+  const handleWallSelect = (wallId: string) => {
+    setSelectedWallId(wallId);
+    
+    // 查找选中的墙体并更新3D属性面板
+    const selectedWall = walls.find(wall => wall.id === wallId);
+    if (selectedWall) {
+      setSelectedWall3DProps({
+        width: selectedWall.width || 3,
+        thickness: (selectedWall.thickness || 20) / 100, // 转换为米，默认20像素
+        height: (selectedWall.height || 280) / 100, // 转换为米，默认280像素
+        color: selectedWall.color || '#cccccc',
+        opacity: 1.0
+      });
+    }
+  };
+
+  // 应用3D设置到选中墙体
+  const applyWall3DSettings = () => {
+    if (!selectedWallId) {
+      message.warning('请先选择一个墙体');
+      return;
+    }
+
+    setWalls(prevWalls => 
+      prevWalls.map(wall => {
+        if (wall.id === selectedWallId) {
+          return {
+            ...wall,
+            width: selectedWall3DProps.width,
+            thickness: selectedWall3DProps.thickness * 100, // 转换为像素
+            height: selectedWall3DProps.height * 100, // 转换为像素
+            color: selectedWall3DProps.color
+          };
+        }
+        return wall;
+      })
+    );
+
+    message.success('墙体属性已更新');
+  };
+
+  // 重置3D设置
+  const resetWall3DSettings = () => {
+    setSelectedWall3DProps({
+      width: 3,
+      thickness: 0.2,
+      height: 2.8,
+      color: '#cccccc',
+      opacity: 1.0
+    });
+    message.info('设置已重置');
+  };
+
   // 重置视图
   const resetView = () => {
     setScale(1);
@@ -622,16 +807,21 @@ const DigitalTwinEditor: React.FC = () => {
     setOffsetY(0);
   };
 
-  // 顶视图
+  // 顶视图 - 切换到顶视图模式
   const handleTopView = () => {
-    // 实现顶视图逻辑
+    setViewMode('top');
     resetView();
+    message.success('已切换到顶视图编辑器');
   };
 
-  // 正视图
+  // 正视图 - 切换到透视图模式
   const handleFrontView = () => {
-    // 实现正视图逻辑
-    resetView();
+    setViewMode(viewMode === 'top' ? 'perspective' : 'top');
+    if (viewMode === 'top') {
+      message.success('已切换到透视图编辑器');
+    } else {
+      message.success('已切换到顶视图编辑器');
+    }
   };
 
   // 返回数字孪生页面
@@ -2572,51 +2762,60 @@ const DigitalTwinEditor: React.FC = () => {
     // 清空画布
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 绘制网格
-    ctx.save();
-    ctx.translate(offsetX, offsetY);
-    ctx.scale(scale, scale);
+    // 绘制网格（仅在顶视图模式下显示）
+    if (viewMode === 'top') {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
 
-    // 绘制网格线
-    const gridSize = 20;
-    ctx.strokeStyle = '#e0e0e0';
-    ctx.lineWidth = 1 / scale;
+      // 绘制网格线
+      const gridSize = 20;
+      ctx.strokeStyle = '#cccccc'; // 使用更明显的灰色
+      ctx.lineWidth = Math.max(1 / scale, 0.5); // 确保最小线宽
 
-    // 计算当前视口在世界坐标系中的范围
-    const viewLeft = -offsetX / scale;
-    const viewTop = -offsetY / scale;
-    const viewRight = (displayWidth - offsetX) / scale;
-    const viewBottom = (displayHeight - offsetY) / scale;
+      // 计算当前视口在世界坐标系中的范围
+      const viewLeft = -offsetX / scale;
+      const viewTop = -offsetY / scale;
+      const viewRight = (displayWidth - offsetX) / scale;
+      const viewBottom = (displayHeight - offsetY) / scale;
 
-    // 计算网格线的起始和结束位置，确保覆盖整个视口
-    const startX = Math.floor(viewLeft / gridSize) * gridSize;
-    const endX = Math.ceil(viewRight / gridSize) * gridSize;
-    const startY = Math.floor(viewTop / gridSize) * gridSize;
-    const endY = Math.ceil(viewBottom / gridSize) * gridSize;
+      // 计算网格线的起始和结束位置，确保覆盖整个视口
+      const startX = Math.floor(viewLeft / gridSize) * gridSize;
+      const endX = Math.ceil(viewRight / gridSize) * gridSize;
+      const startY = Math.floor(viewTop / gridSize) * gridSize;
+      const endY = Math.ceil(viewBottom / gridSize) * gridSize;
 
-    // 绘制垂直网格线
-    for (let x = startX; x <= endX; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, startY);
-      ctx.lineTo(x, endY);
-      ctx.stroke();
-    }
+      // 绘制垂直网格线
+      for (let x = startX; x <= endX; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, startY);
+        ctx.lineTo(x, endY);
+        ctx.stroke();
+      }
 
-    // 绘制水平网格线
-    for (let y = startY; y <= endY; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(startX, y);
-      ctx.lineTo(endX, y);
-      ctx.stroke();
-    }
+      // 绘制水平网格线
+       for (let y = startY; y <= endY; y += gridSize) {
+         ctx.beginPath();
+         ctx.moveTo(startX, y);
+         ctx.lineTo(endX, y);
+         ctx.stroke();
+       }
+       
+       ctx.restore();
+     }
 
-    // 绘制已完成的墙体
-    walls.forEach(wall => {
-      if (wall.points.length >= 2) {
-        ctx.strokeStyle = wall.color;
-        ctx.lineWidth = wall.thickness / scale;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+    // 绘制已完成的墙体（仅在顶视图模式下显示）
+    if (viewMode === 'top') {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+      
+      walls.forEach(wall => {
+        if (wall.points.length >= 2) {
+          ctx.strokeStyle = wall.color;
+          ctx.lineWidth = wall.thickness / scale;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
 
         if (wall.type === 'line') {
           // 检查直线墙体是否有任何线段被选中
@@ -3163,6 +3362,9 @@ const DigitalTwinEditor: React.FC = () => {
       }
     });
 
+    ctx.restore();
+  }
+
     // 绘制框选区域
     if (isSelecting && selectionStart && selectionEnd) {
       ctx.save();
@@ -3272,91 +3474,15 @@ const DigitalTwinEditor: React.FC = () => {
       ctx.restore();
     }
 
-    // 绘制绘制状态提示（在世界坐标系外绘制）
-    if (isDrawingWall || bezierDrawingState.phase !== 'idle' || bezierEditMode.isEditing) {
-      const activeTool = getActiveTool();
-      if (activeTool || bezierEditMode.isEditing) {
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0); // 重置变换矩阵
-        
-        // 绘制提示背景
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-        let bgHeight = 85;
-        if (bezierDrawingState.phase !== 'idle') {
-          bgHeight = 120;
-        } else if (bezierEditMode.isEditing) {
-          bgHeight = 100;
-        }
-        ctx.fillRect(10, 10, 300, bgHeight);
-        
-        // 绘制提示文字
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '12px Arial';
-        
-        if (bezierEditMode.isEditing) {
-          // 贝塞尔曲线编辑模式提示
-          ctx.fillText('贝塞尔曲线编辑模式', 20, 30);
-          ctx.fillText('拖拽蓝色控制点调整曲线形状', 20, 50);
-          ctx.fillText('双击其他曲线切换编辑对象', 20, 70);
-          ctx.fillText('Escape: 退出编辑模式', 20, 90);
-        } else if (activeTool) {
-          ctx.fillText(`绘制模式: ${activeTool.name}`, 20, 30);
-          
-          // 根据工具类型显示不同的提示
-          if (activeTool.subType === 'line') {
-            if (currentWall && currentWall.points.length === 1) {
-              ctx.fillText('点击第二个点完成直线', 20, 50);
-            } else {
-              ctx.fillText('点击第一个点开始绘制', 20, 50);
-            }
-            ctx.fillText('Escape: 取消绘制', 20, 70);
-          } else if (activeTool.subType === 'bezier') {
-            // 贝塞尔曲线绘制提示（两点绘制模式）
-            if (bezierDrawingState.phase === 'idle') {
-              ctx.fillText('点击设置起点', 20, 50);
-            } else if (bezierDrawingState.phase === 'drawing') {
-              if (!bezierDrawingState.startPoint) {
-                ctx.fillText('点击设置起点', 20, 50);
-              } else {
-                ctx.fillText('点击设置终点（自动生成曲线）', 20, 50);
-              }
-            }
-            ctx.fillText('Escape: 取消绘制', 20, 70);
-          } else {
-            ctx.fillText('Enter: 完成绘制', 20, 50);
-            ctx.fillText('Escape: 取消绘制', 20, 70);
-          }
-        }
-        
-        ctx.restore();
-      }
-    }
+
     
-    // 绘制选择模式提示
-    const activeTool = getActiveTool();
-    if (activeTool && activeTool.type === 'select') {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0); // 重置变换矩阵
-      
-      // 绘制提示背景
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-      ctx.fillRect(10, 90, 220, 70);
-      
-      // 绘制提示文字
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '12px Arial';
-      ctx.fillText('选择模式: 点击选择墙体', 20, 110);
-      ctx.fillText('拖拽: 框选多个墙体', 20, 130);
-      ctx.fillText('拖拽端点: 移动墙体端点', 20, 145);
-      
-      ctx.restore();
-    }
+
   }, [scale, offsetX, offsetY, walls, currentWall, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState]);
 
   // 画布初始化和重绘
   useEffect(() => {
     drawCanvas();
-  }, [scale, offsetX, offsetY, walls, currentWall, mousePosition, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, drawCanvas]);
+  }, [scale, offsetX, offsetY, walls, currentWall, mousePosition, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, drawCanvas, viewMode]);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -3383,29 +3509,287 @@ const DigitalTwinEditor: React.FC = () => {
       overflow: 'hidden',
       zIndex: 1
     }}>
-      {/* 画布 */}
-      <canvas
-        ref={canvasRef}
-        style={{
+      {/* 顶视图画布 */}
+          {viewMode === 'top' && (
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: leftPanelVisible ? '240px' : '0',
+            right: rightPanelVisible ? '240px' : '0',
+            width: leftPanelVisible && rightPanelVisible ? 'calc(100% - 480px)' : 
+                   leftPanelVisible || rightPanelVisible ? 'calc(100% - 240px)' : '100%',
+            height: '100%',
+            cursor: isDragging ? 'grabbing' : 'grab',
+            backgroundColor: '#f5f5f5',
+            display: 'block',
+            zIndex: 5
+          }}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onDoubleClick={handleCanvasDoubleClick}
+          onWheel={handleWheel}
+        />
+      )}
+
+      {/* 透视图编辑器 */}
+          {viewMode === 'perspective' && (
+        <ThreeDEditor
+          walls={walls}
+          selectedWall3DProps={selectedWall3DProps}
+          onWallSelect={handleWallSelect}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: leftPanelVisible ? '240px' : '0',
+            right: rightPanelVisible ? '240px' : '0',
+            width: leftPanelVisible && rightPanelVisible ? 'calc(100% - 480px)' : 
+                   leftPanelVisible || rightPanelVisible ? 'calc(100% - 240px)' : '100%',
+            height: '100%',
+            zIndex: 5
+          }}
+        />
+      )}
+
+      {/* 透视图模式下的右侧墙体设置面板 */}
+      {viewMode === 'perspective' && (
+        <div style={{
           position: 'absolute',
-          top: 0,
-          left: leftPanelVisible ? '240px' : '0',
-          right: rightPanelVisible ? '240px' : '0',
-          width: leftPanelVisible && rightPanelVisible ? 'calc(100% - 480px)' : 
-                 leftPanelVisible || rightPanelVisible ? 'calc(100% - 240px)' : '100%',
-          height: '100%',
-          cursor: isDragging ? 'grabbing' : 'grab',
-          backgroundColor: '#f5f5f5',
-          display: 'block',
-          zIndex: 5
-        }}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onDoubleClick={handleCanvasDoubleClick}
-        onWheel={handleWheel}
-      />
+          top: '20px',
+          right: '20px',
+          width: '280px',
+          background: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: '12px',
+          padding: '20px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          zIndex: 15,
+          maxHeight: 'calc(100vh - 40px)',
+          overflowY: 'auto'
+        }}>
+          <div style={{
+            fontSize: '16px',
+            fontWeight: 600,
+            marginBottom: '20px',
+            color: '#1f2937',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <SettingOutlined style={{ color: '#1890ff' }} />
+            墙体属性设置
+          </div>
+
+          {/* 墙体尺寸设置 */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ 
+              fontSize: '14px', 
+              fontWeight: 500, 
+              marginBottom: '12px',
+              color: '#374151'
+            }}>
+              尺寸设置
+            </div>
+            
+            {/* 宽度滑块 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>宽度 (X轴)</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {selectedWall3DProps.width.toFixed(1)}m
+                </span>
+              </div>
+              <Slider
+                 min={0.1}
+                 max={10}
+                 step={0.1}
+                 value={selectedWall3DProps.width}
+                 onChange={(value) => setSelectedWall3DProps(prev => ({ ...prev, width: value || 0.1 }))}
+                 tooltip={{ formatter: (value) => `${value}m` }}
+               />
+            </div>
+
+            {/* 厚度滑块 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>厚度 (Y轴)</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {selectedWall3DProps.thickness.toFixed(2)}m
+                </span>
+              </div>
+              <Slider
+                 min={0.05}
+                 max={1}
+                 step={0.01}
+                 value={selectedWall3DProps.thickness}
+                 onChange={(value) => setSelectedWall3DProps(prev => ({ ...prev, thickness: value || 0.05 }))}
+                 tooltip={{ formatter: (value) => `${value}m` }}
+               />
+            </div>
+
+            {/* 高度滑块 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>高度 (Z轴)</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {selectedWall3DProps.height.toFixed(1)}m
+                </span>
+              </div>
+              <Slider
+                 min={0.5}
+                 max={8}
+                 step={0.1}
+                 value={selectedWall3DProps.height}
+                 onChange={(value) => setSelectedWall3DProps(prev => ({ ...prev, height: value || 0.5 }))}
+                 tooltip={{ formatter: (value) => `${value}m` }}
+               />
+            </div>
+          </div>
+
+          {/* 外观设置 */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ 
+              fontSize: '14px', 
+              fontWeight: 500, 
+              marginBottom: '12px',
+              color: '#374151'
+            }}>
+              外观设置
+            </div>
+            
+            {/* 颜色选择器 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                fontSize: '13px', 
+                color: '#6b7280',
+                marginBottom: '8px'
+              }}>
+                墙体颜色
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                {['#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#6b7280', '#1f2937', '#ffffff'].map(color => (
+                  <div
+                    key={color}
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      backgroundColor: color,
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      border: selectedWall3DProps.color === color ? '3px solid #1890ff' : '2px solid #e5e7eb',
+                      boxSizing: 'border-box',
+                      transition: 'all 0.2s ease',
+                      boxShadow: color === '#ffffff' ? 'inset 0 0 0 1px #e5e7eb' : 'none'
+                    }}
+                    onClick={() => setSelectedWall3DProps(prev => ({ ...prev, color }))}
+                  />
+                ))}
+              </div>
+              <ColorPicker
+                value={selectedWall3DProps.color}
+                onChange={(color) => setSelectedWall3DProps(prev => ({ ...prev, color: color.toHexString() }))}
+                showText
+                size="small"
+                style={{ width: '100%' }}
+              />
+            </div>
+
+            {/* 透明度滑块 */}
+            <div>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>透明度</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {Math.round(selectedWall3DProps.opacity * 100)}%
+                </span>
+              </div>
+              <Slider
+                 min={0.1}
+                 max={1}
+                 step={0.05}
+                 value={selectedWall3DProps.opacity}
+                 onChange={(value) => setSelectedWall3DProps(prev => ({ ...prev, opacity: value || 0.1 }))}
+                 tooltip={{ formatter: (value) => `${Math.round((value || 0) * 100)}%` }}
+               />
+            </div>
+          </div>
+
+          {/* 操作按钮 */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '8px',
+            borderTop: '1px solid #e5e7eb',
+            paddingTop: '16px'
+          }}>
+            <Button 
+              type="primary" 
+              size="small"
+              style={{ flex: 1 }}
+              onClick={applyWall3DSettings}
+              disabled={!selectedWallId}
+            >
+              应用设置
+            </Button>
+            <Button 
+              size="small"
+              onClick={resetWall3DSettings}
+            >
+              重置
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* 中间悬浮控制栏 */}
       <div style={{
@@ -3493,7 +3877,7 @@ const DigitalTwinEditor: React.FC = () => {
               borderRadius: '4px'
             }}
           >
-            正视图
+            透视图
           </Button>
           <Button 
             icon={allPanelsVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
@@ -3527,7 +3911,7 @@ const DigitalTwinEditor: React.FC = () => {
       </div>
 
       {/* 左侧产品模型管理面板 */}
-      {leftPanelVisible && (
+      {leftPanelVisible && viewMode === 'top' && (
         <div style={{
           position: 'absolute',
           top: '0',
@@ -3624,7 +4008,7 @@ const DigitalTwinEditor: React.FC = () => {
       )}
 
       {/* 楼层切换和设置按钮组 */}
-      {rightPanelVisible && (
+      {rightPanelVisible && viewMode === 'top' && (
         <div style={{
           position: 'absolute',
           top: '50%',
@@ -3741,7 +4125,7 @@ const DigitalTwinEditor: React.FC = () => {
       )}
 
       {/* 右侧绘图工具面板 */}
-      {rightPanelVisible && (
+      {rightPanelVisible && viewMode === 'top' && (
         <div style={{
           position: 'absolute',
           top: '0',
