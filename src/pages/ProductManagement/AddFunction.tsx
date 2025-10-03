@@ -1571,7 +1571,7 @@ const AddFunction: React.FC<AddFunctionProps> = ({ visible, onClose, onSave, pro
       form={form}
       layout="vertical"
       preserve={true}
-      onValuesChange={(changedValues: any, allValues: any) => {
+      onValuesChange={(changedValues: any, _: any) => {
         if (changedValues.functionType) {
           setCurrentFunctionType(changedValues.functionType);
         }

@@ -26,7 +26,6 @@ import {
   CopyOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 
@@ -76,7 +75,7 @@ const ProductForm = React.forwardRef<
     onFinish: (values: any) => void,
     loading: boolean
   }
->(({ editingProduct, onFinish, loading }, ref) => {
+>(({ editingProduct, onFinish }, ref) => {
   const [form] = Form.useForm();
 
   // 当编辑产品变化时，设置表单值
@@ -811,7 +810,6 @@ const ProductManagement: React.FC = () => {
   ]);
 
   const productTypes = ['机器人产品', '生产产品', '虚拟产品', '电梯产品', '自动门产品'];
-  const protocols = ['http', 'Mqtt', 'modbus_tcp', '墨影采集卡', '墨影机器人'];
 
   // 筛选数据并按更新时间倒序排序
   const filteredProducts = products

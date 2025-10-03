@@ -16,7 +16,7 @@ const PropertyForm: React.FC<{
   elementData: any;
   onSave: (values: any) => void;
   onClose: () => void;
-}> = ({ elementType, elementData, onSave, onClose }) => {
+}> = ({ elementType, elementData }) => {
   const [form] = Form.useForm();
 
   // 根据元素类型设置表单初始值
@@ -26,19 +26,7 @@ const PropertyForm: React.FC<{
     }
   }, [elementData, form]);
 
-  // 处理表单提交
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields();
-      onSave(values);
-      onClose();
-    } catch (error) {
-      // 开发环境下输出调试信息，Ant Design会自动显示表单验证错误
-      if (process.env.NODE_ENV === 'development') {
-        console.error('表单验证失败:', error);
-      }
-    }
-  };
+
 
   // 渲染点属性表单
   const renderPointForm = () => {

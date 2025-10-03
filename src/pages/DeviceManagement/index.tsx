@@ -33,7 +33,6 @@ import {
   EnvironmentOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { isDev } from '@/lib/utils';
 
 const { Option } = Select;
 
@@ -74,7 +73,7 @@ interface DeviceFormProps {
 
 // 内部DeviceForm组件
 const DeviceForm = React.forwardRef<{ validateAndSubmit: () => void }, DeviceFormProps>(
-  ({ form, editingDevice, onFinish, loading, productNames, deviceTypeOptions, statusOptions, devices, selectedDeviceType, getDeviceTypeByProduct }, ref) => {
+  ({ form, editingDevice, onFinish, productNames, deviceTypeOptions, statusOptions, devices, selectedDeviceType, getDeviceTypeByProduct }, ref) => {
     const [formValues, setFormValues] = React.useState<any>({});
     
     // 使用状态来跟踪表单值，避免useWatch的连接问题
@@ -119,7 +118,7 @@ const DeviceForm = React.forwardRef<{ validateAndSubmit: () => void }, DeviceFor
       <Form
         form={form}
         layout="vertical"
-        onValuesChange={(changedValues: any, allValues: any) => {
+        onValuesChange={(_: any, allValues: any) => {
           setFormValues(allValues);
         }}
       >
