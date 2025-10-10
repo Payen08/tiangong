@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button, Select, Space, Typography, Input, List, Card, Divider, Modal, Form, message, Row, Col, Slider, ColorPicker } from 'antd';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import {
   ReloadOutlined,
   EyeInvisibleOutlined,
@@ -24,6 +25,16 @@ import {
   LineOutlined,
   BgColorsOutlined,
   SelectOutlined,
+  AlignLeftOutlined,
+  AlignRightOutlined,
+  AlignCenterOutlined,
+  VerticalAlignMiddleOutlined,
+  VerticalAlignBottomOutlined,
+  DragOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
+  UndoOutlined,
+  RedoOutlined,
 } from '@ant-design/icons';
 
 const { Text } = Typography;
@@ -33,9 +44,22 @@ const { Option } = Select;
 interface ProductModel {
   id: string;
   name: string;
-  type: 'wall' | 'door' | 'column' | 'floor' | 'equipment';
+  type: 'wall' | 'door' | 'column' | 'floor' | 'equipment' | 'cnc';
   icon: React.ReactNode;
   description: string;
+}
+
+// CNC机台模型接口
+interface CNCMachine {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name: string;
+  type: 'cnc';
+  color: string;
+  selected?: boolean;
 }
 
 // 绘图工具类型定义
@@ -155,14 +179,46 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, selectedWall3DProps,
   const sceneRef = useRef<THREE.Scene>();
   const rendererRef = useRef<THREE.WebGLRenderer>();
   const cameraRef = useRef<THREE.PerspectiveCamera>();
+  const controlsRef = useRef<OrbitControls>();
   const wallMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  
+  // 键盘控制状态
+  const [keys, setKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!mountRef.current) return;
 
     // 创建场景
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf5f5f5);
+    
+    // 创建优雅的景深背景
+    const createDepthBackground = () => {
+      // 创建渐变背景纹理
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const context = canvas.getContext('2d')!;
+      
+      // 创建垂直渐变 - 从天空到地平线
+      const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, '#e8f4f8');    // 淡蓝天空
+      gradient.addColorStop(0.4, '#f0f6f8');  // 浅蓝过渡
+      gradient.addColorStop(0.7, '#f8f8f8');  // 接近白色
+      gradient.addColorStop(1, '#f5f5f5');    // 原始背景色
+      
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // 设置为场景背景
+      const texture = new THREE.CanvasTexture(canvas);
+      scene.background = texture;
+    };
+    
+    createDepthBackground();
+    
+    // 添加轻微雾化效果增强远景
+    scene.fog = new THREE.Fog(0xf5f5f5, 15, 60);
+    
     sceneRef.current = scene;
 
     // 创建相机
@@ -183,36 +239,111 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, selectedWall3DProps,
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     rendererRef.current = renderer;
 
-    // 添加光源
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    // 优化光照系统 - 营造空间感
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(10, 10, 5);
+    // 主方向光 - 模拟自然光照
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    directionalLight.position.set(15, 15, 8);
     directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 1024;
+    directionalLight.shadow.mapSize.height = 1024;
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 50;
     scene.add(directionalLight);
+    
+    // 添加微妙的填充光
+    const fillLight = new THREE.DirectionalLight(0xe8f4f8, 0.3);
+    fillLight.position.set(-10, 5, -5);
+    scene.add(fillLight);
 
-    // 添加地面
-    const groundGeometry = new THREE.PlaneGeometry(20, 20);
-    const groundMaterial = new THREE.MeshLambertMaterial({ color: 0xffffff });
+    // 添加优化地面 - 微妙的层次感
+    const groundGeometry = new THREE.PlaneGeometry(30, 30, 16, 16);
+    
+    // 创建地面渐变纹理
+    const createGroundTexture = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256;
+      canvas.height = 256;
+      const context = canvas.getContext('2d')!;
+      
+      // 创建径向渐变 - 中心稍亮，边缘稍暗
+      const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
+      gradient.addColorStop(0, '#ffffff');    // 中心白色
+      gradient.addColorStop(0.6, '#fafafa');  // 中间区域
+      gradient.addColorStop(1, '#f0f0f0');    // 边缘稍暗
+      
+      context.fillStyle = gradient;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      
+      return new THREE.CanvasTexture(canvas);
+    };
+    
+    const groundTexture = createGroundTexture();
+    groundTexture.wrapS = THREE.RepeatWrapping;
+    groundTexture.wrapT = THREE.RepeatWrapping;
+    groundTexture.repeat.set(1, 1);
+    
+    const groundMaterial = new THREE.MeshLambertMaterial({ 
+      map: groundTexture,
+      color: 0xffffff
+    });
+    
     const ground = new THREE.Mesh(groundGeometry, groundMaterial);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // 添加网格辅助线
-    const gridHelper = new THREE.GridHelper(20, 20, 0x888888, 0xcccccc);
+    // 添加优化网格辅助线 - 配合景深效果
+    const gridHelper = new THREE.GridHelper(30, 30, 0x999999, 0xdddddd);
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.5;
     scene.add(gridHelper);
 
     // 添加坐标轴辅助线
     const axesHelper = new THREE.AxesHelper(5);
     scene.add(axesHelper);
 
+    // 添加坐标轴标签的函数
+    const addAxisLabel = (text: string, position: THREE.Vector3, color: number) => {
+      // 创建文字纹理
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d')!;
+      canvas.width = 64;
+      canvas.height = 64;
+      
+      context.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+      context.font = 'Bold 32px Arial';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.fillText(text, 32, 32);
+      
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({ map: texture });
+      const sprite = new THREE.Sprite(material);
+      
+      sprite.position.copy(position);
+      sprite.scale.set(0.5, 0.5, 1);
+      scene.add(sprite);
+    };
+
+    // 添加X、Y、Z轴标签
+    addAxisLabel('X', new THREE.Vector3(5.5, 0, 0), 0xff0000); // 红色 X 轴
+    addAxisLabel('Y', new THREE.Vector3(0, 5.5, 0), 0x00ff00); // 绿色 Y 轴
+    addAxisLabel('Z', new THREE.Vector3(0, 0, 5.5), 0x0000ff); // 蓝色 Z 轴
+
     mountRef.current.appendChild(renderer.domElement);
 
     // 渲染循环
     const animate = () => {
       requestAnimationFrame(animate);
+      
+      // 更新OrbitControls
+      if (controlsRef.current) {
+        controlsRef.current.update();
+      }
+      
       renderer.render(scene, camera);
     };
     animate();
@@ -225,16 +356,308 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, selectedWall3DProps,
       renderer.setSize(mountRef.current.clientWidth, mountRef.current.clientHeight);
     };
 
+
+
+    // 键盘事件处理
+    const handleKeyDown = (event: KeyboardEvent) => {
+      setKeys(prev => new Set(prev).add(event.key.toLowerCase()));
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      setKeys(prev => {
+        const newKeys = new Set(prev);
+        newKeys.delete(event.key.toLowerCase());
+        return newKeys;
+      });
+    };
+
+    // 键盘移动处理 - 暂时禁用，将由OrbitControls处理
+    const handleKeyboardMovement = () => {
+      // 键盘移动功能将由OrbitControls处理
+    };
+
+    // 初始化OrbitControls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; // 启用阻尼效果
+    controls.dampingFactor = 0.05; // 阻尼系数
+    controls.screenSpacePanning = false; // 禁用屏幕空间平移
+    controls.minDistance = 1; // 最小距离
+    controls.maxDistance = 100; // 最大距离
+    controls.maxPolarAngle = Math.PI / 2; // 最大极角（防止相机翻转到地面以下）
+    
+    // 设置初始相机位置和目标
+    camera.position.set(10, 10, 10);
+    controls.target.set(0, 0, 0);
+    controls.update();
+    
+    controlsRef.current = controls;
+
+    // 设置键盘移动循环
+    const keyboardInterval = setInterval(handleKeyboardMovement, 16); // 60fps
+
+    // 添加事件监听器
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('resize', handleResize);
 
     return () => {
+      clearInterval(keyboardInterval);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('resize', handleResize);
+      
+      // 销毁OrbitControls
+      if (controlsRef.current) {
+        controlsRef.current.dispose();
+      }
+      
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
       }
       renderer.dispose();
     };
   }, []);
+
+  // 相机位置更新将由OrbitControls自动处理
+
+  // 创建统一的闭合墙体（使用BufferGeometry精确构建）
+  const createUnifiedClosedWall = (
+    wall: Wall, 
+    props: typeof selectedWall3DProps, 
+    scene: THREE.Scene, 
+    meshMap: Map<string, THREE.Mesh>
+  ) => {
+    const points = wall.points;
+    if (points.length < 3) return;
+
+    // 计算墙体厚度的一半
+    const halfThickness = props.thickness / 2;
+    const height = props.height;
+    
+    // 创建外轮廓和内轮廓顶点
+    const outerVertices: THREE.Vector3[] = [];
+    const innerVertices: THREE.Vector3[] = [];
+    
+    // 计算每个点的精确偏移位置
+    for (let i = 0; i < points.length; i++) {
+      const current = points[i];
+      const prev = points[(i - 1 + points.length) % points.length];
+      const next = points[(i + 1) % points.length];
+      
+      // 转换为3D坐标系（Y轴向上）
+      const currentPos = new THREE.Vector3(current.x / 100, 0, -current.y / 100);
+      const prevPos = new THREE.Vector3(prev.x / 100, 0, -prev.y / 100);
+      const nextPos = new THREE.Vector3(next.x / 100, 0, -next.y / 100);
+      
+      // 计算前一段和后一段的方向向量
+      const prevDir = new THREE.Vector3().subVectors(currentPos, prevPos).normalize();
+      const nextDir = new THREE.Vector3().subVectors(nextPos, currentPos).normalize();
+      
+      // 计算法向量（垂直于墙体方向）
+      const prevNormal = new THREE.Vector3(-prevDir.z, 0, prevDir.x);
+      const nextNormal = new THREE.Vector3(-nextDir.z, 0, nextDir.x);
+      
+      // 计算角平分线法向量
+      const bisectorNormal = new THREE.Vector3()
+        .addVectors(prevNormal, nextNormal)
+        .normalize();
+      
+      // 计算角度和偏移距离
+      const angle = prevDir.angleTo(nextDir);
+      let offsetDistance = halfThickness;
+      
+      // 对于非直角，使用角平分线算法
+      if (Math.abs(angle) > 0.01) {
+        offsetDistance = halfThickness / Math.sin(Math.max(angle / 2, 0.1));
+        // 限制最大偏移，避免尖角过长
+        offsetDistance = Math.min(offsetDistance, halfThickness * 2);
+      }
+      
+      // 生成外轮廓和内轮廓顶点（底部和顶部）
+      const outerOffset = new THREE.Vector3()
+        .copy(bisectorNormal)
+        .multiplyScalar(offsetDistance);
+      const innerOffset = new THREE.Vector3()
+        .copy(bisectorNormal)
+        .multiplyScalar(-offsetDistance);
+      
+      // 外轮廓顶点（底部和顶部）
+      outerVertices.push(
+        new THREE.Vector3().addVectors(currentPos, outerOffset), // 底部
+        new THREE.Vector3().addVectors(currentPos, outerOffset).setY(height) // 顶部
+      );
+      
+      // 内轮廓顶点（底部和顶部）
+      innerVertices.push(
+        new THREE.Vector3().addVectors(currentPos, innerOffset), // 底部
+        new THREE.Vector3().addVectors(currentPos, innerOffset).setY(height) // 顶部
+      );
+    }
+    
+    // 创建BufferGeometry
+    const geometry = new THREE.BufferGeometry();
+    const vertices: number[] = [];
+    const indices: number[] = [];
+    const normals: number[] = [];
+    
+    // 添加所有顶点
+    const allVertices = [...outerVertices, ...innerVertices];
+    allVertices.forEach(vertex => {
+      vertices.push(vertex.x, vertex.y, vertex.z);
+    });
+    
+    const numPoints = points.length;
+    
+    // 生成外墙面
+    for (let i = 0; i < numPoints; i++) {
+      const next = (i + 1) % numPoints;
+      const baseIdx = i * 2;
+      const nextBaseIdx = next * 2;
+      
+      // 外墙四边形（两个三角形）
+      indices.push(
+        baseIdx, baseIdx + 1, nextBaseIdx,
+        nextBaseIdx, baseIdx + 1, nextBaseIdx + 1
+      );
+      
+      // 计算法向量
+      const normal = new THREE.Vector3(-1, 0, 0); // 外法向量
+      for (let j = 0; j < 6; j++) {
+        normals.push(normal.x, normal.y, normal.z);
+      }
+    }
+    
+    // 生成内墙面
+    const innerOffset = numPoints * 2;
+    for (let i = 0; i < numPoints; i++) {
+      const next = (i + 1) % numPoints;
+      const baseIdx = innerOffset + i * 2;
+      const nextBaseIdx = innerOffset + next * 2;
+      
+      // 内墙四边形（逆序，内法向量）
+      indices.push(
+        baseIdx, nextBaseIdx, baseIdx + 1,
+        nextBaseIdx, nextBaseIdx + 1, baseIdx + 1
+      );
+      
+      // 计算法向量
+      const normal = new THREE.Vector3(1, 0, 0); // 内法向量
+      for (let j = 0; j < 6; j++) {
+        normals.push(normal.x, normal.y, normal.z);
+      }
+    }
+    
+    // 生成顶面和底面
+    // 顶面（外轮廓逆时针，内轮廓顺时针）
+    for (let i = 0; i < numPoints - 2; i++) {
+      // 外轮廓三角扇形
+      indices.push(1, (i + 1) * 2 + 1, (i + 2) * 2 + 1);
+      // 内轮廓三角扇形
+      indices.push(
+        innerOffset + 1, 
+        innerOffset + (i + 2) * 2 + 1, 
+        innerOffset + (i + 1) * 2 + 1
+      );
+    }
+    
+    // 底面（外轮廓顺时针，内轮廓逆时针）
+    for (let i = 0; i < numPoints - 2; i++) {
+      // 外轮廓三角扇形
+      indices.push(0, (i + 2) * 2, (i + 1) * 2);
+      // 内轮廓三角扇形
+      indices.push(
+        innerOffset, 
+        innerOffset + (i + 1) * 2, 
+        innerOffset + (i + 2) * 2
+      );
+    }
+    
+    // 设置几何体属性
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals(); // 自动计算法向量
+    
+    // 创建墙体材质
+    const material = new THREE.MeshLambertMaterial({
+      color: props.color,
+      transparent: true,
+      opacity: props.opacity
+    });
+    
+    // 创建墙体网格
+    const mesh = new THREE.Mesh(geometry, material);
+    
+    // 设置阴影
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    
+    // 设置用户数据
+    mesh.userData = { wallId: wall.id, segmentIndex: 0 };
+    
+    // 添加到场景
+    scene.add(mesh);
+    meshMap.set(`${wall.id}-unified`, mesh);
+  };
+
+  // 创建开放墙体（使用传统分段方法）
+  const createOpenWall = (
+    wall: Wall, 
+    props: typeof selectedWall3DProps, 
+    scene: THREE.Scene, 
+    meshMap: Map<string, THREE.Mesh>
+  ) => {
+    const points = wall.points;
+    
+    for (let i = 0; i < points.length - 1; i++) {
+      const start = points[i];
+      const end = points[i + 1];
+      
+      // 计算墙体段参数
+      const deltaX = end.x - start.x;
+      const deltaY = end.y - start.y;
+      const length2D = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      
+      if (length2D < 5) continue; // 跳过过短的段
+      
+      const length3D = length2D / 100;
+      
+      // 计算中心点和角度
+      const centerX = (start.x + end.x) / 2 / 100;
+      const centerY = props.height / 2;
+      const centerZ = -(start.y + end.y) / 2 / 100;
+      const angle = Math.atan2(deltaX, -deltaY);
+      
+      // 创建墙体几何体
+      const geometry = new THREE.BoxGeometry(
+        props.thickness,
+        props.height,
+        length3D
+      );
+      
+      // 创建材质
+      const material = new THREE.MeshLambertMaterial({
+        color: props.color,
+        transparent: true,
+        opacity: props.opacity
+      });
+      
+      // 创建网格
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(centerX, centerY, centerZ);
+      mesh.rotation.y = angle;
+      
+      // 设置阴影
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      
+      // 设置用户数据
+      mesh.userData = { wallId: wall.id, segmentIndex: i };
+      
+      // 添加到场景
+      scene.add(mesh);
+      meshMap.set(`${wall.id}-${i}`, mesh);
+    }
+  };
 
   // 更新墙体3D模型
   useEffect(() => {
@@ -250,47 +673,29 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, selectedWall3DProps,
     walls.forEach((wall) => {
       if (wall.points.length < 2) return;
 
-      for (let i = 0; i < wall.points.length - 1; i++) {
-        const start = wall.points[i];
-        const end = wall.points[i + 1];
+      // 判断是否为闭合墙体
+      // 方法1：检查首尾点是否相同或非常接近（容差为5像素）
+      const isClosedByPosition = wall.points.length >= 3 && 
+        Math.abs(wall.points[0].x - wall.points[wall.points.length - 1].x) < 5 &&
+        Math.abs(wall.points[0].y - wall.points[wall.points.length - 1].y) < 5;
+      
+      // 方法2：检查是否通过共享端点形成闭合（首尾点共享同一个端点ID）
+      const isClosedBySharedPoint = wall.pointIds && 
+        wall.pointIds.length >= 3 && 
+        wall.pointIds[0] !== null && 
+        wall.pointIds[wall.pointIds.length - 1] !== null &&
+        wall.pointIds[0] === wall.pointIds[wall.pointIds.length - 1];
+      
+      const isClosedWall = isClosedByPosition || isClosedBySharedPoint;
 
-        // 计算墙体长度和角度
-        const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)) / 100; // 转换为米
-        const angle = Math.atan2(end.y - start.y, end.x - start.x);
-
-        // 创建墙体几何体
-        const geometry = new THREE.BoxGeometry(
-          length,
-          selectedWall3DProps.height,
-          selectedWall3DProps.thickness
-        );
-
-        // 创建墙体材质
-        const material = new THREE.MeshLambertMaterial({
-          color: selectedWall3DProps.color,
-          transparent: true,
-          opacity: selectedWall3DProps.opacity
-        });
-
-        // 创建墙体网格
-        const mesh = new THREE.Mesh(geometry, material);
-        
-        // 设置墙体位置和旋转
-        const centerX = (start.x + end.x) / 2 / 100; // 转换为米
-        const centerY = selectedWall3DProps.height / 2;
-        const centerZ = (start.y + end.y) / 2 / 100; // 转换为米
-
-        mesh.position.set(centerX, centerY, centerZ);
-        mesh.rotation.y = angle;
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-
-        // 添加点击事件
-        mesh.userData = { wallId: wall.id, segmentIndex: i };
-
-        sceneRef.current!.add(mesh);
-        wallMeshesRef.current.set(`${wall.id}-${i}`, mesh);
+      if (isClosedWall) {
+        // 对于闭合墙体，使用几何体合并技术创建单一无缝墙体
+        createUnifiedClosedWall(wall, selectedWall3DProps, sceneRef.current!, wallMeshesRef.current);
+      } else {
+        // 对于开放墙体，使用优化的重叠方法
+        createOpenWall(wall, selectedWall3DProps, sceneRef.current!, wallMeshesRef.current);
       }
+ 
     });
   }, [walls, selectedWall3DProps]);
 
@@ -334,6 +739,13 @@ const mockProductModels: ProductModel[] = [
     type: 'floor',
     icon: <BorderInnerOutlined />,
     description: '标准地面模型'
+  },
+  {
+    id: 'cnc-001',
+    name: 'CNC机台',
+    type: 'cnc',
+    icon: <ToolOutlined />,
+    description: 'CNC数控机床设备模型'
   },
 ];
 
@@ -517,6 +929,8 @@ const DigitalTwinEditor: React.FC = () => {
   const [offsetY, setOffsetY] = useState(0);// 画布拖拽状态
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isSpacePressed, setIsSpacePressed] = useState(false); // 空格键状态
+  const [previousCanvasMode, setPreviousCanvasMode] = useState<'select' | 'drag' | null>(null); // 保存空格键按下前的模式
 
   // 获取当前激活的绘图工具
   const getActiveTool = () => {
@@ -714,10 +1128,47 @@ const DigitalTwinEditor: React.FC = () => {
   // 搜索状态
   const [modelSearchText, setModelSearchText] = useState('');
 
+  // CNC机台相关状态
+  const [cncMachines, setCncMachines] = useState<CNCMachine[]>([]);
+  const [isDraggingCNC, setIsDraggingCNC] = useState(false);
+  const [draggedCNCModel, setDraggedCNCModel] = useState<ProductModel | null>(null);
+  const [selectedCNCMachines, setSelectedCNCMachines] = useState<string[]>([]);
+  const selectedCNCMachinesRef = useRef<string[]>([]);
+  
+  // CNC机台拖拽移动状态
+  const [isDraggingCNCMachine, setIsDraggingCNCMachine] = useState(false);
+  const [draggedCNCMachineId, setDraggedCNCMachineId] = useState<string | null>(null);
+  const [dragStartPosition, setDragStartPosition] = useState<{ x: number; y: number } | null>(null);
+
+  // 画布操作工具状态
+  const [canvasOperationMode, setCanvasOperationMode] = useState<'select' | 'drag' | null>(null);
+  const [undoStack, setUndoStack] = useState<any[]>([]);
+  const [redoStack, setRedoStack] = useState<any[]>([]);
+
   // 同步 sharedPoints 状态和 ref
   useEffect(() => {
     sharedPointsRef.current = sharedPoints;
   }, [sharedPoints]);
+
+  // 同步 selectedCNCMachines 状态和 ref
+  useEffect(() => {
+    selectedCNCMachinesRef.current = selectedCNCMachines;
+  }, [selectedCNCMachines]);
+
+  // 监听视图模式变化，透视图模式下自动隐藏面板实现全屏显示
+  useEffect(() => {
+    if (viewMode === 'perspective') {
+      // 透视图模式：隐藏左右面板，实现全屏显示
+      setLeftPanelVisible(false);
+      setRightPanelVisible(false);
+      setAllPanelsVisible(false);
+    } else if (viewMode === 'top') {
+      // 顶视图模式：恢复面板显示
+      setLeftPanelVisible(true);
+      setRightPanelVisible(true);
+      setAllPanelsVisible(true);
+    }
+  }, [viewMode]);
 
   // 面板切换函数
   const toggleLeftPanel = () => {
@@ -829,6 +1280,112 @@ const DigitalTwinEditor: React.FC = () => {
     window.location.href = '/digital-twin';
   };
 
+  // 画布操作工具功能函数
+  // 拖动画布工具
+  const handleCanvasDrag = () => {
+    setCanvasOperationMode(canvasOperationMode === 'drag' ? null : 'drag');
+    message.info(canvasOperationMode === 'drag' ? '已退出拖动模式' : '已进入拖动模式');
+  };
+
+  // 放大画布
+  const handleZoomIn = () => {
+    const newScale = Math.min(scale * 1.2, 3); // 最大放大3倍
+    setScale(newScale);
+    message.info(`画布已放大至 ${Math.round(newScale * 100)}%`);
+  };
+
+  // 缩小画布
+  const handleZoomOut = () => {
+    const newScale = Math.max(scale / 1.2, 0.1); // 最小缩小至10%
+    setScale(newScale);
+    message.info(`画布已缩小至 ${Math.round(newScale * 100)}%`);
+  };
+
+  // 保存当前状态到撤销栈
+  const saveStateToUndoStack = useCallback(() => {
+    const currentState = {
+      walls: [...walls],
+      cncMachines: [...cncMachines],
+      scale,
+      offsetX,
+      offsetY,
+      timestamp: Date.now()
+    };
+    
+    setUndoStack(prev => {
+      const newStack = [...prev, currentState];
+      // 限制撤销栈大小为20
+      return newStack.length > 20 ? newStack.slice(1) : newStack;
+    });
+    
+    // 清空重做栈
+    setRedoStack([]);
+  }, [walls, cncMachines, scale, offsetX, offsetY]);
+
+  // 撤销操作
+  const handleUndo = () => {
+    if (undoStack.length === 0) {
+      message.warning('没有可撤销的操作');
+      return;
+    }
+
+    const currentState = {
+      walls: [...walls],
+      cncMachines: [...cncMachines],
+      scale,
+      offsetX,
+      offsetY,
+      timestamp: Date.now()
+    };
+
+    const previousState = undoStack[undoStack.length - 1];
+    
+    // 恢复状态
+    setWalls(previousState.walls);
+    setCncMachines(previousState.cncMachines);
+    setScale(previousState.scale);
+    setOffsetX(previousState.offsetX);
+    setOffsetY(previousState.offsetY);
+
+    // 更新栈
+    setUndoStack(prev => prev.slice(0, -1));
+    setRedoStack(prev => [...prev, currentState]);
+    
+    message.success('已撤销上一步操作');
+  };
+
+  // 重做操作
+  const handleRedo = () => {
+    if (redoStack.length === 0) {
+      message.warning('没有可重做的操作');
+      return;
+    }
+
+    const currentState = {
+      walls: [...walls],
+      cncMachines: [...cncMachines],
+      scale,
+      offsetX,
+      offsetY,
+      timestamp: Date.now()
+    };
+
+    const nextState = redoStack[redoStack.length - 1];
+    
+    // 恢复状态
+    setWalls(nextState.walls);
+    setCncMachines(nextState.cncMachines);
+    setScale(nextState.scale);
+    setOffsetX(nextState.offsetX);
+    setOffsetY(nextState.offsetY);
+
+    // 更新栈
+    setRedoStack(prev => prev.slice(0, -1));
+    setUndoStack(prev => [...prev, currentState]);
+    
+    message.success('已重做操作');
+  };
+
 
 
   // 取消贝塞尔曲线绘制
@@ -850,12 +1407,15 @@ const DigitalTwinEditor: React.FC = () => {
   // 完成当前墙体绘制
   const finishCurrentWall = useCallback(() => {
     if (currentWall && currentWall.points.length >= 2) {
+      // 保存当前状态到撤销栈
+      saveStateToUndoStack();
+      
       const completedWall = { ...currentWall, completed: true };
       setWalls(prev => [...prev, completedWall]);
     }
     setCurrentWall(null);
     setIsDrawingWall(false);
-  }, [currentWall]);
+  }, [currentWall, saveStateToUndoStack]);
 
   // 取消当前墙体绘制
   const cancelCurrentWall = useCallback(() => {
@@ -872,14 +1432,28 @@ const DigitalTwinEditor: React.FC = () => {
     
     setDrawingTools(prev => prev.map(tool => ({
       ...tool,
-      active: tool.id === toolId ? !tool.active : false
+      active: tool.id === toolId
     })));
   }, [isDrawingWall, finishCurrentWall]);
 
   // 键盘事件处理
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     
-    if (e.key === 'Enter' && isDrawingWall && currentWall) {
+    if (e.key === ' ' && !e.repeat) {
+      // 空格键开始拖动模式（参考地图编辑器）
+      e.preventDefault();
+      if (!isDragging && canvasRef.current && !isSpacePressed) {
+        const canvas = canvasRef.current;
+        canvas.style.cursor = 'grab';
+        
+        // 保存当前画布模式
+        setPreviousCanvasMode(canvasOperationMode);
+        setIsSpacePressed(true);
+        
+        // 临时启用拖动模式
+        setCanvasOperationMode('drag');
+      }
+    } else if (e.key === 'Enter' && isDrawingWall && currentWall) {
       // Enter键完成当前墙体绘制
       finishCurrentWall();
     } else if (e.key === 'Escape') {
@@ -984,6 +1558,9 @@ const DigitalTwinEditor: React.FC = () => {
         deleteSelectedSegments();
       } else if (selectedWalls.length > 0) {
         // Delete/Backspace键删除选中的墙体
+        // 保存当前状态到撤销栈
+        saveStateToUndoStack();
+        
         // 先清理共享端点
         walls.forEach(wall => {
           if (selectedWalls.includes(wall.id) && wall.pointIds) {
@@ -1167,16 +1744,59 @@ const DigitalTwinEditor: React.FC = () => {
         );
         message.info(`已选中 ${allWallIds.length} 个墙体`);
       } else if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-        // 方向键调整选中端点位置
-        console.log('🔍 键盘移动端点 - 方向键触发:', {
+        // 方向键调整选中端点位置或CNC机台位置
+        console.log('🔍 键盘移动 - 方向键触发:', {
           key: e.key,
           selectedEndpointRef: selectedEndpointRef.current,
           selectedEndpoint: selectedEndpoint,
+          selectedCNCMachines: selectedCNCMachines,
           shiftKey: e.shiftKey,
           wallsCount: wallsRef.current.length
         });
         
-        if (selectedEndpointRef.current) {
+        // 优先处理CNC机台移动
+        if (selectedCNCMachinesRef.current.length > 0) {
+          e.preventDefault();
+          const moveDistance = e.shiftKey ? 10 : 1; // Shift键加速移动
+          let deltaX = 0;
+          let deltaY = 0;
+          
+          switch (e.key) {
+            case 'ArrowUp':
+              deltaY = -moveDistance;
+              break;
+            case 'ArrowDown':
+              deltaY = moveDistance;
+              break;
+            case 'ArrowLeft':
+              deltaX = -moveDistance;
+              break;
+            case 'ArrowRight':
+              deltaX = moveDistance;
+              break;
+          }
+          
+          console.log('🎯 键盘移动CNC机台 - 计算移动量:', {
+            deltaX,
+            deltaY,
+            moveDistance,
+            selectedCNCMachines: selectedCNCMachinesRef.current
+          });
+          
+          // 更新选中的CNC机台位置
+          setCncMachines(prev => 
+            prev.map(machine => {
+              if (selectedCNCMachinesRef.current.includes(machine.id)) {
+                return {
+                  ...machine,
+                  x: machine.x + deltaX,
+                  y: machine.y + deltaY
+                };
+              }
+              return machine;
+            })
+          );
+        } else if (selectedEndpointRef.current) {
           e.preventDefault();
           const moveDistance = e.shiftKey ? 10 : 1; // Shift键加速移动
           let deltaX = 0;
@@ -1252,16 +1872,34 @@ const DigitalTwinEditor: React.FC = () => {
             }
           }
         } else {
-          console.log('⚠️ 键盘移动端点 - 没有选中的端点');
+          console.log('⚠️ 键盘移动 - 没有选中的端点或CNC机台');
+        }
+      }
+    };
+
+    // 处理空格键释放事件
+    const handleKeyUpEvent = (e: KeyboardEvent) => {
+      if (e.key === ' ') {
+        // 空格键释放时恢复之前的画布操作模式
+        if (isSpacePressed) {
+          setIsSpacePressed(false);
+          setCanvasOperationMode(previousCanvasMode);
+          
+          // 恢复默认光标
+          if (canvasRef.current) {
+            canvasRef.current.style.cursor = 'default';
+          }
         }
       }
     };
 
     document.addEventListener('keydown', handleKeyDownEvent);
+    document.addEventListener('keyup', handleKeyUpEvent);
     return () => {
       document.removeEventListener('keydown', handleKeyDownEvent);
+      document.removeEventListener('keyup', handleKeyUpEvent);
     };
-  }, []); // 空依赖数组，只在组件挂载时创建事件监听器
+  }, [isSpacePressed, previousCanvasMode, setCanvasOperationMode]); // 添加依赖项
 
 
 
@@ -1366,14 +2004,254 @@ const DigitalTwinEditor: React.FC = () => {
     });
   }, []);
 
+  // CNC机台控制函数
+  const handleCNCMachineMove = useCallback((machineId: string, direction: 'up' | 'down' | 'left' | 'right') => {
+    const moveDistance = 10; // 每次移动的距离（像素）
+    
+    setCncMachines(prev => prev.map(machine => {
+      if (machine.id === machineId) {
+        let newX = machine.x;
+        let newY = machine.y;
+        
+        switch (direction) {
+          case 'up':
+            newY -= moveDistance;
+            break;
+          case 'down':
+            newY += moveDistance;
+            break;
+          case 'left':
+            newX -= moveDistance;
+            break;
+          case 'right':
+            newX += moveDistance;
+            break;
+        }
+        
+        return { ...machine, x: newX, y: newY };
+      }
+      return machine;
+    }));
+  }, []);
 
+  const handleCNCMachineRotate = useCallback((machineId: string, direction: 'clockwise' | 'counterclockwise') => {
+    // 这里可以添加旋转逻辑，目前先显示消息
+    const rotationText = direction === 'clockwise' ? '顺时针' : '逆时针';
+    message.info(`CNC机台 ${machineId} ${rotationText}旋转`);
+    
+    // 如果CNC机台有旋转角度属性，可以在这里更新
+    // setCncMachines(prev => prev.map(machine => {
+    //   if (machine.id === machineId) {
+    //     const rotationStep = 15; // 每次旋转15度
+    //     const newRotation = (machine.rotation || 0) + (direction === 'clockwise' ? rotationStep : -rotationStep);
+    //     return { ...machine, rotation: newRotation % 360 };
+    //   }
+    //   return machine;
+    // }));
+  }, []);
+
+  // CNC机台对齐功能
+  const handleCNCMachineAlign = useCallback((alignType: 'left' | 'right' | 'top' | 'bottom' | 'horizontal' | 'vertical') => {
+    if (selectedCNCMachines.length < 2) {
+      message.warning('请选择至少2个CNC机台进行对齐操作');
+      return;
+    }
+
+    const selectedMachines = cncMachines.filter(machine => selectedCNCMachines.includes(machine.id));
+    
+    setCncMachines(prev => prev.map(machine => {
+      if (!selectedCNCMachines.includes(machine.id)) {
+        return machine;
+      }
+
+      let newX = machine.x;
+      let newY = machine.y;
+
+      switch (alignType) {
+        case 'left': {
+          // 左对齐：所有机台的x坐标对齐到最左边的机台
+          const minX = Math.min(...selectedMachines.map(m => m.x));
+          newX = minX;
+          break;
+        }
+        case 'right': {
+          // 右对齐：所有机台的x坐标对齐到最右边的机台
+          const maxX = Math.max(...selectedMachines.map(m => m.x));
+          newX = maxX;
+          break;
+        }
+        case 'top': {
+          // 上对齐：所有机台的y坐标对齐到最上边的机台
+          const minY = Math.min(...selectedMachines.map(m => m.y));
+          newY = minY;
+          break;
+        }
+        case 'bottom': {
+          // 下对齐：所有机台的y坐标对齐到最下边的机台
+          const maxY = Math.max(...selectedMachines.map(m => m.y));
+          newY = maxY;
+          break;
+        }
+        case 'horizontal': {
+          // 横向平均分布：保持y坐标不变，x坐标平均分布
+          const sortedByX = [...selectedMachines].sort((a, b) => a.x - b.x);
+          const minX = sortedByX[0].x;
+          const maxX = sortedByX[sortedByX.length - 1].x;
+          const currentIndex = sortedByX.findIndex(m => m.id === machine.id);
+          
+          if (sortedByX.length > 1) {
+            const spacing = (maxX - minX) / (sortedByX.length - 1);
+            newX = minX + currentIndex * spacing;
+          }
+          break;
+        }
+        case 'vertical': {
+          // 纵向平均分布：保持x坐标不变，y坐标平均分布
+          const sortedByY = [...selectedMachines].sort((a, b) => a.y - b.y);
+          const minY = sortedByY[0].y;
+          const maxY = sortedByY[sortedByY.length - 1].y;
+          const currentIndex = sortedByY.findIndex(m => m.id === machine.id);
+          
+          if (sortedByY.length > 1) {
+            const spacing = (maxY - minY) / (sortedByY.length - 1);
+            newY = minY + currentIndex * spacing;
+          }
+          break;
+        }
+      }
+
+      return { ...machine, x: newX, y: newY };
+    }));
+
+    const alignTypeNames = {
+      'left': '左对齐',
+      'right': '右对齐', 
+      'top': '上对齐',
+      'bottom': '下对齐',
+      'horizontal': '横向平均分布',
+      'vertical': '纵向平均分布'
+    };
+    
+    message.success(`已完成${selectedCNCMachines.length}个CNC机台的${alignTypeNames[alignType]}操作`);
+  }, [selectedCNCMachines, cncMachines]);
 
   // 画布事件处理
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const activeTool = getActiveTool();
     const point = screenToCanvas(e.clientX, e.clientY);
     
-
+    // 在顶视图模式下检查是否点击了CNC机台的控制按钮
+    if (viewMode === 'top') {
+      // 首先检查是否点击了选中CNC机台的控制按钮
+      for (const machine of cncMachines) {
+        const isSelected = selectedCNCMachines.includes(machine.id);
+        if (!isSelected) continue;
+        
+        const buttonSize = 16;
+        const buttonDistance = 30;
+        const rotateButtonSize = 12;
+        const rotateDistance = 35;
+        
+        // 检查移动控制按钮
+        const upButtonX = machine.x;
+        const upButtonY = machine.y - buttonDistance;
+        if (point.x >= upButtonX - buttonSize / 2 && 
+            point.x <= upButtonX + buttonSize / 2 &&
+            point.y >= upButtonY - buttonSize / 2 && 
+            point.y <= upButtonY + buttonSize / 2) {
+          handleCNCMachineMove(machine.id, 'up');
+          return;
+        }
+        
+        const downButtonX = machine.x;
+        const downButtonY = machine.y + buttonDistance;
+        if (point.x >= downButtonX - buttonSize / 2 && 
+            point.x <= downButtonX + buttonSize / 2 &&
+            point.y >= downButtonY - buttonSize / 2 && 
+            point.y <= downButtonY + buttonSize / 2) {
+          handleCNCMachineMove(machine.id, 'down');
+          return;
+        }
+        
+        const leftButtonX = machine.x - buttonDistance;
+        const leftButtonY = machine.y;
+        if (point.x >= leftButtonX - buttonSize / 2 && 
+            point.x <= leftButtonX + buttonSize / 2 &&
+            point.y >= leftButtonY - buttonSize / 2 && 
+            point.y <= leftButtonY + buttonSize / 2) {
+          handleCNCMachineMove(machine.id, 'left');
+          return;
+        }
+        
+        const rightButtonX = machine.x + buttonDistance;
+        const rightButtonY = machine.y;
+        if (point.x >= rightButtonX - buttonSize / 2 && 
+            point.x <= rightButtonX + buttonSize / 2 &&
+            point.y >= rightButtonY - buttonSize / 2 && 
+            point.y <= rightButtonY + buttonSize / 2) {
+          handleCNCMachineMove(machine.id, 'right');
+          return;
+        }
+        
+        // 检查旋转控制按钮
+        const clockwiseButtonX = machine.x + rotateDistance;
+        const clockwiseButtonY = machine.y + rotateDistance;
+        if (point.x >= clockwiseButtonX - rotateButtonSize / 2 && 
+            point.x <= clockwiseButtonX + rotateButtonSize / 2 &&
+            point.y >= clockwiseButtonY - rotateButtonSize / 2 && 
+            point.y <= clockwiseButtonY + rotateButtonSize / 2) {
+          handleCNCMachineRotate(machine.id, 'clockwise');
+          return;
+        }
+        
+        const counterClockwiseButtonX = machine.x - rotateDistance;
+        const counterClockwiseButtonY = machine.y + rotateDistance;
+        if (point.x >= counterClockwiseButtonX - rotateButtonSize / 2 && 
+            point.x <= counterClockwiseButtonX + rotateButtonSize / 2 &&
+            point.y >= counterClockwiseButtonY - rotateButtonSize / 2 && 
+            point.y <= counterClockwiseButtonY + rotateButtonSize / 2) {
+          handleCNCMachineRotate(machine.id, 'counterclockwise');
+          return;
+        }
+      }
+      
+      // 然后检查是否点击了CNC机台本身
+      const clickedCNCMachine = cncMachines.find(machine => {
+        const machineSize = 25; // CNC机台的半尺寸
+        return point.x >= machine.x - machineSize && 
+               point.x <= machine.x + machineSize &&
+               point.y >= machine.y - machineSize && 
+               point.y <= machine.y + machineSize;
+      });
+      
+      if (clickedCNCMachine) {
+        // 处理CNC机台的选中逻辑
+        if (e.ctrlKey || e.metaKey) {
+          // Ctrl/Cmd + 点击：多选模式
+          setSelectedCNCMachines(prev => {
+            if (prev.includes(clickedCNCMachine.id)) {
+              return prev.filter(id => id !== clickedCNCMachine.id);
+            } else {
+              return [...prev, clickedCNCMachine.id];
+            }
+          });
+        } else {
+          // 普通点击：单选模式
+          setSelectedCNCMachines([clickedCNCMachine.id]);
+          
+          // 开始拖拽移动
+          setIsDraggingCNCMachine(true);
+          setDraggedCNCMachineId(clickedCNCMachine.id);
+          setDragStartPosition({ x: point.x, y: point.y });
+        }
+        return; // 阻止其他事件处理
+      } else {
+        // 点击空白区域，清除CNC机台选中状态
+        if (!e.ctrlKey && !e.metaKey) {
+          setSelectedCNCMachines([]);
+        }
+      }
+    }
 
     // 检查是否点击了编辑模式下的控制点或手柄
     if (bezierEditMode.isEditing && bezierEditMode.wallId) {
@@ -1426,10 +2304,69 @@ const DigitalTwinEditor: React.FC = () => {
     } else if (activeTool && activeTool.type === 'select') {
       // 选择工具模式
       handleSelectionStart(e);
+    } else if (canvasOperationMode === 'drag') {
+      // 画布拖动模式 - 使用改进的拖动逻辑
+      handleCanvasDragStart(e);
     } else {
-      // 普通拖拽模式
+      // 普通拖拽模式（保持原有逻辑）
       setIsDragging(true);
       setDragStart({ x: e.clientX - offsetX, y: e.clientY - offsetY });
+    }
+  };
+
+  // 改进的画布拖动开始处理函数（参考地图编辑器实现）
+  const handleCanvasDragStart = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const activeTool = getActiveTool();
+    // 只在拖动模式下或者没有激活工具时允许拖动
+    if (canvasOperationMode !== 'drag' && activeTool) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    if (!isDragging) {
+      // 开始拖动
+      setIsDragging(true);
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const startOffset = { x: offsetX, y: offsetY };
+      
+      // 设置拖动光标
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.style.cursor = 'grabbing';
+      }
+      
+      const handleMouseMove = (e: MouseEvent) => {
+        const deltaX = e.clientX - startX;
+        const deltaY = e.clientY - startY;
+        
+        // 设置拖动灵敏度为1:1
+        const sensitivity = 1.0;
+        
+        setOffsetX(startOffset.x + deltaX * sensitivity);
+        setOffsetY(startOffset.y + deltaY * sensitivity);
+      };
+      
+      const handleMouseUp = () => {
+        setIsDragging(false);
+        
+        // 恢复光标样式
+        const canvas = canvasRef.current;
+        if (canvas) {
+          canvas.style.cursor = canvasOperationMode === 'drag' ? 'grab' : 'default';
+        }
+        
+        // 确保画布保持焦点
+        if (canvas) {
+          canvas.focus();
+        }
+        
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+      
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
     }
   };// 处理画布双击事件
   const handleCanvasDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -1457,7 +2394,7 @@ const DigitalTwinEditor: React.FC = () => {
     }
     
     // 检查是否双击了贝塞尔曲线，进入编辑模式
-    if (activeTool?.id === 'select') {
+    if (activeTool?.type === 'select') {
       const clickedWall = walls.find(wall => {
         if (wall.type !== 'bezier' || !wall.completed) return false;
         
@@ -1482,6 +2419,48 @@ const DigitalTwinEditor: React.FC = () => {
         message.info('进入贝塞尔曲线编辑模式，拖拽控制点调整曲线形状');
       }
     }
+  };
+
+  // 处理拖拽放置事件
+  const handleDragOver = (e: React.DragEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+    
+    try {
+      const modelData = JSON.parse(e.dataTransfer.getData('text/plain'));
+      if (modelData.type === 'cnc') {
+        const point = screenToCanvas(e.clientX, e.clientY);
+        
+        // 创建新的CNC机台
+        const newCNCMachine: CNCMachine = {
+          id: `cnc_${Date.now()}`,
+          x: point.x,
+          y: point.y,
+          width: 50, // 默认宽度50像素
+          height: 50, // 默认高度50像素
+          name: modelData.name,
+          type: 'cnc',
+          color: '#1890ff',
+          selected: false
+        };
+        
+        // 保存当前状态到撤销栈
+        saveStateToUndoStack();
+        
+        setCncMachines(prev => [...prev, newCNCMachine]);
+        message.success(`已添加CNC机台: ${modelData.name}`);
+      }
+    } catch (error) {
+      console.error('拖拽放置失败:', error);
+    }
+    
+    // 重置拖拽状态
+    setIsDraggingCNC(false);
+    setDraggedCNCModel(null);
   };
 
   // 处理鼠标移动
@@ -1540,13 +2519,39 @@ const DigitalTwinEditor: React.FC = () => {
         canvas.style.cursor = isHoveringControlPoint ? 'pointer' : 'default';
       }
     } else if (canvas && !isDragging && !isDraggingEndpoint) {
-      // 重置光标样式（仅在非拖拽状态下）
-      canvas.style.cursor = 'default';
+      // 根据画布操作模式设置光标样式
+      if (canvasOperationMode === 'drag') {
+        canvas.style.cursor = 'grab';
+      } else {
+        canvas.style.cursor = 'default';
+      }
     }
     
     if (isDragging) {
+      // 在拖动时设置抓取光标
+      if (canvas) {
+        canvas.style.cursor = 'grabbing';
+      }
       setOffsetX(e.clientX - dragStart.x);
       setOffsetY(e.clientY - dragStart.y);
+    } else if (isDraggingCNCMachine && draggedCNCMachineId && dragStartPosition) {
+      // CNC机台拖拽移动
+      const deltaX = point.x - dragStartPosition.x;
+      const deltaY = point.y - dragStartPosition.y;
+      
+      setCncMachines(prev => prev.map(machine => {
+        if (machine.id === draggedCNCMachineId) {
+          return {
+            ...machine,
+            x: machine.x + deltaX,
+            y: machine.y + deltaY
+          };
+        }
+        return machine;
+      }));
+      
+      // 更新拖拽起始位置
+      setDragStartPosition(point);
     } else if (isDraggingEndpoint && selectedEndpoint) {
       // 拖拽端点 - 支持共享端点
       // 首先检查是否有共享端点与当前拖拽的端点位置匹配
@@ -1640,6 +2645,16 @@ const DigitalTwinEditor: React.FC = () => {
   const handleMouseUp = () => {
     setIsDragging(false);
     
+    // 重置光标状态
+    const canvas = canvasRef.current;
+    if (canvas) {
+      if (canvasOperationMode === 'drag') {
+        canvas.style.cursor = 'grab';
+      } else {
+        canvas.style.cursor = 'default';
+      }
+    }
+    
     // 结束贝塞尔曲线控制点拖拽
     if (bezierDrawingState.isDraggingControl) {
       setBezierDrawingState(prev => ({
@@ -1665,11 +2680,45 @@ const DigitalTwinEditor: React.FC = () => {
       console.log('🔚 结束端点拖拽，保持选中状态');
     }
     
+    // 结束CNC机台拖拽
+    if (isDraggingCNCMachine) {
+      setIsDraggingCNCMachine(false);
+      setDraggedCNCMachineId(null);
+      setDragStartPosition(null);
+      console.log('🔚 结束CNC机台拖拽');
+    }
+    
+    // 结束拖动画布
+    if (isDragging) {
+      setIsDragging(false);
+      setDragStart({ x: 0, y: 0 });
+      console.log('🔚 结束拖动画布');
+      
+      // 恢复画布光标样式
+      const canvas = canvasRef.current;
+      if (canvas) {
+        if (canvasOperationMode === 'drag') {
+          canvas.style.cursor = 'grab';
+        } else {
+          canvas.style.cursor = 'default';
+        }
+      }
+    }
+
     // 结束框选
     if (isSelecting && selectionStart && selectionEnd) {
+      // 框选墙体（在所有视图模式下都可以框选墙体）
       const selectedWallIds = getWallsInSelection(selectionStart, selectionEnd);
-      // 框选应该选中所有被接触到的线
       setSelectedWalls(selectedWallIds);
+      console.log('🎯 框选墙体:', selectedWallIds);
+      
+      // 在顶视图模式下，同时框选CNC机台
+      if (viewMode === 'top') {
+        const selectedCNCMachineIds = getCNCMachinesInSelection(selectionStart, selectionEnd);
+        setSelectedCNCMachines(selectedCNCMachineIds);
+        console.log('🎯 框选CNC机台:', selectedCNCMachineIds);
+      }
+      
       setIsSelecting(false);
       setSelectionStart(null);
       setSelectionEnd(null);
@@ -1735,10 +2784,39 @@ const DigitalTwinEditor: React.FC = () => {
     }).map(wall => wall.id);
   };
 
+  // 获取框选区域内的CNC机台
+  const getCNCMachinesInSelection = (start: WallPoint, end: WallPoint): string[] => {
+    const minX = Math.min(start.x, end.x);
+    const maxX = Math.max(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    const maxY = Math.max(start.y, end.y);
+    
+    const machineSize = 30; // CNC机台的尺寸（像素）
+    
+    return cncMachines.filter(machine => {
+      // 检查CNC机台的矩形区域是否与框选矩形相交
+      const machineMinX = machine.x - machineSize / 2;
+      const machineMaxX = machine.x + machineSize / 2;
+      const machineMinY = machine.y - machineSize / 2;
+      const machineMaxY = machine.y + machineSize / 2;
+      
+      // 矩形相交检测：两个矩形相交当且仅当它们在x轴和y轴上都有重叠
+      const xOverlap = machineMaxX >= minX && machineMinX <= maxX;
+      const yOverlap = machineMaxY >= minY && machineMinY <= maxY;
+      
+      return xOverlap && yOverlap;
+    }).map(machine => machine.id);
+  };
+
   const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     setScale(prev => Math.max(0.1, Math.min(3, prev * delta)));
+    
+    // 确保画布在缩放后保持焦点
+    if (canvasRef.current) {
+      canvasRef.current.focus();
+    }
   };
 
   // 墙体绘制处理
@@ -2110,6 +3188,12 @@ const DigitalTwinEditor: React.FC = () => {
     
     console.log('点击事件开始:', { x, y, scale, offsetX, offsetY });
 
+    // 获取当前激活的工具
+    const activeTool = getActiveTool();
+    const isSelectTool = activeTool?.type === 'select';
+    
+    console.log('当前工具状态:', { activeTool, isSelectTool });
+
     // 检查是否点击了墙体端点 - 端点选择优先级最高
     const endpointHit = checkEndpointClick(point, walls);
     console.log('端点点击检测结果:', { endpointHit, x, y });
@@ -2141,7 +3225,8 @@ const DigitalTwinEditor: React.FC = () => {
     const wallHit = checkWallHit(x, y);
     console.log('墙体点击检测结果:', { wallHit, x, y });
     
-    if (wallHit) {
+    // 在选择工具模式下，墙体和线段点击不应阻止框选
+    if (wallHit && !isSelectTool) {
       const currentTime = Date.now();
       const timeDiff = currentTime - lastClickTime;
       const clickedWall = walls.find(wall => wall.id === wallHit);
@@ -2223,8 +3308,8 @@ const DigitalTwinEditor: React.FC = () => {
       return;
     }
 
-    // 如果没有墙体被点击，但有线段被检测到，则选择线段
-    if (segmentHit) {
+    // 如果没有墙体被点击，但有线段被检测到，且不是选择工具模式，则选择线段
+    if (segmentHit && !isSelectTool) {
       console.log('备用线段选择逻辑:', segmentHit);
       // 单选线段逻辑
       setSelectedSegments(prev => {
@@ -2457,6 +3542,9 @@ const DigitalTwinEditor: React.FC = () => {
       title: '确认删除',
       content: `确定要删除选中的 ${selectedWalls.length} 个墙体吗？`,
       onOk: () => {
+        // 保存当前状态到撤销栈
+        saveStateToUndoStack();
+        
         // 在删除墙体前，先清理相关的共享端点
         setWalls(prevWalls => {
           const wallsToDelete = prevWalls.filter(wall => selectedWalls.includes(wall.id));
@@ -3368,10 +4456,12 @@ const DigitalTwinEditor: React.FC = () => {
     // 绘制框选区域
     if (isSelecting && selectionStart && selectionEnd) {
       ctx.save();
+      
+      // 使用当前的变换矩阵，保持与画布内容的一致性
       ctx.strokeStyle = '#1890ff';
       ctx.fillStyle = 'rgba(24, 144, 255, 0.1)';
-      ctx.lineWidth = 1 / scale;
-      ctx.setLineDash([5 / scale, 5 / scale]);
+      ctx.lineWidth = 1 / scale; // 根据缩放调整线宽，保持视觉一致性
+      ctx.setLineDash([5 / scale, 5 / scale]); // 根据缩放调整虚线间距
       
       const x = Math.min(selectionStart.x, selectionEnd.x);
       const y = Math.min(selectionStart.y, selectionEnd.y);
@@ -3474,15 +4564,305 @@ const DigitalTwinEditor: React.FC = () => {
       ctx.restore();
     }
 
+    // 绘制CNC机台（仅在顶视图模式下显示）
+    if (viewMode === 'top') {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
 
-    
+      // 绘制多选CNC机台的虚线矩形框（在绘制机台之前）
+      if (selectedCNCMachines.length >= 2) {
+        const selectedMachines = cncMachines.filter(machine => selectedCNCMachines.includes(machine.id));
+        if (selectedMachines.length >= 2) {
+          const machineSize = 30; // CNC机台的尺寸（像素）
+          const selectionPadding = 8; // 选中框的外边距
+          
+          // 计算所有选中机台的边界框
+          const minX = Math.min(...selectedMachines.map(m => m.x - machineSize / 2 - selectionPadding));
+          const maxX = Math.max(...selectedMachines.map(m => m.x + machineSize / 2 + selectionPadding));
+          const minY = Math.min(...selectedMachines.map(m => m.y - machineSize / 2 - selectionPadding));
+          const maxY = Math.max(...selectedMachines.map(m => m.y + machineSize / 2 + selectionPadding));
+          
+          // 添加额外的边距让框选框更明显
+          const extraPadding = 10;
+          const boundingBoxX = minX - extraPadding;
+          const boundingBoxY = minY - extraPadding;
+          const boundingBoxWidth = maxX - minX + extraPadding * 2;
+          const boundingBoxHeight = maxY - minY + extraPadding * 2;
+          
+          // 绘制虚线矩形框
+          ctx.strokeStyle = '#1890ff'; // 蓝色虚线框
+          ctx.lineWidth = 2 / scale;
+          ctx.setLineDash([8 / scale, 4 / scale]); // 虚线样式
+          
+          ctx.strokeRect(
+            boundingBoxX,
+            boundingBoxY,
+            boundingBoxWidth,
+            boundingBoxHeight
+          );
+          
+          // 绘制半透明背景
+          ctx.fillStyle = 'rgba(24, 144, 255, 0.1)';
+          ctx.fillRect(
+            boundingBoxX,
+            boundingBoxY,
+            boundingBoxWidth,
+            boundingBoxHeight
+          );
+          
+          ctx.setLineDash([]); // 重置虚线
+        }
+      }
 
-  }, [scale, offsetX, offsetY, walls, currentWall, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState]);
+      cncMachines.forEach(machine => {
+        ctx.save();
+        
+        // 设置CNC机台的样式
+        const isSelected = selectedCNCMachines.includes(machine.id);
+        const machineSize = 30; // CNC机台的尺寸（像素）
+        
+        // 绘制正方形CNC机台
+        ctx.fillStyle = isSelected ? '#faad14' : machine.color;
+        ctx.strokeStyle = isSelected ? '#d48806' : '#333333';
+        ctx.lineWidth = 2 / scale;
+        
+        // 绘制正方形
+        ctx.fillRect(
+          machine.x - machineSize / 2,
+          machine.y - machineSize / 2,
+          machineSize,
+          machineSize
+        );
+        ctx.strokeRect(
+          machine.x - machineSize / 2,
+          machine.y - machineSize / 2,
+          machineSize,
+          machineSize
+        );
+        
+        // 绘制选中状态的虚线框和控制按钮（仅在单选时显示）
+        if (isSelected && selectedCNCMachines.length === 1) {
+          const selectionPadding = 8; // 选中框的外边距
+          ctx.strokeStyle = '#1890ff'; // 蓝色虚线框
+          ctx.lineWidth = 2 / scale;
+          ctx.setLineDash([6 / scale, 4 / scale]); // 虚线样式
+          
+          ctx.strokeRect(
+            machine.x - machineSize / 2 - selectionPadding,
+            machine.y - machineSize / 2 - selectionPadding,
+            machineSize + selectionPadding * 2,
+            machineSize + selectionPadding * 2
+          );
+          
+          ctx.setLineDash([]); // 重置虚线
+          
+          // 绘制控制按钮
+          const buttonSize = 16; // 控制按钮尺寸
+          const buttonDistance = 50; // 控制按钮距离机台中心的距离
+          
+          // 按钮样式设置
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+          ctx.strokeStyle = '#d9d9d9';
+          ctx.lineWidth = 1 / scale;
+          
+          // 上移按钮
+          const upButtonX = machine.x;
+          const upButtonY = machine.y - buttonDistance;
+          ctx.fillRect(
+            upButtonX - buttonSize / 2,
+            upButtonY - buttonSize / 2,
+            buttonSize,
+            buttonSize
+          );
+          ctx.strokeRect(
+            upButtonX - buttonSize / 2,
+            upButtonY - buttonSize / 2,
+            buttonSize,
+            buttonSize
+          );
+          
+          // 绘制上箭头
+          ctx.fillStyle = '#666';
+          ctx.beginPath();
+          ctx.moveTo(upButtonX, upButtonY - 4);
+          ctx.lineTo(upButtonX - 4, upButtonY + 2);
+          ctx.lineTo(upButtonX + 4, upButtonY + 2);
+          ctx.closePath();
+          ctx.fill();
+          
+          // 下移按钮
+          const downButtonX = machine.x;
+          const downButtonY = machine.y + buttonDistance;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+          ctx.fillRect(
+            downButtonX - buttonSize / 2,
+            downButtonY - buttonSize / 2,
+            buttonSize,
+            buttonSize
+          );
+          ctx.strokeRect(
+            downButtonX - buttonSize / 2,
+            downButtonY - buttonSize / 2,
+            buttonSize,
+            buttonSize
+          );
+          
+          // 绘制下箭头
+          ctx.fillStyle = '#666';
+          ctx.beginPath();
+          ctx.moveTo(downButtonX, downButtonY + 4);
+          ctx.lineTo(downButtonX - 4, downButtonY - 2);
+          ctx.lineTo(downButtonX + 4, downButtonY - 2);
+          ctx.closePath();
+          ctx.fill();
+          
+          // 左移按钮
+          const leftButtonX = machine.x - buttonDistance;
+          const leftButtonY = machine.y;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+          ctx.fillRect(
+            leftButtonX - buttonSize / 2,
+            leftButtonY - buttonSize / 2,
+            buttonSize,
+            buttonSize
+          );
+          ctx.strokeRect(
+            leftButtonX - buttonSize / 2,
+            leftButtonY - buttonSize / 2,
+            buttonSize,
+            buttonSize
+          );
+          
+          // 绘制左箭头
+          ctx.fillStyle = '#666';
+          ctx.beginPath();
+          ctx.moveTo(leftButtonX - 4, leftButtonY);
+          ctx.lineTo(leftButtonX + 2, leftButtonY - 4);
+          ctx.lineTo(leftButtonX + 2, leftButtonY + 4);
+          ctx.closePath();
+          ctx.fill();
+          
+          // 右移按钮
+          const rightButtonX = machine.x + buttonDistance;
+          const rightButtonY = machine.y;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+          ctx.fillRect(
+            rightButtonX - buttonSize / 2,
+            rightButtonY - buttonSize / 2,
+            buttonSize,
+            buttonSize
+          );
+          ctx.strokeRect(
+            rightButtonX - buttonSize / 2,
+            rightButtonY - buttonSize / 2,
+            buttonSize,
+            buttonSize
+          );
+          
+          // 绘制右箭头
+          ctx.fillStyle = '#666';
+          ctx.beginPath();
+          ctx.moveTo(rightButtonX + 4, rightButtonY);
+          ctx.lineTo(rightButtonX - 2, rightButtonY - 4);
+          ctx.lineTo(rightButtonX - 2, rightButtonY + 4);
+          ctx.closePath();
+          ctx.fill();
+          
+          // 旋转控制按钮
+          const rotateButtonSize = 12; // 旋转按钮稍小一些
+          const rotateDistance = 35; // 旋转按钮距离机台中心的距离（对角线位置）
+          
+          // 顺时针旋转按钮（右下角）
+          const clockwiseButtonX = machine.x + rotateDistance;
+          const clockwiseButtonY = machine.y + rotateDistance;
+          ctx.fillStyle = 'rgba(255, 193, 7, 0.9)'; // 黄色背景
+          ctx.strokeStyle = '#ffc107';
+          ctx.fillRect(
+            clockwiseButtonX - rotateButtonSize / 2,
+            clockwiseButtonY - rotateButtonSize / 2,
+            rotateButtonSize,
+            rotateButtonSize
+          );
+          ctx.strokeRect(
+            clockwiseButtonX - rotateButtonSize / 2,
+            clockwiseButtonY - rotateButtonSize / 2,
+            rotateButtonSize,
+            rotateButtonSize
+          );
+          
+          // 绘制顺时针旋转图标
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1.5 / scale;
+          ctx.beginPath();
+          ctx.arc(clockwiseButtonX, clockwiseButtonY, 3, 0, Math.PI * 1.5);
+          ctx.stroke();
+          // 箭头
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.moveTo(clockwiseButtonX + 3, clockwiseButtonY);
+          ctx.lineTo(clockwiseButtonX + 1, clockwiseButtonY - 2);
+          ctx.lineTo(clockwiseButtonX + 1, clockwiseButtonY + 2);
+          ctx.closePath();
+          ctx.fill();
+          
+          // 逆时针旋转按钮（左下角）
+          const counterClockwiseButtonX = machine.x - rotateDistance;
+          const counterClockwiseButtonY = machine.y + rotateDistance;
+          ctx.fillStyle = 'rgba(255, 193, 7, 0.9)'; // 黄色背景
+          ctx.strokeStyle = '#ffc107';
+          ctx.fillRect(
+            counterClockwiseButtonX - rotateButtonSize / 2,
+            counterClockwiseButtonY - rotateButtonSize / 2,
+            rotateButtonSize,
+            rotateButtonSize
+          );
+          ctx.strokeRect(
+            counterClockwiseButtonX - rotateButtonSize / 2,
+            counterClockwiseButtonY - rotateButtonSize / 2,
+            rotateButtonSize,
+            rotateButtonSize
+          );
+          
+          // 绘制逆时针旋转图标
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 1.5 / scale;
+          ctx.beginPath();
+          ctx.arc(counterClockwiseButtonX, counterClockwiseButtonY, 3, Math.PI * 0.5, 0);
+          ctx.stroke();
+          // 箭头
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.moveTo(counterClockwiseButtonX - 3, counterClockwiseButtonY);
+          ctx.lineTo(counterClockwiseButtonX - 1, counterClockwiseButtonY - 2);
+          ctx.lineTo(counterClockwiseButtonX - 1, counterClockwiseButtonY + 2);
+          ctx.closePath();
+          ctx.fill();
+        }
+        
+        // 绘制机台名称
+        ctx.fillStyle = '#000000';
+        ctx.font = `${12 / scale}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(
+          machine.name,
+          machine.x,
+          machine.y + machineSize / 2 + 15 / scale
+        );
+        
+        ctx.restore();
+      });
+
+      ctx.restore();
+    }
+
+  }, [scale, offsetX, offsetY, walls, currentWall, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, cncMachines, selectedCNCMachines, viewMode]);
 
   // 画布初始化和重绘
   useEffect(() => {
     drawCanvas();
-  }, [scale, offsetX, offsetY, walls, currentWall, mousePosition, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, drawCanvas, viewMode]);
+  }, [scale, offsetX, offsetY, walls, currentWall, mousePosition, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, drawCanvas, viewMode, cncMachines, selectedCNCMachines]);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -3513,6 +4893,7 @@ const DigitalTwinEditor: React.FC = () => {
           {viewMode === 'top' && (
         <canvas
           ref={canvasRef}
+          tabIndex={0}
           style={{
             position: 'absolute',
             top: 0,
@@ -3524,7 +4905,8 @@ const DigitalTwinEditor: React.FC = () => {
             cursor: isDragging ? 'grabbing' : 'grab',
             backgroundColor: '#f5f5f5',
             display: 'block',
-            zIndex: 5
+            zIndex: 5,
+            outline: 'none' // 移除焦点时的默认边框
           }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
@@ -3532,6 +4914,8 @@ const DigitalTwinEditor: React.FC = () => {
           onMouseLeave={handleMouseUp}
           onDoubleClick={handleCanvasDoubleClick}
           onWheel={handleWheel}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
         />
       )}
 
@@ -3544,17 +4928,16 @@ const DigitalTwinEditor: React.FC = () => {
           style={{
             position: 'absolute',
             top: 0,
-            left: leftPanelVisible ? '240px' : '0',
-            right: rightPanelVisible ? '240px' : '0',
-            width: leftPanelVisible && rightPanelVisible ? 'calc(100% - 480px)' : 
-                   leftPanelVisible || rightPanelVisible ? 'calc(100% - 240px)' : '100%',
+            left: '0', // 透视图模式下始终从左侧0位置开始
+            right: '0', // 透视图模式下不为右侧面板预留空间
+            width: '100%', // 透视图模式下始终占满全宽
             height: '100%',
             zIndex: 5
           }}
         />
       )}
 
-      {/* 透视图模式下的右侧墙体设置面板 */}
+      {/* 透视图模式下的悬浮墙体属性设置面板 */}
       {viewMode === 'perspective' && (
         <div style={{
           position: 'absolute',
@@ -3966,12 +5349,25 @@ const DigitalTwinEditor: React.FC = () => {
                 <List.Item
                   style={{
                     padding: '12px',
-                    cursor: 'pointer',
+                    cursor: model.type === 'cnc' ? 'grab' : 'pointer',
                     backgroundColor: 'transparent',
                     border: 'none',
                     borderBottom: '1px solid rgba(0, 0, 0, 0.1)',
                     borderRadius: '6px',
                     marginBottom: '8px'
+                  }}
+                  draggable={model.type === 'cnc'}
+                  onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
+                    if (model.type === 'cnc') {
+                      setIsDraggingCNC(true);
+                      setDraggedCNCModel(model);
+                      e.dataTransfer.setData('text/plain', JSON.stringify(model));
+                      e.dataTransfer.effectAllowed = 'copy';
+                    }
+                  }}
+                  onDragEnd={() => {
+                    setIsDraggingCNC(false);
+                    setDraggedCNCModel(null);
                   }}
                 >
                   <List.Item.Meta
@@ -4008,11 +5404,11 @@ const DigitalTwinEditor: React.FC = () => {
       )}
 
       {/* 楼层切换和设置按钮组 */}
-      {rightPanelVisible && viewMode === 'top' && (
+      {leftPanelVisible && viewMode === 'top' && (
         <div style={{
           position: 'absolute',
           top: '50%',
-          right: '260px',
+          left: '260px',
           transform: 'translateY(-50%)',
           zIndex: 10,
           display: 'flex',
@@ -4119,6 +5515,435 @@ const DigitalTwinEditor: React.FC = () => {
                  e.currentTarget.style.boxShadow = 'none';
                  e.currentTarget.style.borderColor = '#e8e8e8';
                }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* CNC机台对齐工具栏 - 仅在多选时显示 */}
+      {rightPanelVisible && viewMode === 'top' && selectedCNCMachines.length >= 2 && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          right: '320px',
+          transform: 'translateY(-50%)',
+          zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '12px',
+        }}>
+
+
+          {/* 对齐按钮组 */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.95)',
+            borderRadius: '12px',
+            padding: '8px',
+            boxShadow: '0 2px 12px rgba(0, 0, 0, 0.06)',
+            border: '1px solid rgba(0, 0, 0, 0.04)',
+            backdropFilter: 'blur(8px)',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+          }}>
+            {/* 左对齐 */}
+            <Button
+              type="default"
+              icon={<AlignLeftOutlined />}
+              size="small"
+              title="左对齐"
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={() => handleCNCMachineAlign('left')}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                e.currentTarget.style.borderColor = '#1890ff';
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#e8e8e8';
+              }}
+            />
+
+            {/* 右对齐 */}
+            <Button
+              type="default"
+              icon={<AlignRightOutlined />}
+              size="small"
+              title="右对齐"
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={() => handleCNCMachineAlign('right')}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                e.currentTarget.style.borderColor = '#1890ff';
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#e8e8e8';
+              }}
+            />
+
+            {/* 上对齐 */}
+            <Button
+              type="default"
+              icon={<VerticalAlignTopOutlined />}
+              size="small"
+              title="上对齐"
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={() => handleCNCMachineAlign('top')}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                e.currentTarget.style.borderColor = '#1890ff';
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#e8e8e8';
+              }}
+            />
+
+            {/* 下对齐 */}
+            <Button
+              type="default"
+              icon={<VerticalAlignBottomOutlined />}
+              size="small"
+              title="下对齐"
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={() => handleCNCMachineAlign('bottom')}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                e.currentTarget.style.borderColor = '#1890ff';
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#e8e8e8';
+              }}
+            />
+
+            {/* 横向平均分布 */}
+            <Button
+              type="default"
+              icon={<AlignCenterOutlined />}
+              size="small"
+              title="横向平均分布"
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={() => handleCNCMachineAlign('horizontal')}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                e.currentTarget.style.borderColor = '#1890ff';
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#e8e8e8';
+              }}
+            />
+
+            {/* 纵向平均分布 */}
+            <Button
+              type="default"
+              icon={<VerticalAlignMiddleOutlined />}
+              size="small"
+              title="纵向平均分布"
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={() => handleCNCMachineAlign('vertical')}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                e.currentTarget.style.borderColor = '#1890ff';
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#e8e8e8';
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 画布操作工具栏 - 位于画布右侧中间位置 */}
+      {viewMode === 'top' && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          right: rightPanelVisible ? '260px' : '20px', // 根据右侧面板状态调整位置
+          transform: 'translateY(-50%)',
+          zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '12px',
+        }}>
+          {/* 画布操作工具组 */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.95)',
+            borderRadius: '12px',
+            padding: '8px',
+            boxShadow: '0 2px 12px rgba(0, 0, 0, 0.06)',
+            border: '1px solid rgba(0, 0, 0, 0.04)',
+            backdropFilter: 'blur(8px)',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+          }}>
+            {/* 拖动画布工具 */}
+            <Button
+              type={canvasOperationMode === 'drag' ? 'primary' : 'default'}
+              icon={<DragOutlined />}
+              size="small"
+              title="拖动画布"
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: canvasOperationMode === 'drag' ? 'none' : '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: canvasOperationMode === 'drag' ? '0 1px 6px rgba(24, 144, 255, 0.3)' : 'none',
+              }}
+              onClick={handleCanvasDrag}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                if (canvasOperationMode !== 'drag') {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                  e.currentTarget.style.borderColor = '#1890ff';
+                }
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                if (canvasOperationMode !== 'drag') {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.borderColor = '#e8e8e8';
+                }
+              }}
+            />
+
+            {/* 放大工具 */}
+            <Button
+              type="default"
+              icon={<ZoomInOutlined />}
+              size="small"
+              title="放大画布"
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={handleZoomIn}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                e.currentTarget.style.borderColor = '#1890ff';
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#e8e8e8';
+              }}
+            />
+
+            {/* 缩小工具 */}
+            <Button
+              type="default"
+              icon={<ZoomOutOutlined />}
+              size="small"
+              title="缩小画布"
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={handleZoomOut}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1.05)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                e.currentTarget.style.borderColor = '#1890ff';
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                e.currentTarget.style.transform = 'scale(1)';
+                e.currentTarget.style.boxShadow = 'none';
+                e.currentTarget.style.borderColor = '#e8e8e8';
+              }}
+            />
+
+            {/* 撤销工具 */}
+            <Button
+              type="default"
+              icon={<UndoOutlined />}
+              size="small"
+              title="撤销"
+              disabled={undoStack.length === 0}
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: undoStack.length === 0 ? 0.5 : 1,
+              }}
+              onClick={handleUndo}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                if (undoStack.length > 0) {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                  e.currentTarget.style.borderColor = '#1890ff';
+                }
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                if (undoStack.length > 0) {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.borderColor = '#e8e8e8';
+                }
+              }}
+            />
+
+            {/* 重做工具 */}
+            <Button
+              type="default"
+              icon={<RedoOutlined />}
+              size="small"
+              title="重做"
+              disabled={redoStack.length === 0}
+              style={{
+                fontSize: '11px',
+                fontWeight: 500,
+                borderRadius: '6px',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                border: '1px solid #e8e8e8',
+                height: '28px',
+                width: '40px',
+                padding: '0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: redoStack.length === 0 ? 0.5 : 1,
+              }}
+              onClick={handleRedo}
+              onMouseEnter={(e: React.MouseEvent<HTMLElement>) => {
+                if (redoStack.length > 0) {
+                  e.currentTarget.style.transform = 'scale(1.05)';
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(24, 144, 255, 0.2)';
+                  e.currentTarget.style.borderColor = '#1890ff';
+                }
+              }}
+              onMouseLeave={(e: React.MouseEvent<HTMLElement>) => {
+                if (redoStack.length > 0) {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.borderColor = '#e8e8e8';
+                }
+              }}
             />
           </div>
         </div>

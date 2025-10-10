@@ -473,6 +473,7 @@ const MapManagement: React.FC = () => {
   const [selectionInitialPosition, setSelectionInitialPosition] = useState<{start: {x: number, y: number}, end: {x: number, y: number}} | null>(null); // 存储拖拽开始时选中框的初始位置
   const [isDraggingSelection, setIsDraggingSelection] = useState(false); // 是否正在拖拽选中的元素组
   const [selectionDragStart, setSelectionDragStart] = useState<{x: number, y: number} | null>(null); // 选中元素组拖拽开始位置
+  const [dragAccumulatedOffset, setDragAccumulatedOffset] = useState<{x: number, y: number}>({x: 0, y: 0}); // 拖拽累积偏移量
   
   // 画笔绘制相关状态
   const [isDrawing, setIsDrawing] = useState(false); // 是否正在绘制
@@ -734,7 +735,9 @@ const MapManagement: React.FC = () => {
 
   // 处理框选区域拖拽开始
   const handleSelectionMouseDown = (event: React.MouseEvent) => {
-    if (selectedTool !== 'select' || selectedPoints.length === 0 || !canvasRef.current) return;
+    if (selectedTool !== 'select' || selectedPoints.length === 0 || !canvasRef.current) {
+      return;
+    }
     
     event.preventDefault();
     event.stopPropagation();
@@ -742,112 +745,57 @@ const MapManagement: React.FC = () => {
     const canvasCoords = screenToCanvasCoordinates(event.clientX, event.clientY, canvasRef.current);
     setIsDraggingSelection(true);
     setSelectionDragStart(canvasCoords);
+    setDragAccumulatedOffset({x: 0, y: 0}); // 重置累积偏移量
+    
+    // 添加全局mouseup监听器，确保拖拽结束事件能正确触发
+    const handleGlobalSelectionMouseUp = () => {
+      handleSelectionDragEnd();
+      document.removeEventListener('mouseup', handleGlobalSelectionMouseUp);
+    };
+    
+    document.addEventListener('mouseup', handleGlobalSelectionMouseUp);
+    
     if (isDev) console.log('🎯 Selection drag start:', canvasCoords);
   };
 
-  // 处理框选区域拖拽移动
+  // 处理框选区域拖拽移动 - 基于键盘移动逻辑重新实现
   const handleSelectionDrag = (event: React.MouseEvent) => {
-    if (!isDraggingSelection || !selectionDragStart || selectedPoints.length === 0 || !canvasRef.current) return;
+    if (!isDraggingSelection || !selectionDragStart || selectedPoints.length === 0 || !canvasRef.current) {
+      return;
+    }
     
     const currentCanvasCoords = screenToCanvasCoordinates(event.clientX, event.clientY, canvasRef.current);
-    const deltaX = currentCanvasCoords.x - selectionDragStart.x;
-    const deltaY = currentCanvasCoords.y - selectionDragStart.y;
     
-    // 更新选中点的位置
-    setMapPoints(prevPoints => 
-      prevPoints.map(point => {
-        if (selectedPoints.includes(point.id)) {
-          return {
-            ...point,
-            x: point.x + deltaX,
-            y: point.y + deltaY
-          };
-        }
-        return point;
-      })
-    );
+    // 计算从拖拽开始到现在的总偏移量
+    const totalDeltaX = currentCanvasCoords.x - selectionDragStart.x;
+    const totalDeltaY = currentCanvasCoords.y - selectionDragStart.y;
     
-    // 更新连接到这些点的线
-    setMapLines(prevLines => 
-      prevLines.map(line => {
-        const isStartPointSelected = selectedPoints.includes(line.startPointId);
-        const isEndPointSelected = selectedPoints.includes(line.endPointId);
-        
-        if (isStartPointSelected || isEndPointSelected) {
-          let updatedLine = { ...line };
-          
-          // 如果是贝塞尔曲线，同步更新控制点
-             if ((line.type === 'single-bezier' || line.type === 'double-bezier') && line.controlPoints) {
-               updatedLine.controlPoints = {
-                 ...line.controlPoints,
-                 ...(line.controlPoints.cp1 && {
-                   cp1: {
-                     x: line.controlPoints.cp1.x + deltaX,
-                     y: line.controlPoints.cp1.y + deltaY
-                   }
-                 }),
-                 ...(line.controlPoints.cp2 && {
-                   cp2: {
-                     x: line.controlPoints.cp2.x + deltaX,
-                     y: line.controlPoints.cp2.y + deltaY
-                   }
-                 })
-               };
-             }
-          
-          return updatedLine;
-        }
-        return line;
-      })
-    );
+    // 计算相对于上次移动的增量偏移
+    const incrementalDeltaX = totalDeltaX - dragAccumulatedOffset.x;
+    const incrementalDeltaY = totalDeltaY - dragAccumulatedOffset.y;
     
-    // 更新选中框位置
-      if (selectionInitialPosition) {
-        setSelectionStart({
-          x: selectionInitialPosition.start.x + deltaX,
-          y: selectionInitialPosition.start.y + deltaY
-        });
-        setSelectionEnd({
-          x: selectionInitialPosition.end.x + deltaX,
-          y: selectionInitialPosition.end.y + deltaY
-        });
-      }
-    
-    // 更新拖拽起始位置
-    setSelectionDragStart(currentCanvasCoords);
+    // 只有当增量不为0时才移动
+    if (incrementalDeltaX !== 0 || incrementalDeltaY !== 0) {
+      // 复用键盘移动的逻辑，直接调用移动函数
+      moveSelectedElementsByDelta(incrementalDeltaX, incrementalDeltaY);
+      
+      // 更新累积偏移量
+      setDragAccumulatedOffset({x: totalDeltaX, y: totalDeltaY});
+    }
   };
 
   // 处理框选区域拖拽结束
   const handleSelectionDragEnd = () => {
     setIsDraggingSelection(false);
     setSelectionDragStart(null);
+    setDragAccumulatedOffset({x: 0, y: 0}); // 重置累积偏移量
     if (isDev) console.log('🎯 Selection drag end');
   };
   
-  // 处理方向键移动选中元素
-  const handleArrowKeyMove = (key: string) => {
-    const moveDistance = 5; // 每次移动的像素距离
-    let deltaX = 0;
-    let deltaY = 0;
-    
-    switch (key) {
-      case 'ArrowUp':
-        deltaY = -moveDistance;
-        break;
-      case 'ArrowDown':
-        deltaY = moveDistance;
-        break;
-      case 'ArrowLeft':
-        deltaX = -moveDistance;
-        break;
-      case 'ArrowRight':
-        deltaX = moveDistance;
-        break;
-    }
-    
+  // 通用的移动选中元素函数
+  const moveSelectedElementsByDelta = (deltaX: number, deltaY: number) => {
     // 移动选中的顶点（优先级最高）
     if (selectedVertices.length > 0) {
-      
       setMapAreas(prevAreas => 
         prevAreas.map(area => {
           // 检查这个区域是否有选中的顶点
@@ -885,7 +833,6 @@ const MapManagement: React.FC = () => {
     }
     // 移动选中的点
     else if (selectedPoints.length > 0) {
-      
       // 同时更新连接到这些点的线
       setMapLines(prevLines => 
         prevLines.map(line => {
@@ -937,8 +884,6 @@ const MapManagement: React.FC = () => {
         
         // 在状态更新后立即重新计算选中框位置
         setTimeout(() => {
-
-          
           if (selectedPoints.length > 0) {
             const selectedPointsData = updatedPoints.filter(point => selectedPoints.includes(point.id));
             if (selectedPointsData.length > 0) {
@@ -948,42 +893,65 @@ const MapManagement: React.FC = () => {
               const pointMinY = Math.min(...selectedPointsData.map(p => p.y - pointRadius));
               const pointMaxY = Math.max(...selectedPointsData.map(p => p.y + pointRadius));
               
-              const padding = 3;
-              const newSelectionStart = { x: pointMinX - padding, y: pointMinY - padding };
-              const newSelectionEnd = { x: pointMaxX + padding, y: pointMaxY + padding };
-              
-              setSelectionStart(newSelectionStart);
-              setSelectionEnd(newSelectionEnd);
+              setSelectionStart({ x: pointMinX, y: pointMinY });
+              setSelectionEnd({ x: pointMaxX, y: pointMaxY });
             }
           }
         }, 0);
         
         return updatedPoints;
       });
-    }
-    // 移动选中的区域（优先级最低）
-    else if (selectedAreas.length > 0) {
-      setMapAreas(prevAreas => 
-        prevAreas.map(area => {
-          if (selectedAreas.includes(area.id)) {
-            const updatedArea = {
-              ...area,
-              points: area.points.map(point => ({
-                x: point.x + deltaX,
-                y: point.y + deltaY
-              }))
-            };
-            
-            return updatedArea;
-          }
-          return area;
-        })
-      );
       
       // 保存到历史记录
-      saveToHistory();
-      
+       saveToHistory();
+     }
+     // 移动选中的区域（优先级最低）
+     else if (selectedAreas.length > 0) {
+       setMapAreas(prevAreas => 
+         prevAreas.map(area => {
+           if (selectedAreas.includes(area.id)) {
+             const updatedArea = {
+               ...area,
+               points: area.points.map(point => ({
+                 x: point.x + deltaX,
+                 y: point.y + deltaY
+               }))
+             };
+             
+             return updatedArea;
+           }
+           return area;
+         })
+       );
+       
+       // 保存到历史记录
+       saveToHistory();
+     }
+   };
+
+  // 处理方向键移动选中元素
+  const handleArrowKeyMove = (key: string) => {
+    const moveDistance = 5; // 每次移动的像素距离
+    let deltaX = 0;
+    let deltaY = 0;
+    
+    switch (key) {
+      case 'ArrowUp':
+        deltaY = -moveDistance;
+        break;
+      case 'ArrowDown':
+        deltaY = moveDistance;
+        break;
+      case 'ArrowLeft':
+        deltaX = -moveDistance;
+        break;
+      case 'ArrowRight':
+        deltaX = moveDistance;
+        break;
     }
+    
+    // 调用通用移动函数
+    moveSelectedElementsByDelta(deltaX, deltaY);
   };
 
   // 处理点位移动控制按钮
@@ -1439,7 +1407,7 @@ const MapManagement: React.FC = () => {
   const [pageSize, setPageSize] = useState(10);
   
   // 右侧信息面板标签页状态
-  const [activeTabKey, setActiveTabKey] = useState('elements'); // 默认选中地图元素Tab
+  const [activeTabKey, setActiveTabKey] = useState('tools'); // 默认选中绘图工具Tab
 
   // 地图原点坐标编辑相关状态
   const [originEditVisible, setOriginEditVisible] = useState(false); // 原点编辑气泡显示状态
@@ -8045,12 +8013,14 @@ const MapManagement: React.FC = () => {
       top: minY,
       width: finalWidth,
       height: finalHeight,
-      border: '2px dashed #1890ff',  // 蓝色虚线边框
-      background: 'rgba(24, 144, 255, 0.1)',  // 半透明背景
+      border: isDraggingSelection ? '3px solid #1890ff' : '2px dashed #1890ff',  // 拖拽时实线边框更粗
+      background: isDraggingSelection ? 'rgba(24, 144, 255, 0.2)' : 'rgba(24, 144, 255, 0.1)',  // 拖拽时背景更明显
       pointerEvents: (selectedPoints.length > 0 ? 'auto' : 'none') as React.CSSProperties['pointerEvents'],  // 有选中点时允许交互
-      zIndex: 5,
+      zIndex: isDraggingSelection ? 10000 : 5000,  // 拖拽时提高层级，确保在所有元素之上
       boxSizing: 'border-box' as const,
-      cursor: selectedPoints.length > 0 ? 'move' : 'default'  // 有选中点时显示移动光标
+      cursor: selectedPoints.length > 0 ? 'move' : 'default',  // 有选中点时显示移动光标
+      boxShadow: isDraggingSelection ? '0 4px 12px rgba(24, 144, 255, 0.3)' : 'none',  // 拖拽时添加阴影
+      transition: isDraggingSelection ? 'none' : 'all 0.2s ease'  // 非拖拽时平滑过渡
     };
     return style;
   };
@@ -16150,9 +16120,10 @@ const MapManagement: React.FC = () => {
             id: point.id,
             name: point.name,
             direction: point.direction || 0,
-            type: point.type || 'normal'
+            type: point.type || 'normal',
+            baseMapId: point.baseMapId || ''
           } : null;
-        }).filter((item): item is { id: string; name: string; direction: number; type: string } => item !== null)}
+        }).filter((item): item is { id: string; name: string; direction: number; type: string; baseMapId: string } => item !== null)}
         onUpdate={(updateData) => {
           // 批量更新选中的点
           setMapPoints(prevPoints => 
@@ -16161,7 +16132,8 @@ const MapManagement: React.FC = () => {
                 return {
                   ...point,
                   ...(updateData.direction !== undefined && { direction: updateData.direction }),
-                  ...(updateData.type !== undefined && { type: updateData.type })
+                  ...(updateData.type !== undefined && { type: updateData.type }),
+                  ...(updateData.baseMapId !== undefined && { baseMapId: updateData.baseMapId })
                 };
               }
               return point;
