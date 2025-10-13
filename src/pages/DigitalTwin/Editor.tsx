@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Button, Select, Space, Typography, Input, List, Card, Divider, Modal, Form, message, Row, Col, Slider, ColorPicker } from 'antd';
+import { Button, Select, Space, Typography, Input, InputNumber, List, Card, Divider, Modal, Form, message, Row, Col, Slider, ColorPicker } from 'antd';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import {
@@ -60,6 +60,23 @@ interface CNCMachine {
   type: 'cnc';
   color: string;
   selected?: boolean;
+  // 3D参数
+  depth3D?: number;    // 3D深度（Z轴，单位：m）
+  width3D?: number;    // 3D宽度（X轴，单位：m）
+  height3D?: number;   // 3D高度（Y轴，单位：m）
+  // 新增3D渲染参数
+  opacity?: number;    // 透明度 (0-1)
+  scale?: number;      // 整体缩放 (0.1-5.0)
+  lighting?: {         // 光照参数
+    intensity?: number;    // 光照强度 (0-2)
+    ambient?: number;      // 环境光强度 (0-1)
+    directional?: number;  // 方向光强度 (0-2)
+  };
+  rotation?: {         // 旋转参数
+    x?: number;        // X轴旋转角度 (度)
+    y?: number;        // Y轴旋转角度 (度)
+    z?: number;        // Z轴旋转角度 (度)
+  };
 }
 
 // 绘图工具类型定义
@@ -162,6 +179,7 @@ interface FloorScene {
 // 3D编辑器组件接口
 interface ThreeDEditorProps {
   walls: Wall[];
+  cncMachines: CNCMachine[];
   selectedWall3DProps: {
     width: number;
     thickness: number;
@@ -170,17 +188,19 @@ interface ThreeDEditorProps {
     opacity: number;
   };
   onWallSelect: (wallId: string) => void;
+  onCNCMachineSelect?: (cncId: string) => void;
   style?: React.CSSProperties;
 }
 
 // 3D编辑器组件
-const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, selectedWall3DProps, onWallSelect, style }) => {
+const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selectedWall3DProps, onWallSelect, onCNCMachineSelect, style }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene>();
   const rendererRef = useRef<THREE.WebGLRenderer>();
   const cameraRef = useRef<THREE.PerspectiveCamera>();
   const controlsRef = useRef<OrbitControls>();
   const wallMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const cncMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   
   // 键盘控制状态
   const [keys, setKeys] = useState<Set<string>>(new Set());
@@ -699,6 +719,94 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, selectedWall3DProps,
     });
   }, [walls, selectedWall3DProps]);
 
+  // 创建CNC机台3D模型
+  const createCNCMachine = (
+    cnc: CNCMachine,
+    scene: THREE.Scene,
+    meshMap: Map<string, THREE.Mesh>
+  ) => {
+    // 获取3D参数，如果没有则使用默认值
+    const width3D = cnc.width3D || 5;
+    const depth3D = cnc.depth3D || 5;
+    const height3D = cnc.height3D || 5;
+    
+    // 转换2D坐标到3D坐标系（Y轴向上）
+    const x3D = cnc.x / 100; // 像素转米
+    const z3D = -cnc.y / 100; // 像素转米，Z轴翻转
+    const y3D = height3D / 2; // Y轴位置（高度的一半，使底部贴地）
+    
+    // 创建主体几何体
+    const mainGeometry = new THREE.BoxGeometry(width3D, height3D, depth3D);
+    
+    // 创建主体材质
+    const mainMaterial = new THREE.MeshLambertMaterial({
+      color: cnc.color || '#4CAF50',
+      transparent: false
+    });
+    
+    // 创建主体网格
+    const mainMesh = new THREE.Mesh(mainGeometry, mainMaterial);
+    mainMesh.position.set(x3D, y3D, z3D);
+    mainMesh.castShadow = true;
+    mainMesh.receiveShadow = true;
+    
+    // 创建边框线条以增强立体感
+    const edges = new THREE.EdgesGeometry(mainGeometry);
+    const lineMaterial = new THREE.LineBasicMaterial({ 
+      color: cnc.selected ? '#ff4444' : '#333333',
+      linewidth: cnc.selected ? 3 : 1
+    });
+    const wireframe = new THREE.LineSegments(edges, lineMaterial);
+    wireframe.position.copy(mainMesh.position);
+    
+    // 创建组合对象
+    const cncGroup = new THREE.Group();
+    cncGroup.add(mainMesh);
+    cncGroup.add(wireframe);
+    
+    // 设置用户数据
+    cncGroup.userData = { 
+      cncId: cnc.id, 
+      type: 'cnc',
+      name: cnc.name 
+    };
+    
+    // 添加到场景
+    scene.add(cncGroup);
+    meshMap.set(cnc.id, cncGroup as any);
+    
+    // 如果选中，添加选中指示器
+    if (cnc.selected) {
+      // 创建选中指示器（发光效果）
+      const indicatorGeometry = new THREE.BoxGeometry(width3D + 0.2, height3D + 0.2, depth3D + 0.2);
+      const indicatorMaterial = new THREE.MeshBasicMaterial({
+        color: '#ffff00',
+        transparent: true,
+        opacity: 0.3,
+        wireframe: true
+      });
+      const indicator = new THREE.Mesh(indicatorGeometry, indicatorMaterial);
+      indicator.position.copy(mainMesh.position);
+      cncGroup.add(indicator);
+    }
+  };
+
+  // 更新CNC机台3D模型
+  useEffect(() => {
+    if (!sceneRef.current) return;
+
+    // 清除现有CNC机台
+    cncMeshesRef.current.forEach((mesh) => {
+      sceneRef.current!.remove(mesh);
+    });
+    cncMeshesRef.current.clear();
+
+    // 创建新的CNC机台
+    cncMachines.forEach((cnc) => {
+      createCNCMachine(cnc, sceneRef.current!, cncMeshesRef.current);
+    });
+  }, [cncMachines]);
+
   return (
     <div
       ref={mountRef}
@@ -909,6 +1017,9 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 视图模式状态
   const [viewMode, setViewMode] = useState<'top' | 'perspective'>('top');
+  
+  // 强制重绘状态 - 用于解决视图切换时的画布变形问题
+  const [forceRedraw, setForceRedraw] = useState(0);
   
   // 选中墙体的3D属性状态
   const [selectedWall3DProps, setSelectedWall3DProps] = useState({
@@ -1125,6 +1236,38 @@ const DigitalTwinEditor: React.FC = () => {
   } | null>(null);
   const [propertiesForm] = Form.useForm();
 
+  // CNC机台属性面板状态
+  const [showCNCPropertiesPanel, setShowCNCPropertiesPanel] = useState(false);
+  const [cncPropertiesFormData, setCncPropertiesFormData] = useState<{
+    cncId: string;
+    name: string;
+    width: number;
+    height: number;
+    depth3D: number;
+    color: string;
+    // 新增3D渲染参数
+    opacity: number;
+    scale: number;
+    rotationX: number;
+    rotationY: number;
+    rotationZ: number;
+  } | null>(null);
+  const [cncPropertiesForm] = Form.useForm();
+
+  // 防抖状态更新函数
+  const debouncedUpdateCncFormData = useCallback(
+    (() => {
+      let timeoutId: NodeJS.Timeout;
+      return (newData: typeof cncPropertiesFormData) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          setCncPropertiesFormData(newData);
+        }, 300); // 300ms 防抖延迟
+      };
+    })(),
+    []
+  );
+
   // 搜索状态
   const [modelSearchText, setModelSearchText] = useState('');
 
@@ -1140,6 +1283,13 @@ const DigitalTwinEditor: React.FC = () => {
   const [draggedCNCMachineId, setDraggedCNCMachineId] = useState<string | null>(null);
   const [dragStartPosition, setDragStartPosition] = useState<{ x: number; y: number } | null>(null);
 
+  // CNC机台3D预览相关状态
+  const cncPreviewSceneRef = useRef<THREE.Scene | null>(null);
+  const cncPreviewRendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const cncPreviewCameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const cncPreviewControlsRef = useRef<OrbitControls | null>(null);
+  const cncPreviewMeshRef = useRef<THREE.Mesh | null>(null);
+
   // 画布操作工具状态
   const [canvasOperationMode, setCanvasOperationMode] = useState<'select' | 'drag' | null>(null);
   const [undoStack, setUndoStack] = useState<any[]>([]);
@@ -1154,6 +1304,37 @@ const DigitalTwinEditor: React.FC = () => {
   useEffect(() => {
     selectedCNCMachinesRef.current = selectedCNCMachines;
   }, [selectedCNCMachines]);
+
+  // 监听CNC属性面板显示状态，初始化3D预览
+  useEffect(() => {
+    if (showCNCPropertiesPanel) {
+      // 延迟初始化，确保DOM元素已渲染
+      const timer = setTimeout(() => {
+        initCNCPreviewScene();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [showCNCPropertiesPanel]);
+
+  // 监听CNC属性表单数据变化，实时更新3D预览
+  useEffect(() => {
+    console.log('🔍 [USEEFFECT] ========== CNC属性监听useEffect触发 ==========');
+    console.log('🔍 [USEEFFECT] showCNCPropertiesPanel:', showCNCPropertiesPanel);
+    console.log('🔍 [USEEFFECT] cncPropertiesFormData存在:', !!cncPropertiesFormData);
+    console.log('🔍 [USEEFFECT] cncPropertiesFormData详细数据:', cncPropertiesFormData);
+    
+    if (showCNCPropertiesPanel && cncPropertiesFormData) {
+      console.log('✅ [USEEFFECT] 条件满足，即将调用updateCNCPreviewMesh');
+      updateCNCPreviewMesh();
+    } else {
+      console.log('❌ [USEEFFECT] 条件不满足，跳过updateCNCPreviewMesh调用');
+      console.log('❌ [USEEFFECT] 原因分析:', {
+        showCNCPropertiesPanel,
+        cncPropertiesFormDataExists: !!cncPropertiesFormData
+      });
+    }
+    console.log('🔍 [USEEFFECT] ========== CNC属性监听useEffect结束 ==========');
+  }, [showCNCPropertiesPanel, cncPropertiesFormData]);
 
   // 监听视图模式变化，透视图模式下自动隐藏面板实现全屏显示
   useEffect(() => {
@@ -1261,7 +1442,23 @@ const DigitalTwinEditor: React.FC = () => {
   // 顶视图 - 切换到顶视图模式
   const handleTopView = () => {
     setViewMode('top');
-    resetView();
+    // 延迟重绘画布，确保视图切换完成后再渲染
+    setTimeout(() => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        // 触发画布重绘
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // 清除画布并重新绘制
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          // 强制重绘
+          setForceRedraw(prev => prev + 1);
+          // 触发重绘
+          const event = new Event('resize');
+          window.dispatchEvent(event);
+        }
+      }
+    }, 150);
     message.success('已切换到顶视图编辑器');
   };
 
@@ -1341,11 +1538,19 @@ const DigitalTwinEditor: React.FC = () => {
     const previousState = undoStack[undoStack.length - 1];
     
     // 恢复状态
+    console.log('🔄 [UNDO] ========== 撤销操作开始 ==========');
+    console.log('🔄 [UNDO] 当前CNC机台数量:', cncMachines.length);
+    console.log('🔄 [UNDO] 撤销前状态CNC机台数量:', previousState.cncMachines.length);
+    console.log('🔄 [UNDO] 撤销前状态CNC机台列表:', previousState.cncMachines);
+    
     setWalls(previousState.walls);
     setCncMachines(previousState.cncMachines);
     setScale(previousState.scale);
     setOffsetX(previousState.offsetX);
     setOffsetY(previousState.offsetY);
+    
+    console.log('🔄 [UNDO] setCncMachines调用完成');
+    console.log('🔄 [UNDO] ========== 撤销操作结束 ==========');
 
     // 更新栈
     setUndoStack(prev => prev.slice(0, -1));
@@ -1373,11 +1578,19 @@ const DigitalTwinEditor: React.FC = () => {
     const nextState = redoStack[redoStack.length - 1];
     
     // 恢复状态
+    console.log('🔄 [REDO] ========== 重做操作开始 ==========');
+    console.log('🔄 [REDO] 当前CNC机台数量:', cncMachines.length);
+    console.log('🔄 [REDO] 重做状态CNC机台数量:', nextState.cncMachines.length);
+    console.log('🔄 [REDO] 重做状态CNC机台列表:', nextState.cncMachines);
+    
     setWalls(nextState.walls);
     setCncMachines(nextState.cncMachines);
     setScale(nextState.scale);
     setOffsetX(nextState.offsetX);
     setOffsetY(nextState.offsetY);
+    
+    console.log('🔄 [REDO] setCncMachines调用完成');
+    console.log('🔄 [REDO] ========== 重做操作结束 ==========');
 
     // 更新栈
     setRedoStack(prev => prev.slice(0, -1));
@@ -1415,6 +1628,12 @@ const DigitalTwinEditor: React.FC = () => {
     }
     setCurrentWall(null);
     setIsDrawingWall(false);
+    
+    // 自动切换回选择工具
+    setDrawingTools(prev => prev.map(tool => ({
+      ...tool,
+      active: tool.type === 'select'
+    })));
   }, [currentWall, saveStateToUndoStack]);
 
   // 取消当前墙体绘制
@@ -1438,6 +1657,18 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 键盘事件处理
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    console.log('⌨️ [KEYBOARD] 键盘事件触发:', {
+      key: e.key,
+      code: e.code,
+      ctrlKey: e.ctrlKey,
+      metaKey: e.metaKey,
+      target: e.target?.constructor?.name,
+      activeElement: document.activeElement?.tagName,
+      showCNCPropertiesPanel,
+      selectedCNCMachines: selectedCNCMachines.length,
+      cncMachines: cncMachines.length,
+      timestamp: new Date().toISOString()
+    });
     
     if (e.key === ' ' && !e.repeat) {
       // 空格键开始拖动模式（参考地图编辑器）
@@ -1553,6 +1784,22 @@ const DigitalTwinEditor: React.FC = () => {
       console.log('✅ ESC键重置完成');
       message.info('已退出所有编辑模式');
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
+      // 🛡️ 检查是否在输入元素中按下Delete键，如果是则不执行删除操作
+      const activeElement = document.activeElement;
+      const isInputElement = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        (activeElement as HTMLElement).contentEditable === 'true' ||
+        activeElement.closest('.ant-input') ||
+        activeElement.closest('.ant-select') ||
+        activeElement.closest('.ant-slider')
+      );
+      
+      if (isInputElement) {
+        console.log('⚠️ [DELETE] 在输入元素中按下Delete键，跳过删除操作');
+        return;
+      }
+      
       if (selectedSegments.length > 0) {
         // Delete/Backspace键删除选中的线段
         deleteSelectedSegments();
@@ -1575,6 +1822,42 @@ const DigitalTwinEditor: React.FC = () => {
         setWalls(prevWalls => prevWalls.filter(wall => !selectedWalls.includes(wall.id)));
         setSelectedWalls([]);
         message.success(`已删除 ${selectedWalls.length} 个墙体`);
+      } else if (selectedCNCMachines.length > 0) {
+        // Delete/Backspace键删除选中的CNC机台
+        console.log('🗑️ [DELETE] 尝试删除CNC机台');
+        console.log('🗑️ [DELETE] 选中的机台ID:', selectedCNCMachines);
+        console.log('🗑️ [DELETE] 属性面板是否打开:', showCNCPropertiesPanel);
+        console.log('🗑️ [DELETE] 当前编辑的机台ID:', cncPropertiesFormData?.cncId);
+        
+        // 🛡️ 增强保护机制：检查多种情况
+        const shouldBlockDeletion = (
+          // 情况1：属性面板正在打开且正在编辑选中的机台
+          (showCNCPropertiesPanel && cncPropertiesFormData?.cncId && selectedCNCMachines.includes(cncPropertiesFormData.cncId)) ||
+          // 情况2：刚刚关闭属性面板，但表单数据仍然存在（可能正在应用更改）
+          (!showCNCPropertiesPanel && cncPropertiesFormData?.cncId && selectedCNCMachines.includes(cncPropertiesFormData.cncId))
+        );
+        
+        if (shouldBlockDeletion) {
+          console.log('⚠️ [DELETE] 阻止删除：CNC机台正在编辑或刚刚编辑完成');
+          message.warning('CNC机台正在编辑或刚刚编辑完成，请稍后再试');
+          return;
+        }
+        
+        // 🛡️ 额外保护：检查CNC机台列表是否为空
+        if (cncMachines.length === 0) {
+          console.error('❌ [DELETE] CNC机台列表为空，无法执行删除操作');
+          message.error('CNC机台数据异常，无法执行删除操作');
+          return;
+        }
+        
+        setCncMachines(prevMachines => {
+          const filteredMachines = prevMachines.filter(machine => !selectedCNCMachines.includes(machine.id));
+          console.log('🗑️ [DELETE] 删除前机台数量:', prevMachines.length);
+          console.log('🗑️ [DELETE] 删除后机台数量:', filteredMachines.length);
+          return filteredMachines;
+        });
+        setSelectedCNCMachines([]);
+        message.success(`已删除 ${selectedCNCMachines.length} 个CNC机台`);
       }
     } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
       // Ctrl+A 或 Cmd+A 全选墙体
@@ -1728,11 +2011,62 @@ const DigitalTwinEditor: React.FC = () => {
         selectDrawingTool('select-wall');
         message.info('已切换到选择工具');
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        // 删除选中的墙体
+        // 🛡️ 检查是否在输入元素中按下Delete键，如果是则不执行删除操作
+        const activeElement = document.activeElement;
+        const isInputElement = activeElement && (
+          activeElement.tagName === 'INPUT' ||
+          activeElement.tagName === 'TEXTAREA' ||
+          (activeElement as HTMLElement).contentEditable === 'true' ||
+          activeElement.closest('.ant-input') ||
+          activeElement.closest('.ant-select') ||
+          activeElement.closest('.ant-slider')
+        );
+        
+        if (isInputElement) {
+          console.log('⚠️ [DELETE] 在输入元素中按下Delete键，跳过删除操作');
+          return;
+        }
+        
+        // 删除选中的墙体或CNC机台
         if (selectedWallsRef.current.length > 0) {
           setWalls(prev => prev.filter(wall => !selectedWallsRef.current.includes(wall.id)));
           setSelectedWalls([]);
           message.success(`已删除 ${selectedWallsRef.current.length} 个墙体`);
+        } else if (selectedCNCMachinesRef.current.length > 0) {
+          console.log('🗑️ [DELETE-REF] 尝试删除CNC机台 (通过Ref)');
+          console.log('🗑️ [DELETE-REF] 选中的机台ID:', selectedCNCMachinesRef.current);
+          console.log('🗑️ [DELETE-REF] 属性面板是否打开:', showCNCPropertiesPanel);
+          console.log('🗑️ [DELETE-REF] 当前编辑的机台ID:', cncPropertiesFormData?.cncId);
+          
+          // 🛡️ 增强保护机制：检查多种情况
+          const shouldBlockDeletion = (
+            // 情况1：属性面板正在打开且正在编辑选中的机台
+            (showCNCPropertiesPanel && cncPropertiesFormData?.cncId && selectedCNCMachinesRef.current.includes(cncPropertiesFormData.cncId)) ||
+            // 情况2：刚刚关闭属性面板，但表单数据仍然存在（可能正在应用更改）
+            (!showCNCPropertiesPanel && cncPropertiesFormData?.cncId && selectedCNCMachinesRef.current.includes(cncPropertiesFormData.cncId))
+          );
+          
+          if (shouldBlockDeletion) {
+            console.log('⚠️ [DELETE-REF] 阻止删除：CNC机台正在编辑或刚刚编辑完成');
+            message.warning('CNC机台正在编辑或刚刚编辑完成，请稍后再试');
+            return;
+          }
+          
+          // 🛡️ 额外保护：检查CNC机台列表是否为空
+          if (cncMachines.length === 0) {
+            console.error('❌ [DELETE-REF] CNC机台列表为空，无法执行删除操作');
+            message.error('CNC机台数据异常，无法执行删除操作');
+            return;
+          }
+          
+          setCncMachines(prev => {
+            const filteredMachines = prev.filter(machine => !selectedCNCMachinesRef.current.includes(machine.id));
+            console.log('🗑️ [DELETE-REF] 删除前机台数量:', prev.length);
+            console.log('🗑️ [DELETE-REF] 删除后机台数量:', filteredMachines.length);
+            return filteredMachines;
+          });
+          setSelectedCNCMachines([]);
+          message.success(`已删除 ${selectedCNCMachinesRef.current.length} 个CNC机台`);
         }
       } else if (e.ctrlKey && e.key === 'a') {
         // Ctrl+A 全选所有墙体
@@ -2163,8 +2497,12 @@ const DigitalTwinEditor: React.FC = () => {
           return;
         }
         
-        const downButtonX = machine.x;
-        const downButtonY = machine.y + buttonDistance;
+        // 计算机台在画布上的位置（与绘制时保持一致）
+        const canvasX = machine.x;
+        const canvasY = machine.y;
+        
+        const downButtonX = canvasX;
+        const downButtonY = canvasY + buttonDistance;
         if (point.x >= downButtonX - buttonSize / 2 && 
             point.x <= downButtonX + buttonSize / 2 &&
             point.y >= downButtonY - buttonSize / 2 && 
@@ -2173,8 +2511,8 @@ const DigitalTwinEditor: React.FC = () => {
           return;
         }
         
-        const leftButtonX = machine.x - buttonDistance;
-        const leftButtonY = machine.y;
+        const leftButtonX = canvasX - buttonDistance;
+        const leftButtonY = canvasY;
         if (point.x >= leftButtonX - buttonSize / 2 && 
             point.x <= leftButtonX + buttonSize / 2 &&
             point.y >= leftButtonY - buttonSize / 2 && 
@@ -2183,8 +2521,8 @@ const DigitalTwinEditor: React.FC = () => {
           return;
         }
         
-        const rightButtonX = machine.x + buttonDistance;
-        const rightButtonY = machine.y;
+        const rightButtonX = canvasX + buttonDistance;
+        const rightButtonY = canvasY;
         if (point.x >= rightButtonX - buttonSize / 2 && 
             point.x <= rightButtonX + buttonSize / 2 &&
             point.y >= rightButtonY - buttonSize / 2 && 
@@ -2194,8 +2532,8 @@ const DigitalTwinEditor: React.FC = () => {
         }
         
         // 检查旋转控制按钮
-        const clockwiseButtonX = machine.x + rotateDistance;
-        const clockwiseButtonY = machine.y + rotateDistance;
+        const clockwiseButtonX = canvasX + rotateDistance;
+        const clockwiseButtonY = canvasY + rotateDistance;
         if (point.x >= clockwiseButtonX - rotateButtonSize / 2 && 
             point.x <= clockwiseButtonX + rotateButtonSize / 2 &&
             point.y >= clockwiseButtonY - rotateButtonSize / 2 && 
@@ -2204,8 +2542,8 @@ const DigitalTwinEditor: React.FC = () => {
           return;
         }
         
-        const counterClockwiseButtonX = machine.x - rotateDistance;
-        const counterClockwiseButtonY = machine.y + rotateDistance;
+        const counterClockwiseButtonX = canvasX - rotateDistance;
+        const counterClockwiseButtonY = canvasY + rotateDistance;
         if (point.x >= counterClockwiseButtonX - rotateButtonSize / 2 && 
             point.x <= counterClockwiseButtonX + rotateButtonSize / 2 &&
             point.y >= counterClockwiseButtonY - rotateButtonSize / 2 && 
@@ -2217,11 +2555,18 @@ const DigitalTwinEditor: React.FC = () => {
       
       // 然后检查是否点击了CNC机台本身
       const clickedCNCMachine = cncMachines.find(machine => {
-        const machineSize = 25; // CNC机台的半尺寸
-        return point.x >= machine.x - machineSize && 
-               point.x <= machine.x + machineSize &&
-               point.y >= machine.y - machineSize && 
-               point.y <= machine.y + machineSize;
+        // 计算机台在画布上的位置（与绘制时保持一致）
+        const canvasX = machine.x;
+        const canvasY = machine.y;
+        
+        // 使用机台的实际尺寸，如果没有设置则使用默认值，并确保最小点击区域
+        const minClickSize = 8; // 最小点击区域
+        const machineWidth = Math.max((machine.width3D || machine.width || 5) * 10, minClickSize);
+        const machineHeight = Math.max((machine.height3D || machine.height || 5) * 10, minClickSize);
+        return point.x >= canvasX - machineWidth / 2 && 
+               point.x <= canvasX + machineWidth / 2 &&
+               point.y >= canvasY - machineHeight / 2 && 
+               point.y <= canvasY + machineHeight / 2;
       });
       
       if (clickedCNCMachine) {
@@ -2393,6 +2738,24 @@ const DigitalTwinEditor: React.FC = () => {
       return;
     }
     
+    // 检查是否双击了CNC机台，打开属性面板
+    const clickedCNC = cncMachines.find(cnc => {
+      const distance = Math.sqrt(
+        Math.pow(point.x - cnc.x, 2) + Math.pow(point.y - cnc.y, 2)
+      );
+      // 检查点击是否在CNC机台范围内（考虑机台尺寸）
+      const halfWidth = (cnc.width || 2.0) * 20; // 转换为像素，假设1米=20像素
+      const halfHeight = (cnc.height || 1.5) * 20;
+      return Math.abs(point.x - cnc.x) <= halfWidth && Math.abs(point.y - cnc.y) <= halfHeight;
+    });
+    
+    if (clickedCNC) {
+      // 打开CNC机台属性面板
+      openCNCPropertiesPanel(clickedCNC.id);
+      message.info(`打开 ${clickedCNC.name} 属性面板`);
+      return;
+    }
+    
     // 检查是否双击了贝塞尔曲线，进入编辑模式
     if (activeTool?.type === 'select') {
       const clickedWall = walls.find(wall => {
@@ -2427,6 +2790,59 @@ const DigitalTwinEditor: React.FC = () => {
     e.dataTransfer.dropEffect = 'copy';
   };
 
+  // 检查CNC机台是否与现有机台重叠
+  const checkCNCCollision = (x: number, y: number, width: number, height: number, excludeId?: string): boolean => {
+    return cncMachines.some(machine => {
+      if (excludeId && machine.id === excludeId) return false;
+      
+      // 检查矩形重叠
+      const left1 = x - width / 2;
+      const right1 = x + width / 2;
+      const top1 = y - height / 2;
+      const bottom1 = y + height / 2;
+      
+      const left2 = machine.x - machine.width / 2;
+      const right2 = machine.x + machine.width / 2;
+      const top2 = machine.y - machine.height / 2;
+      const bottom2 = machine.y + machine.height / 2;
+      
+      return !(right1 <= left2 || left1 >= right2 || bottom1 <= top2 || top1 >= bottom2);
+    });
+  };
+
+  // 寻找合适的放置位置，避免重叠
+  const findValidPosition = (initialX: number, initialY: number, width: number, height: number): { x: number, y: number } => {
+    const minSpacing = 80; // 最小间距（像素）
+    const maxAttempts = 50; // 最大尝试次数
+    
+    // 首先检查初始位置是否可用
+    if (!checkCNCCollision(initialX, initialY, width, height)) {
+      return { x: initialX, y: initialY };
+    }
+    
+    // 如果初始位置有冲突，尝试在周围寻找合适位置
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const radius = minSpacing * attempt;
+      const angleStep = Math.PI / 4; // 45度步长
+      
+      for (let angle = 0; angle < Math.PI * 2; angle += angleStep) {
+        const x = initialX + Math.cos(angle) * radius;
+        const y = initialY + Math.sin(angle) * radius;
+        
+        // 确保位置在画布范围内
+        if (x >= width / 2 && x <= 800 - width / 2 && 
+            y >= height / 2 && y <= 600 - height / 2) {
+          if (!checkCNCCollision(x, y, width, height)) {
+            return { x, y };
+          }
+        }
+      }
+    }
+    
+    // 如果找不到合适位置，返回初始位置（用户可以手动调整）
+    return { x: initialX, y: initialY };
+  };
+
   const handleDrop = (e: React.DragEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     
@@ -2435,24 +2851,41 @@ const DigitalTwinEditor: React.FC = () => {
       if (modelData.type === 'cnc') {
         const point = screenToCanvas(e.clientX, e.clientY);
         
+        // 机台尺寸
+        const machineWidth = 50;
+        const machineHeight = 50;
+        
+        // 寻找合适的放置位置
+        const validPosition = findValidPosition(point.x, point.y, machineWidth, machineHeight);
+        
         // 创建新的CNC机台
         const newCNCMachine: CNCMachine = {
           id: `cnc_${Date.now()}`,
-          x: point.x,
-          y: point.y,
-          width: 50, // 默认宽度50像素
-          height: 50, // 默认高度50像素
+          x: validPosition.x,
+          y: validPosition.y,
+          width: machineWidth,
+          height: machineHeight,
           name: modelData.name,
           type: 'cnc',
           color: '#1890ff',
-          selected: false
+          selected: false,
+          // 3D参数默认值 - 确保与间距比例协调，避免重叠
+          width3D: 1,    // 3D宽度（X轴，单位：m），配合4米间距绝对避免重叠
+          depth3D: 1,    // 3D深度（Z轴，单位：m），配合4米间距绝对避免重叠
+          height3D: 1    // 3D高度（Y轴，单位：m），配合4米间距绝对避免重叠
         };
         
         // 保存当前状态到撤销栈
         saveStateToUndoStack();
         
         setCncMachines(prev => [...prev, newCNCMachine]);
-        message.success(`已添加CNC机台: ${modelData.name}`);
+        
+        // 如果位置被调整，提示用户
+        if (validPosition.x !== point.x || validPosition.y !== point.y) {
+          message.success(`已添加CNC机台: ${modelData.name}（位置已自动调整以避免重叠）`);
+        } else {
+          message.success(`已添加CNC机台: ${modelData.name}`);
+        }
       }
     } catch (error) {
       console.error('拖拽放置失败:', error);
@@ -2791,14 +3224,17 @@ const DigitalTwinEditor: React.FC = () => {
     const minY = Math.min(start.y, end.y);
     const maxY = Math.max(start.y, end.y);
     
-    const machineSize = 30; // CNC机台的尺寸（像素）
-    
     return cncMachines.filter(machine => {
+      // 使用机台的实际尺寸，如果没有设置则使用默认值，并确保最小选择区域
+        const minSelectSize = 8; // 最小选择区域
+        const machineWidth = Math.max(machine.width3D || machine.width || 30, minSelectSize);
+        const machineHeight = Math.max(machine.height3D || machine.height || 30, minSelectSize);
+      
       // 检查CNC机台的矩形区域是否与框选矩形相交
-      const machineMinX = machine.x - machineSize / 2;
-      const machineMaxX = machine.x + machineSize / 2;
-      const machineMinY = machine.y - machineSize / 2;
-      const machineMaxY = machine.y + machineSize / 2;
+      const machineMinX = machine.x - machineWidth / 2;
+      const machineMaxX = machine.x + machineWidth / 2;
+      const machineMinY = machine.y - machineHeight / 2;
+      const machineMaxY = machine.y + machineHeight / 2;
       
       // 矩形相交检测：两个矩形相交当且仅当它们在x轴和y轴上都有重叠
       const xOverlap = machineMaxX >= minX && machineMinX <= maxX;
@@ -3225,13 +3661,13 @@ const DigitalTwinEditor: React.FC = () => {
     const wallHit = checkWallHit(x, y);
     console.log('墙体点击检测结果:', { wallHit, x, y });
     
-    // 在选择工具模式下，墙体和线段点击不应阻止框选
-    if (wallHit && !isSelectTool) {
+    // 处理墙体点击 - 只在选择工具模式下响应
+    if (wallHit && isSelectTool) {
       const currentTime = Date.now();
       const timeDiff = currentTime - lastClickTime;
       const clickedWall = walls.find(wall => wall.id === wallHit);
       
-      console.log('找到点击的墙体:', { wallHit, clickedWall });
+      console.log('找到点击的墙体:', { wallHit, clickedWall, isSelectTool });
       
       // 检查是否为双击（300ms内点击同一墙体）
       if (timeDiff < 300 && lastClickedWall === wallHit) {
@@ -3247,7 +3683,8 @@ const DigitalTwinEditor: React.FC = () => {
         console.log('点击了已完成的墙体:', {
           wallId: wallHit,
           wallType: clickedWall.type,
-          currentBezierEditMode: bezierEditMode
+          currentBezierEditMode: bezierEditMode,
+          isSelectTool
         });
         
         // 检查是否已经在编辑这条线段
@@ -3308,8 +3745,8 @@ const DigitalTwinEditor: React.FC = () => {
       return;
     }
 
-    // 如果没有墙体被点击，但有线段被检测到，且不是选择工具模式，则选择线段
-    if (segmentHit && !isSelectTool) {
+    // 如果没有墙体被点击，但有线段被检测到，则选择线段（只在选择工具模式下）
+    if (segmentHit && isSelectTool) {
       console.log('备用线段选择逻辑:', segmentHit);
       // 单选线段逻辑
       setSelectedSegments(prev => {
@@ -3532,6 +3969,348 @@ const DigitalTwinEditor: React.FC = () => {
     
     message.success('墙体属性更新成功');
     closePropertiesPanel();
+  };
+
+  // 打开CNC机台属性面板
+  const openCNCPropertiesPanel = (cncId: string) => {
+    const cnc = cncMachines.find(c => c.id === cncId);
+    if (cnc) {
+      const formData = {
+        cncId: cnc.id,
+        name: cnc.name || 'CNC机台-001',
+        // 注意：表单中的width/height字段对应3D尺寸，需要从width3D/height3D获取
+        width: cnc.width3D || 3.0,    // 表单的width字段显示width3D值
+        height: cnc.height3D || 2.5,  // 表单的height字段显示height3D值
+        depth3D: cnc.depth3D || 2.0,
+
+        color: cnc.color || '#4A90E2',
+        opacity: cnc.opacity || 1.0,
+        scale: cnc.scale || 1.0,
+        rotationX: cnc.rotation?.x || 0,
+        rotationY: cnc.rotation?.y || 0,
+        rotationZ: cnc.rotation?.z || 0
+      };
+      setCncPropertiesFormData(formData);
+      cncPropertiesForm.setFieldsValue(formData);
+      setShowCNCPropertiesPanel(true);
+    }
+  };
+
+  // 关闭CNC机台属性面板
+  const closeCNCPropertiesPanel = () => {
+    console.log('🔧 [DEBUG] closeCNCPropertiesPanel 开始执行');
+    console.log('🔧 [DEBUG] 关闭前 - CNC机台总数:', cncMachines.length);
+    console.log('🔧 [DEBUG] 关闭前 - 选中的CNC机台:', selectedCNCMachines);
+    console.log('🔧 [DEBUG] 关闭前 - 表单数据:', cncPropertiesFormData);
+    
+    setShowCNCPropertiesPanel(false);
+    setCncPropertiesFormData(null);
+    cncPropertiesForm.resetFields();
+    
+    // 清理选中的CNC机台状态，避免状态不一致导致的显示问题
+    setSelectedCNCMachines([]);
+    
+    // 清理3D预览场景
+    if (cncPreviewRendererRef.current) {
+      cncPreviewRendererRef.current.dispose();
+      cncPreviewRendererRef.current = null;
+    }
+    if (cncPreviewControlsRef.current) {
+      cncPreviewControlsRef.current.dispose();
+      cncPreviewControlsRef.current = null;
+    }
+    cncPreviewSceneRef.current = null;
+    cncPreviewCameraRef.current = null;
+    cncPreviewMeshRef.current = null;
+    
+    console.log('🔧 [DEBUG] closeCNCPropertiesPanel 执行完成');
+    console.log('🔧 [DEBUG] 关闭后 - CNC机台总数:', cncMachines.length);
+    
+    // 强制重新绘制画布
+    setTimeout(() => {
+      console.log('🔧 [DEBUG] 延迟重绘画布');
+      drawCanvas();
+    }, 100);
+  };
+
+  // 初始化CNC机台3D预览场景
+  const initCNCPreviewScene = () => {
+    const container = document.getElementById('cnc-preview-container');
+    if (!container) return;
+
+    // 清理现有场景
+    if (cncPreviewRendererRef.current) {
+      cncPreviewRendererRef.current.dispose();
+    }
+
+    // 创建场景
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf5f5f5);
+    cncPreviewSceneRef.current = scene;
+
+    // 创建相机
+    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+    camera.position.set(5, 5, 5);
+    camera.lookAt(0, 0, 0);
+    cncPreviewCameraRef.current = camera;
+
+    // 创建渲染器
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    cncPreviewRendererRef.current = renderer;
+
+    // 清空容器并添加渲染器
+    container.innerHTML = '';
+    container.appendChild(renderer.domElement);
+
+    // 创建控制器
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.enableZoom = true;
+    controls.enablePan = true;
+    cncPreviewControlsRef.current = controls;
+
+    // 添加光照
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+    scene.add(ambientLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(10, 10, 5);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
+    scene.add(directionalLight);
+
+    // 创建默认CNC机台几何体（正方体）
+    updateCNCPreviewMesh();
+
+    // 渲染循环
+    const animate = () => {
+      requestAnimationFrame(animate);
+      if (controls) controls.update();
+      if (renderer && scene && camera) {
+        renderer.render(scene, camera);
+      }
+    };
+    animate();
+
+    // 处理窗口大小变化
+    const handleResize = () => {
+      if (container && camera && renderer) {
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  };
+
+  // 更新CNC机台3D预览网格
+  const updateCNCPreviewMesh = () => {
+    console.log('🔄 [CNC_MESH] ========== updateCNCPreviewMesh 开始执行 ==========');
+    console.log('📊 [CNC_MESH] 当前 cncPropertiesFormData:', cncPropertiesFormData);
+    
+    const scene = cncPreviewSceneRef.current;
+    console.log('🎬 [CNC_MESH] 场景对象:', scene ? '存在' : '不存在');
+    console.log('📝 [CNC_MESH] 表单数据:', cncPropertiesFormData ? '存在' : '不存在');
+    
+    if (!scene || !cncPropertiesFormData) {
+      console.log('❌ [CNC_MESH] 场景或表单数据不存在，退出函数');
+      return;
+    }
+
+    // 移除现有网格
+    console.log('🗑️ [CNC_MESH] 检查现有网格:', cncPreviewMeshRef.current ? '存在，准备删除' : '不存在');
+    if (cncPreviewMeshRef.current) {
+      console.log('🔥 [CNC_MESH] 正在删除现有网格...');
+      scene.remove(cncPreviewMeshRef.current);
+      cncPreviewMeshRef.current.geometry.dispose();
+      if (Array.isArray(cncPreviewMeshRef.current.material)) {
+        cncPreviewMeshRef.current.material.forEach(material => material.dispose());
+      } else {
+        cncPreviewMeshRef.current.material.dispose();
+      }
+      console.log('✅ [CNC_MESH] 现有网格已删除');
+    }
+
+    // 创建新的几何体
+    console.log('🔧 [CNC_MESH] 开始创建新几何体');
+    console.log('📏 [CNC_MESH] 几何体尺寸参数:', {
+      width: cncPropertiesFormData.width || 3.0,
+      depth3D: cncPropertiesFormData.depth3D || 2.0,
+      height: cncPropertiesFormData.height || 2.5
+    });
+    
+    const geometry = new THREE.BoxGeometry(
+      cncPropertiesFormData.width || 3.0,
+      cncPropertiesFormData.depth3D || 2.0,
+      cncPropertiesFormData.height || 2.5
+    );
+    console.log('✅ [CNC_MESH] 几何体创建完成');
+
+    // 创建材质
+    console.log('🎨 [CNC_MESH] 开始创建材质');
+    console.log('🎨 [CNC_MESH] 材质参数:', {
+      color: cncPropertiesFormData.color || '#4A90E2',
+      opacity: cncPropertiesFormData.opacity || 1.0
+    });
+    
+    const material = new THREE.MeshLambertMaterial({
+      color: cncPropertiesFormData.color || '#4A90E2',
+      transparent: true,
+      opacity: cncPropertiesFormData.opacity || 1.0
+    });
+    console.log('✅ [CNC_MESH] 材质创建完成');
+
+    // 创建网格
+    console.log('🔗 [CNC_MESH] 开始创建网格');
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(0, 0, 0);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    console.log('✅ [CNC_MESH] 网格创建完成');
+
+    // 应用旋转
+    console.log('🔄 [CNC_MESH] 应用旋转参数:', {
+      rotationX: cncPropertiesFormData.rotationX || 0,
+      rotationY: cncPropertiesFormData.rotationY || 0,
+      rotationZ: cncPropertiesFormData.rotationZ || 0
+    });
+    mesh.rotation.x = (cncPropertiesFormData.rotationX || 0) * Math.PI / 180;
+    mesh.rotation.y = (cncPropertiesFormData.rotationY || 0) * Math.PI / 180;
+    mesh.rotation.z = (cncPropertiesFormData.rotationZ || 0) * Math.PI / 180;
+
+    // 应用整体缩放参数（等比例缩放）
+    const scale = cncPropertiesFormData.scale || 1.0;
+    console.log('📐 [CNC_MESH] 应用整体缩放参数:', scale);
+    mesh.scale.set(scale, scale, scale);
+
+    console.log('🌟 [CNC_MESH] 将网格添加到场景');
+    scene.add(mesh);
+    cncPreviewMeshRef.current = mesh;
+    console.log('✅ [CNC_MESH] updateCNCPreviewMesh 函数执行完成');
+  };
+
+  // 更新CNC机台属性
+  const updateCNCProperties = (values: any) => {
+    console.log('🚀 [DEBUG] ========== updateCNCProperties 函数开始执行 ==========');
+    console.log('📝 [DEBUG] 接收到的表单值:', values);
+    console.log('🔍 [DEBUG] 表单值类型检查:', typeof values);
+    console.log('📊 [DEBUG] 表单值是否为空:', values === null || values === undefined);
+    
+    if (!cncPropertiesFormData) {
+      console.error('❌ [DEBUG] cncPropertiesFormData 为空，函数提前返回');
+      return;
+    }
+    
+    console.log('✅ [DEBUG] cncPropertiesFormData 存在:', cncPropertiesFormData);
+    console.log('🎯 [DEBUG] 当前选中的CNC ID:', cncPropertiesFormData.cncId);
+    console.log('📊 [DEBUG] 当前CNC机台列表长度:', cncMachines.length);
+    console.log('🔍 [DEBUG] 当前CNC机台列表:', cncMachines.map(cnc => ({ id: cnc.id, name: cnc.name })));
+    
+    // 🛡️ 保护机制：检查CNC机台列表是否为空
+    if (cncMachines.length === 0) {
+      console.error('❌ [PROTECTION] CNC机台列表为空，无法执行更新操作');
+      console.error('❌ [PROTECTION] 这可能是由于意外的状态清空导致的');
+      
+      // 尝试从撤销栈中恢复数据
+      if (undoStack.length > 0) {
+        const lastState = undoStack[undoStack.length - 1];
+        if (lastState.cncMachines && lastState.cncMachines.length > 0) {
+          console.log('🔄 [PROTECTION] 尝试从撤销栈恢复CNC机台数据');
+          console.log('🔄 [PROTECTION] 恢复的CNC机台数量:', lastState.cncMachines.length);
+          setCncMachines(lastState.cncMachines);
+          message.warning('检测到CNC机台数据异常，已自动恢复');
+          return;
+        }
+      }
+      
+      message.error('CNC机台数据丢失，无法执行更新操作');
+      return;
+    }
+    
+    // 查找当前CNC机台
+    const currentCNC = cncMachines.find(cnc => cnc.id === cncPropertiesFormData.cncId);
+    console.log('🔍 [DEBUG] 更新前的CNC机台数据:', currentCNC);
+    
+    // 空值检查和默认值处理
+    const safeValues = {
+      name: values.name || currentCNC?.name || 'CNC机台',
+      width: (values.width !== null && values.width !== undefined && values.width > 0) ? values.width : (currentCNC?.width3D || 3.0),
+      height: (values.height !== null && values.height !== undefined && values.height > 0) ? values.height : (currentCNC?.height3D || 2.5),
+      depth3D: (values.depth3D !== null && values.depth3D !== undefined && values.depth3D > 0) ? values.depth3D : (currentCNC?.depth3D || 2.0),
+      color: values.color || currentCNC?.color || '#4A90E2',
+      opacity: (values.opacity !== null && values.opacity !== undefined && values.opacity >= 0 && values.opacity <= 1) ? values.opacity : (currentCNC?.opacity || 1.0),
+      scale: (values.scale !== null && values.scale !== undefined && values.scale > 0) ? values.scale : (currentCNC?.scale || 1.0),
+
+      rotationX: (values.rotationX !== null && values.rotationX !== undefined) ? values.rotationX : (currentCNC?.rotation?.x || 0),
+      rotationY: (values.rotationY !== null && values.rotationY !== undefined) ? values.rotationY : (currentCNC?.rotation?.y || 0),
+      rotationZ: (values.rotationZ !== null && values.rotationZ !== undefined) ? values.rotationZ : (currentCNC?.rotation?.z || 0)
+    };
+    
+    console.log('🛡️ [DEBUG] 处理后的安全值:', safeValues);
+    console.log('🔄 [DEBUG] 准备调用 setCncMachines 更新状态');
+    console.log('📋 [DEBUG] 更新前的CNC机台列表:', cncMachines);
+    
+    setCncMachines(prevCncs => {
+      console.log('🔄 [DEBUG] setCncMachines 回调函数开始执行');
+      console.log('📋 [DEBUG] prevCncs 参数:', prevCncs);
+      console.log('📊 [DEBUG] prevCncs 长度:', prevCncs.length);
+      
+      const updatedCncs = prevCncs.map(cnc => {
+        if (cnc.id === cncPropertiesFormData.cncId) {
+          console.log('🎯 [DEBUG] 找到要更新的CNC机台:', cnc);
+          const updatedCnc = {
+            ...cnc,
+            name: safeValues.name, // 使用安全值更新name属性
+            // 同步更新2D显示属性（像素）和3D属性（米）
+            width: safeValues.width * 10,     // 3D宽度转换为2D显示宽度（1米=10像素）
+            height: safeValues.height * 10,   // 3D高度转换为2D显示高度（1米=10像素）
+            width3D: safeValues.width,        // 表单的width映射到width3D
+            height3D: safeValues.height,      // 表单的height映射到height3D
+            depth3D: safeValues.depth3D,
+            color: safeValues.color,
+            opacity: safeValues.opacity,
+            scale: safeValues.scale,
+
+            rotation: {
+              x: safeValues.rotationX,
+              y: safeValues.rotationY,
+              z: safeValues.rotationZ
+            }
+          };
+          console.log('✨ [DEBUG] 生成的更新后CNC数据:', updatedCnc);
+          return updatedCnc;
+        } else {
+          return cnc;
+        }
+      });
+      
+      const updatedCNC = updatedCncs.find(cnc => cnc.id === cncPropertiesFormData.cncId);
+      console.log('✅ [DEBUG] 最终更新后的CNC机台数据:', updatedCNC);
+      console.log('📊 [DEBUG] 最终更新后的所有CNC机台数量:', updatedCncs.length);
+      console.log('📋 [DEBUG] 最终更新后的所有CNC机台列表:', updatedCncs.map(cnc => ({ id: cnc.id, name: cnc.name })));
+      console.log('🔄 [DEBUG] setCncMachines 回调函数即将返回新状态');
+      
+      return updatedCncs;
+    });
+    
+    console.log('💾 [DEBUG] setCncMachines 调用完成');
+    
+    message.success('CNC机台属性更新成功');
+    console.log('✅ [DEBUG] 成功消息已显示');
+    console.log('🚪 [DEBUG] 即将关闭属性面板');
+    console.log('🏁 [DEBUG] ========== updateCNCProperties 函数执行完成 ==========');
+    closeCNCPropertiesPanel();
   };
 
   // 删除选中的墙体
@@ -4574,14 +5353,25 @@ const DigitalTwinEditor: React.FC = () => {
       if (selectedCNCMachines.length >= 2) {
         const selectedMachines = cncMachines.filter(machine => selectedCNCMachines.includes(machine.id));
         if (selectedMachines.length >= 2) {
-          const machineSize = 30; // CNC机台的尺寸（像素）
           const selectionPadding = 8; // 选中框的外边距
           
-          // 计算所有选中机台的边界框
-          const minX = Math.min(...selectedMachines.map(m => m.x - machineSize / 2 - selectionPadding));
-          const maxX = Math.max(...selectedMachines.map(m => m.x + machineSize / 2 + selectionPadding));
-          const minY = Math.min(...selectedMachines.map(m => m.y - machineSize / 2 - selectionPadding));
-          const maxY = Math.max(...selectedMachines.map(m => m.y + machineSize / 2 + selectionPadding));
+          // 计算所有选中机台的边界框，使用每个机台的实际尺寸
+          const minX = Math.min(...selectedMachines.map(m => {
+            const machineWidth = m.width || 30;
+            return m.x - machineWidth / 2 - selectionPadding;
+          }));
+          const maxX = Math.max(...selectedMachines.map(m => {
+            const machineWidth = m.width || 30;
+            return m.x + machineWidth / 2 + selectionPadding;
+          }));
+          const minY = Math.min(...selectedMachines.map(m => {
+            const machineHeight = m.height || 30;
+            return m.y - machineHeight / 2 - selectionPadding;
+          }));
+          const maxY = Math.max(...selectedMachines.map(m => {
+            const machineHeight = m.height || 30;
+            return m.y + machineHeight / 2 + selectionPadding;
+          }));
           
           // 添加额外的边距让框选框更明显
           const extraPadding = 10;
@@ -4615,44 +5405,93 @@ const DigitalTwinEditor: React.FC = () => {
         }
       }
 
-      cncMachines.forEach(machine => {
+      console.log('🎨 [DEBUG] ========== 开始绘制CNC机台 ==========');
+      console.log('📊 [DEBUG] CNC机台总数量:', cncMachines.length);
+      console.log('📋 [DEBUG] CNC机台列表概览:', cncMachines.map(m => ({ 
+        id: m.id, 
+        name: m.name, 
+        width3D: m.width3D, 
+        height3D: m.height3D,
+        depth3D: m.depth3D 
+      })));
+      
+      cncMachines.forEach((machine, index) => {
         ctx.save();
+        
+        console.log(`🔍 [DEBUG] 绘制第${index + 1}个CNC机台:`, {
+          id: machine.id,
+          name: machine.name,
+          position: { x: machine.x, y: machine.y },
+          dimensions2D: { width: machine.width, height: machine.height },
+          dimensions3D: { width3D: machine.width3D, height3D: machine.height3D, depth3D: machine.depth3D },
+          color: machine.color
+        });
         
         // 设置CNC机台的样式
         const isSelected = selectedCNCMachines.includes(machine.id);
-        const machineSize = 30; // CNC机台的尺寸（像素）
+        // 使用机台的实际尺寸，如果没有设置则使用默认值30
+        // 设置最小显示尺寸，确保设备在画布上始终可见
+        const minDisplaySize = 8; // 最小显示尺寸（像素）
         
-        // 绘制正方形CNC机台
+        // 修复：统一使用3D尺寸（米）并转换为像素，与透视图保持一致
+        // 使用与透视图相同的缩放比例：1米 = 10像素
+        const meterToPixelRatio = 10;
+        const rawWidthMeters = machine.width3D || 5; // 默认5米
+        const rawHeightMeters = machine.height3D || 5; // 默认5米
+        const machineWidth = Math.max(rawWidthMeters * meterToPixelRatio, minDisplaySize);
+        const machineHeight = Math.max(rawHeightMeters * meterToPixelRatio, minDisplaySize);
+        
+        console.log('📏 [DEBUG] 尺寸计算详情:', {
+          原始3D宽度: machine.width3D,
+          原始2D宽度: machine.width,
+          原始3D高度: machine.height3D,
+          原始2D高度: machine.height,
+          计算原始宽度米: rawWidthMeters,
+          计算原始高度米: rawHeightMeters,
+          米到像素比例: meterToPixelRatio,
+          最终绘制宽度: machineWidth,
+          最终绘制高度: machineHeight,
+          最小显示尺寸: minDisplaySize
+        });
+        
+        // 绘制CNC机台
         ctx.fillStyle = isSelected ? '#faad14' : machine.color;
         ctx.strokeStyle = isSelected ? '#d48806' : '#333333';
         ctx.lineWidth = 2 / scale;
         
-        // 绘制正方形
+        // 绘制矩形（支持不同的宽高）
+        // 修正坐标映射：与透视图保持一致的坐标转换
+        // 透视图转换：x3D = (machine.x - 400) / 10, z3D = -(machine.y - 300) / 10
+        // 反向转换：canvasX = x3D * 10 + 400, canvasY = -z3D * 10 + 300
+        // 但为了保持顶视图的直观性，我们使用原始坐标但确保比例一致
+        const canvasX = machine.x;
+        const canvasY = machine.y;
+        
         ctx.fillRect(
-          machine.x - machineSize / 2,
-          machine.y - machineSize / 2,
-          machineSize,
-          machineSize
+          canvasX - machineWidth / 2,
+          canvasY - machineHeight / 2,
+          machineWidth,
+          machineHeight
         );
         ctx.strokeRect(
-          machine.x - machineSize / 2,
-          machine.y - machineSize / 2,
-          machineSize,
-          machineSize
+          canvasX - machineWidth / 2,
+          canvasY - machineHeight / 2,
+          machineWidth,
+          machineHeight
         );
         
         // 绘制选中状态的虚线框和控制按钮（仅在单选时显示）
         if (isSelected && selectedCNCMachines.length === 1) {
-          const selectionPadding = 8; // 选中框的外边距
+          const selectionPadding = 8 / scale; // 选中框的外边距，考虑缩放
           ctx.strokeStyle = '#1890ff'; // 蓝色虚线框
           ctx.lineWidth = 2 / scale;
           ctx.setLineDash([6 / scale, 4 / scale]); // 虚线样式
           
           ctx.strokeRect(
-            machine.x - machineSize / 2 - selectionPadding,
-            machine.y - machineSize / 2 - selectionPadding,
-            machineSize + selectionPadding * 2,
-            machineSize + selectionPadding * 2
+            canvasX - machineWidth / 2 - selectionPadding,
+            canvasY - machineHeight / 2 - selectionPadding,
+            machineWidth + selectionPadding * 2,
+            machineHeight + selectionPadding * 2
           );
           
           ctx.setLineDash([]); // 重置虚线
@@ -4667,8 +5506,8 @@ const DigitalTwinEditor: React.FC = () => {
           ctx.lineWidth = 1 / scale;
           
           // 上移按钮
-          const upButtonX = machine.x;
-          const upButtonY = machine.y - buttonDistance;
+          const upButtonX = canvasX;
+          const upButtonY = canvasY - buttonDistance;
           ctx.fillRect(
             upButtonX - buttonSize / 2,
             upButtonY - buttonSize / 2,
@@ -4692,8 +5531,8 @@ const DigitalTwinEditor: React.FC = () => {
           ctx.fill();
           
           // 下移按钮
-          const downButtonX = machine.x;
-          const downButtonY = machine.y + buttonDistance;
+          const downButtonX = canvasX;
+          const downButtonY = canvasY + buttonDistance;
           ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
           ctx.fillRect(
             downButtonX - buttonSize / 2,
@@ -4718,8 +5557,8 @@ const DigitalTwinEditor: React.FC = () => {
           ctx.fill();
           
           // 左移按钮
-          const leftButtonX = machine.x - buttonDistance;
-          const leftButtonY = machine.y;
+          const leftButtonX = canvasX - buttonDistance;
+          const leftButtonY = canvasY;
           ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
           ctx.fillRect(
             leftButtonX - buttonSize / 2,
@@ -4744,8 +5583,8 @@ const DigitalTwinEditor: React.FC = () => {
           ctx.fill();
           
           // 右移按钮
-          const rightButtonX = machine.x + buttonDistance;
-          const rightButtonY = machine.y;
+          const rightButtonX = canvasX + buttonDistance;
+          const rightButtonY = canvasY;
           ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
           ctx.fillRect(
             rightButtonX - buttonSize / 2,
@@ -4774,8 +5613,8 @@ const DigitalTwinEditor: React.FC = () => {
           const rotateDistance = 35; // 旋转按钮距离机台中心的距离（对角线位置）
           
           // 顺时针旋转按钮（右下角）
-          const clockwiseButtonX = machine.x + rotateDistance;
-          const clockwiseButtonY = machine.y + rotateDistance;
+          const clockwiseButtonX = canvasX + rotateDistance;
+          const clockwiseButtonY = canvasY + rotateDistance;
           ctx.fillStyle = 'rgba(255, 193, 7, 0.9)'; // 黄色背景
           ctx.strokeStyle = '#ffc107';
           ctx.fillRect(
@@ -4807,8 +5646,8 @@ const DigitalTwinEditor: React.FC = () => {
           ctx.fill();
           
           // 逆时针旋转按钮（左下角）
-          const counterClockwiseButtonX = machine.x - rotateDistance;
-          const counterClockwiseButtonY = machine.y + rotateDistance;
+          const counterClockwiseButtonX = canvasX - rotateDistance;
+          const counterClockwiseButtonY = canvasY + rotateDistance;
           ctx.fillStyle = 'rgba(255, 193, 7, 0.9)'; // 黄色背景
           ctx.strokeStyle = '#ffc107';
           ctx.fillRect(
@@ -4848,7 +5687,7 @@ const DigitalTwinEditor: React.FC = () => {
         ctx.fillText(
           machine.name,
           machine.x,
-          machine.y + machineSize / 2 + 15 / scale
+          machine.y + machineHeight / 2 + 15 / scale
         );
         
         ctx.restore();
@@ -4862,7 +5701,7 @@ const DigitalTwinEditor: React.FC = () => {
   // 画布初始化和重绘
   useEffect(() => {
     drawCanvas();
-  }, [scale, offsetX, offsetY, walls, currentWall, mousePosition, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, drawCanvas, viewMode, cncMachines, selectedCNCMachines]);
+  }, [scale, offsetX, offsetY, walls, currentWall, mousePosition, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, drawCanvas, viewMode, cncMachines, selectedCNCMachines, forceRedraw]);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -4923,8 +5762,16 @@ const DigitalTwinEditor: React.FC = () => {
           {viewMode === 'perspective' && (
         <ThreeDEditor
           walls={walls}
+          cncMachines={cncMachines}
           selectedWall3DProps={selectedWall3DProps}
           onWallSelect={handleWallSelect}
+          onCNCMachineSelect={(cncId) => {
+            setCncMachines(prev => prev.map(cnc => ({
+              ...cnc,
+              selected: cnc.id === cncId
+            })));
+            openCNCPropertiesPanel(cncId);
+          }}
           style={{
             position: 'absolute',
             top: 0,
@@ -6435,6 +7282,543 @@ const DigitalTwinEditor: React.FC = () => {
             </Select>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* CNC机台属性设置面板 */}
+      <Modal
+        title="CNC机台属性设置"
+        open={showCNCPropertiesPanel}
+        onOk={() => {
+          console.log('🚀 [DEBUG] Modal确认按钮被点击');
+          console.log('📋 [DEBUG] 当前表单数据状态:', cncPropertiesFormData);
+          console.log('🎯 [DEBUG] 当前选中CNC ID:', cncPropertiesFormData?.cncId);
+          console.log('📊 [DEBUG] 当前CNC机台列表长度:', cncMachines.length);
+          
+          cncPropertiesForm.validateFields().then((values: any) => {
+            console.log('✅ [DEBUG] Modal表单验证通过');
+            console.log('📝 [DEBUG] 验证后的表单值:', values);
+            console.log('🔍 [DEBUG] 表单值详细检查:', {
+              width: { value: values.width, type: typeof values.width },
+              height: { value: values.height, type: typeof values.height },
+              depth3D: { value: values.depth3D, type: typeof values.depth3D },
+              name: { value: values.name, type: typeof values.name },
+              color: { value: values.color, type: typeof values.color }
+            });
+            
+            console.log('🔧 [DEBUG] 准备调用updateCNCProperties函数');
+            updateCNCProperties(values);
+            
+            console.log('🚪 [DEBUG] 准备关闭面板');
+            closeCNCPropertiesPanel();
+          }).catch((error: any) => {
+            console.error('❌ [DEBUG] Modal表单验证失败:', error);
+            console.error('🔍 [DEBUG] 验证错误详情:', JSON.stringify(error, null, 2));
+          });
+        }}
+        onCancel={closeCNCPropertiesPanel}
+        okText="应用更改"
+        cancelText="取消"
+        width={1200}
+        style={{ top: 20 }}
+        footer={[
+          <Button key="cancel" onClick={closeCNCPropertiesPanel}>
+            取消
+          </Button>,
+          <Button
+            key="apply"
+            type="primary"
+            onClick={() => {
+              console.log('🎯 [DEBUG] 应用更改按钮被点击');
+              console.log('📋 [DEBUG] 当前表单数据状态:', cncPropertiesFormData);
+              console.log('🎯 [DEBUG] 当前选中CNC ID:', cncPropertiesFormData?.cncId);
+              console.log('📊 [DEBUG] 当前CNC机台列表长度:', cncMachines.length);
+              
+              cncPropertiesForm.validateFields().then((values: any) => {
+                console.log('✅ [DEBUG] 应用按钮 - 表单验证通过');
+                console.log('📝 [DEBUG] 应用按钮 - 验证后的表单值:', values);
+                console.log('🔍 [DEBUG] 应用按钮 - 表单值详细检查:', {
+                  width: { value: values.width, type: typeof values.width },
+                  height: { value: values.height, type: typeof values.height },
+                  depth3D: { value: values.depth3D, type: typeof values.depth3D },
+                  name: { value: values.name, type: typeof values.name },
+                  color: { value: values.color, type: typeof values.color }
+                });
+                
+                console.log('🔧 [DEBUG] 应用按钮 - 准备调用updateCNCProperties函数');
+                updateCNCProperties(values);
+                
+                console.log('🚪 [DEBUG] 应用按钮 - 准备关闭面板');
+                closeCNCPropertiesPanel();
+              }).catch((error: any) => {
+                console.error('❌ [DEBUG] 应用按钮 - 表单验证失败:', error);
+                console.error('🔍 [DEBUG] 应用按钮 - 验证错误详情:', JSON.stringify(error, null, 2));
+              });
+            }}
+          >
+            应用更改
+          </Button>
+        ]}
+      >
+        <Row gutter={24} style={{ minHeight: '700px' }}>
+          <Col span={14}>
+            <Form
+              form={cncPropertiesForm}
+              layout="vertical"
+              initialValues={cncPropertiesFormData}
+              onValuesChange={(changedValues: any, allValues: any) => {
+                // 输入验证：只有当数值字段为有效值时才更新状态
+                const isValidUpdate = Object.keys(changedValues).every(key => {
+                  const value = changedValues[key];
+                  
+                  // 对于透明度，允许0-1范围内的值
+                  if (key === 'opacity') {
+                    return value !== null && value !== undefined && !isNaN(value) && value >= 0 && value <= 1;
+                  }
+                  
+                  // 对于旋转角度，允许任何数值（包括负值）
+                  if (['rotationX', 'rotationY', 'rotationZ'].includes(key)) {
+                    return value !== null && value !== undefined && !isNaN(value);
+                  }
+                  
+                  // 对于尺寸和其他正数字段，必须大于0
+                  if (['width', 'height', 'depth3D', 'scale'].includes(key)) {
+                    return value !== null && value !== undefined && !isNaN(value) && value > 0;
+                  }
+                  
+                  // 对于其他字段（如name、color），直接允许
+                  return true;
+                });
+                
+                // 只有当所有变更值都有效时才更新状态
+                if (isValidUpdate) {
+                  let updatedValues = { ...allValues };
+                  
+                  // 🎯 整体缩放同步逻辑：当scale改变时，同步更新宽度、高度、深度
+                  if (changedValues.scale !== undefined && cncPropertiesFormData) {
+                    const newScale = changedValues.scale;
+                    const baseWidth = 3.0;   // 基础宽度
+                    const baseHeight = 2.5;  // 基础高度
+                    const baseDepth = 2.0;   // 基础深度
+                    
+                    // 计算缩放后的尺寸
+                    const scaledWidth = baseWidth * newScale;
+                    const scaledHeight = baseHeight * newScale;
+                    const scaledDepth = baseDepth * newScale;
+                    
+                    // 更新表单字段值
+                    updatedValues = {
+                      ...updatedValues,
+                      width: scaledWidth,
+                      height: scaledHeight,
+                      depth3D: scaledDepth
+                    };
+                    
+                    // 同步更新表单显示
+                    cncPropertiesForm.setFieldsValue({
+                      width: scaledWidth,
+                      height: scaledHeight,
+                      depth3D: scaledDepth
+                    });
+                    
+                    console.log('🎯 [SCALE_SYNC] 整体缩放同步更新:', {
+                      scale: newScale,
+                      width: scaledWidth,
+                      height: scaledHeight,
+                      depth3D: scaledDepth
+                    });
+                  }
+                  
+                  // 🔄 反向同步逻辑：当宽度、高度、深度改变时，计算并更新整体缩放值
+                  else if ((changedValues.width !== undefined || changedValues.height !== undefined || changedValues.depth3D !== undefined) && cncPropertiesFormData) {
+                    const baseWidth = 3.0;   // 基础宽度
+                    const baseHeight = 2.5;  // 基础高度
+                    const baseDepth = 2.0;   // 基础深度
+                    
+                    // 获取当前尺寸值
+                    const currentWidth = changedValues.width !== undefined ? changedValues.width : (updatedValues.width || cncPropertiesFormData.width || baseWidth);
+                    const currentHeight = changedValues.height !== undefined ? changedValues.height : (updatedValues.height || cncPropertiesFormData.height || baseHeight);
+                    const currentDepth = changedValues.depth3D !== undefined ? changedValues.depth3D : (updatedValues.depth3D || cncPropertiesFormData.depth3D || baseDepth);
+                    
+                    // 计算平均缩放比例（基于三个维度的平均值）
+                    const scaleFromWidth = currentWidth / baseWidth;
+                    const scaleFromHeight = currentHeight / baseHeight;
+                    const scaleFromDepth = currentDepth / baseDepth;
+                    const averageScale = (scaleFromWidth + scaleFromHeight + scaleFromDepth) / 3;
+                    
+                    // 四舍五入到一位小数
+                    const newScale = Math.round(averageScale * 10) / 10;
+                    
+                    // 更新整体缩放值
+                    updatedValues = {
+                      ...updatedValues,
+                      scale: newScale
+                    };
+                    
+                    // 同步更新表单显示
+                    cncPropertiesForm.setFieldsValue({
+                      scale: newScale
+                    });
+                    
+                    console.log('🔄 [REVERSE_SYNC] 反向同步更新整体缩放:', {
+                      changedField: Object.keys(changedValues)[0],
+                      currentDimensions: { width: currentWidth, height: currentHeight, depth3D: currentDepth },
+                      scaleCalculation: { scaleFromWidth, scaleFromHeight, scaleFromDepth },
+                      newScale: newScale
+                    });
+                  }
+                  
+                  const newData = cncPropertiesFormData ? { ...cncPropertiesFormData, ...updatedValues } : null;
+                  debouncedUpdateCncFormData(newData);
+                }
+              }}
+            >
+              {/* 基础信息区域 */}
+              <Card 
+                title={
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ToolOutlined style={{ color: '#1890ff' }} />
+                    <span>基础信息</span>
+                  </div>
+                }
+                style={{ marginBottom: '16px' }}
+                size="small"
+              >
+                <Form.Item
+                  label="机台名称"
+                  name="name"
+                  rules={[{ required: true, message: '请输入机台名称' }]}
+                  style={{ marginBottom: '16px' }}
+                >
+                  <Input placeholder="请输入CNC机台名称" />
+                </Form.Item>
+                
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Form.Item
+                      label="宽度 (X轴)"
+                      name="width"
+                      rules={[{ required: true, message: '请输入宽度' }]}
+                    >
+                      <InputNumber 
+                        placeholder="单位：米" 
+                        min={0.1}
+                        step={0.1}
+                        addonAfter="m"
+                        style={{ width: '100%' }}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item
+                      label="高度 (Y轴)"
+                      name="height"
+                      rules={[{ required: true, message: '请输入高度' }]}
+                    >
+                      <InputNumber 
+                        placeholder="单位：米" 
+                        min={0.1}
+                        step={0.1}
+                        addonAfter="m"
+                        style={{ width: '100%' }}
+                      />
+                    </Form.Item>
+                  </Col>
+                  <Col span={8}>
+                    <Form.Item
+                      label="深度 (Z轴)"
+                      name="depth3D"
+                      rules={[{ required: true, message: '请输入深度' }]}
+                    >
+                      <InputNumber 
+                        placeholder="单位：米" 
+                        min={0.1}
+                        step={0.1}
+                        addonAfter="m"
+                        style={{ width: '100%' }}
+                      />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                
+                <Form.Item
+                  label="机台颜色"
+                  name="color"
+                >
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {['#1890ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2', '#eb2f96', '#666666'].map(color => (
+                        <div
+                          key={color}
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            backgroundColor: color,
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            border: cncPropertiesFormData?.color === color ? '3px solid #1890ff' : '2px solid #e8e8e8',
+                            boxSizing: 'border-box',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onClick={() => {
+                            setCncPropertiesFormData((prev: any) => prev ? { ...prev, color } : null);
+                            cncPropertiesForm.setFieldsValue({ color });
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <Input
+                      placeholder="自定义颜色 (#hex)"
+                      value={cncPropertiesFormData?.color || ''}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        const color = e.target.value;
+                        setCncPropertiesFormData((prev: any) => prev ? { ...prev, color } : null);
+                        cncPropertiesForm.setFieldsValue({ color });
+                      }}
+                    />
+                  </div>
+                </Form.Item>
+              </Card>
+
+              {/* 3D渲染参数和旋转控制区域 */}
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Card 
+                    title={
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <BgColorsOutlined style={{ color: '#52c41a' }} />
+                        <span>渲染参数</span>
+                      </div>
+                    }
+                    style={{ height: '320px' }}
+                    size="small"
+                  >
+                    <div style={{ padding: '8px 0', height: '100%' }}>
+                      <Row gutter={16} style={{ height: '100%' }}>
+                        <Col span={12} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <div style={{ 
+                            textAlign: 'center', 
+                            marginBottom: '16px',
+                            fontWeight: 'bold',
+                            color: '#1890ff'
+                          }}>
+                            透明度
+                          </div>
+                          <Form.Item
+                            name="opacity"
+                            style={{ marginBottom: '0', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                          >
+                            <Slider
+                              vertical
+                              min={0}
+                              max={1}
+                              step={0.1}
+                              style={{ height: '200px' }}
+                              marks={{
+                                0: '0%',
+                                0.5: '50%',
+                                1: '100%'
+                              }}
+                              tooltip={{
+                                formatter: (value) => `${Math.round((value || 0) * 100)}%`
+                              }}
+                            />
+                          </Form.Item>
+                        </Col>
+                        
+                        <Col span={12} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <div style={{ 
+                            textAlign: 'center', 
+                            marginBottom: '16px',
+                            fontWeight: 'bold',
+                            color: '#1890ff'
+                          }}>
+                            整体缩放
+                          </div>
+                          <Form.Item
+                            name="scale"
+                            style={{ marginBottom: '8px', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                          >
+                            <Slider
+                              vertical
+                              min={0.1}
+                              max={3.0}
+                              step={0.1}
+                              style={{ height: '200px' }}
+                              marks={{
+                                0.5: '0.5x',
+                                1: '1x',
+                                1.5: '1.5x',
+                                2: '2x',
+                                2.5: '2.5x'
+                              }}
+                              tooltip={{
+                                formatter: (value) => `${value}x`
+                              }}
+                            />
+                          </Form.Item>
+
+                        </Col>
+                      </Row>
+                    </div>
+                  </Card>
+                </Col>
+                
+                <Col span={16}>
+                  <Card 
+                    title={
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <ReloadOutlined style={{ color: '#fa8c16' }} />
+                        <span>旋转控制</span>
+                      </div>
+                    }
+                    style={{ height: '320px' }}
+                    size="small"
+                    extra={
+                      <Button 
+                        type="primary"
+                        size="small" 
+                        ghost
+                        onClick={() => {
+                          const resetValues = { rotationX: 0, rotationY: 0, rotationZ: 0 };
+                          cncPropertiesForm.setFieldsValue(resetValues);
+                          setCncPropertiesFormData((prev: any) => prev ? { ...prev, ...resetValues } : null);
+                        }}
+                      >
+                        重置旋转
+                      </Button>
+                    }
+                  >
+                    <div style={{ padding: '8px 0' }}>
+                      <Row gutter={[16, 0]}>
+                        <Col span={8}>
+                          <Form.Item
+                            label={
+                              <div style={{ textAlign: 'center', fontWeight: 500, color: '#1890ff', marginBottom: '8px' }}>
+                                X轴旋转
+                              </div>
+                            }
+                            name="rotationX"
+                            style={{ marginBottom: '24px' }}
+                          >
+                            <Slider
+                              vertical
+                              min={-180}
+                              max={180}
+                              step={15}
+                              marks={{
+                                '-180': '-180°',
+                                0: '0°',
+                                180: '180°'
+                              }}
+                              tooltip={{
+                                formatter: (value) => `${value}°`
+                              }}
+                              style={{ height: '180px' }}
+                            />
+                          </Form.Item>
+                        </Col>
+                        
+                        <Col span={8}>
+                          <Form.Item
+                            label={
+                              <div style={{ textAlign: 'center', fontWeight: 500, color: '#52c41a', marginBottom: '8px' }}>
+                                Y轴旋转
+                              </div>
+                            }
+                            name="rotationY"
+                            style={{ marginBottom: '24px' }}
+                          >
+                            <Slider
+                              vertical
+                              min={-180}
+                              max={180}
+                              step={15}
+                              marks={{
+                                '-180': '-180°',
+                                0: '0°',
+                                180: '180°'
+                              }}
+                              tooltip={{
+                                formatter: (value) => `${value}°`
+                              }}
+                              style={{ height: '180px' }}
+                            />
+                          </Form.Item>
+                        </Col>
+                        
+                        <Col span={8}>
+                          <Form.Item
+                            label={
+                              <div style={{ textAlign: 'center', fontWeight: 500, color: '#fa8c16', marginBottom: '8px' }}>
+                                Z轴旋转
+                              </div>
+                            }
+                            name="rotationZ"
+                            style={{ marginBottom: '24px' }}
+                          >
+                            <Slider
+                              vertical
+                              min={-180}
+                              max={180}
+                              step={15}
+                              marks={{
+                                '-180': '-180°',
+                                0: '0°',
+                                180: '180°'
+                              }}
+                              tooltip={{
+                                formatter: (value) => `${value}°`
+                              }}
+                              style={{ height: '180px' }}
+                            />
+                          </Form.Item>
+                        </Col>
+                      </Row>
+                    </div>
+                  </Card>
+                </Col>
+              </Row>
+            </Form>
+          </Col>
+          
+          <Col span={10}>
+            <Card 
+              title={
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <EyeOutlined style={{ color: '#722ed1' }} />
+                  <span>3D实时预览</span>
+                </div>
+              }
+              style={{ height: '700px' }}
+              bodyStyle={{ padding: '16px', height: 'calc(100% - 57px)' }}
+            >
+              <div 
+                id="cnc-preview-container"
+                style={{ 
+                  height: '100%', 
+                  background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  border: '1px dashed #d9d9d9',
+                  borderRadius: '8px',
+                  position: 'relative'
+                }}
+              >
+                <div style={{ textAlign: 'center', color: '#666' }}>
+                  <ToolOutlined style={{ fontSize: '48px', marginBottom: '16px', color: '#722ed1' }} />
+                  <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>3D实时预览</div>
+                  <div style={{ fontSize: '12px', color: '#999' }}>
+                    实时显示机台3D效果
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#ccc', marginTop: '12px' }}>
+                    调整左侧参数查看实时变化
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </Col>
+        </Row>
       </Modal>
     </div>
   );

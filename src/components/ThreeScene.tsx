@@ -2,6 +2,23 @@ import { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 
+// CNC机台接口定义
+interface CNCMachine {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name: string;
+  type: 'cnc';
+  color: string;
+  selected?: boolean;
+  // 3D参数
+  depth3D?: number;    // 3D深度（Z轴，单位：m）
+  width3D?: number;    // 3D宽度（X轴，单位：m）
+  height3D?: number;   // 3D高度（Y轴，单位：m）
+}
+
 export interface ThreeSceneRef {
   resetView: () => void;
   setTopView: () => void;
@@ -11,7 +28,11 @@ export interface ThreeSceneRef {
   testRobotMovement: () => void;
 }
 
-const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
+interface ThreeSceneProps {
+  cncMachines?: CNCMachine[];
+}
+
+const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [] }, ref) => {
   // 开发模式标志
   const isDev = import.meta.env.DEV;
   
@@ -111,15 +132,38 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
     scene.add(directionalLight);
 
     // CNC Machine representation
-    const createCNCMachine = (position: THREE.Vector3, floorGroup: THREE.Group) => {
-      const geometry = new THREE.BoxGeometry(5, 5, 5);
-      const material = new THREE.MeshStandardMaterial({ color: 0x0077ff });
+    const createCNCMachine = (
+      position: THREE.Vector3, 
+      floorGroup: THREE.Group, 
+      dimensions: { width: number; height: number; depth: number } = { width: 5, height: 5, depth: 5 },
+      color: number = 0x0077ff
+    ) => {
+      const geometry = new THREE.BoxGeometry(dimensions.width, dimensions.height, dimensions.depth);
+      const material = new THREE.MeshStandardMaterial({ 
+        color: color,
+        metalness: 0.3,
+        roughness: 0.4,
+        transparent: true,
+        opacity: 0.9
+      });
       const cube = new THREE.Mesh(geometry, material);
       cube.position.copy(position);
       cube.castShadow = true;
       cube.receiveShadow = true;
+      
+      // 添加描边效果
+      const edgesGeometry = new THREE.EdgesGeometry(geometry);
+      const edgesMaterial = new THREE.LineBasicMaterial({ 
+        color: 0x0099ff, // 亮蓝色描边
+        linewidth: 2
+      });
+      const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+      edges.position.copy(position);
+      
       floorGroup.add(cube);
-      return cube;
+      floorGroup.add(edges);
+      
+      return { cube, edges };
     };
 
     // CRM Mobile Robot representation - 立体圆角矩形
@@ -326,13 +370,43 @@ const ThreeScene = forwardRef<ThreeSceneRef>((_props, ref) => {
       { z: -50, label: '1-4', color: '#ffff44' }
     ];
     
-    // 创建一楼设备
-    floor1Rows.forEach(row => {
-      for (let col = 0; col < 6; col++) {
-        const x = startX + col * spacing;
-        createCNCMachine(new THREE.Vector3(x, floor1Y, row.z), floor1Group);
-      }
-    });
+    // 创建一楼设备 - 使用传入的CNC机台数据
+    if (cncMachines.length > 0) {
+      cncMachines.forEach(machine => {
+        // 将2D坐标转换为3D坐标
+        // 彻底解决间距问题：使用超大缩放比例确保机台间距足够大
+        // 转换为3D坐标系：X轴向右，Z轴向前（画布Y轴对应3D的-Z轴）
+        // 使用1:100缩放比例，确保80像素间距转换为0.8米间距，但通过额外间距倍数放大
+        const x3D = (machine.x - 400) / 100 * 5; // 额外乘以5倍，增大间距
+        const z3D = -(machine.y - 300) / 100 * 5; // 额外乘以5倍，增大间距 
+        
+        // 大幅减小机台尺寸，确保绝对不重叠
+        // 使用1米3D尺寸，配合4米间距（80像素*5倍=4米），确保足够的空隙
+        const dimensions = {
+          width: machine.width3D || 1,   // 大幅减小到1米，确保4米间距绝对足够
+          height: machine.height3D || 1, // 大幅减小到1米，确保4米间距绝对足够
+          depth: machine.depth3D || 1    // 大幅减小到1米，确保4米间距绝对足够
+        };
+        
+        // 解析颜色
+        const color = parseInt(machine.color.replace('#', '0x'));
+        
+        createCNCMachine(
+          new THREE.Vector3(x3D, floor1Y, z3D), 
+          floor1Group, 
+          dimensions,
+          color
+        );
+      });
+    } else {
+      // 如果没有传入CNC机台数据，使用默认的网格布局
+      floor1Rows.forEach(row => {
+        for (let col = 0; col < 6; col++) {
+          const x = startX + col * spacing;
+          createCNCMachine(new THREE.Vector3(x, floor1Y, row.z), floor1Group);
+        }
+      });
+    }
 
     // 创建一楼电梯 - 位于场景右侧，Y轴向上移动7.5个单位
      createElevator(new THREE.Vector3(60, floor1Y + 7.5, 0), 20, floor1Group);
