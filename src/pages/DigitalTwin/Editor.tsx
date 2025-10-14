@@ -125,6 +125,21 @@ interface Wall {
   selectedSegments?: number[]; // 选中的线段索引（从0开始，表示第i个点到第i+1个点的线段）
 }
 
+// 地面区域接口定义（参考地图管理中的区域绘制）
+interface FloorArea {
+  id: string;
+  name: string;
+  type: string; // 地面类型，如 'floor', 'carpet', 'tile' 等
+  points: WallPoint[]; // 多边形顶点
+  color: string;
+  opacity?: number;
+  completed: boolean;
+  visible?: boolean;
+  selected?: boolean;
+  material?: string; // 材质类型
+  texture?: string; // 纹理URL
+}
+
 // 拓扑路网节点
 interface TopologyNode {
   id: string;
@@ -193,7 +208,7 @@ interface ThreeDEditorProps {
 }
 
 // 3D编辑器组件
-const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selectedWall3DProps, onWallSelect, onCNCMachineSelect, style }) => {
+const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selectedWall3DProps, onWallSelect: _onWallSelect, onCNCMachineSelect: _onCNCMachineSelect, style }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene>();
   const rendererRef = useRef<THREE.WebGLRenderer>();
@@ -202,8 +217,7 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
   const wallMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const cncMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   
-  // 键盘控制状态
-  const [keys, setKeys] = useState<Set<string>>(new Set());
+  // 键盘控制状态（预留用于未来功能扩展）
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -378,17 +392,13 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
 
 
 
-    // 键盘事件处理
-    const handleKeyDown = (event: KeyboardEvent) => {
-      setKeys(prev => new Set(prev).add(event.key.toLowerCase()));
+    // 键盘事件处理（预留用于未来功能扩展）
+    const handleKeyDown = (_event: KeyboardEvent) => {
+      // 键盘按下事件处理逻辑
     };
 
-    const handleKeyUp = (event: KeyboardEvent) => {
-      setKeys(prev => {
-        const newKeys = new Set(prev);
-        newKeys.delete(event.key.toLowerCase());
-        return newKeys;
-      });
+    const handleKeyUp = (_event: KeyboardEvent) => {
+      // 键盘释放事件处理逻辑
     };
 
     // 键盘移动处理 - 暂时禁用，将由OrbitControls处理
@@ -1041,7 +1051,19 @@ const DigitalTwinEditor: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isSpacePressed, setIsSpacePressed] = useState(false); // 空格键状态
-  const [previousCanvasMode, setPreviousCanvasMode] = useState<'select' | 'drag' | null>(null); // 保存空格键按下前的模式
+
+
+  // 地面绘制相关状态
+  const [floorAreas, setFloorAreas] = useState<FloorArea[]>([]);
+  const [isDrawingFloor, setIsDrawingFloor] = useState(false);
+  const [currentFloorPoints, setCurrentFloorPoints] = useState<WallPoint[]>([]);
+  const [currentFloorType] = useState<string>('standard'); // 预留用于地面类型设置
+  const [floorStyle] = useState({
+    color: '#e6f7ff',
+    opacity: 0.6,
+    material: 'standard',
+    texture: 'none'
+  }); // 地面样式配置，预留用于未来的地面样式设置功能
 
   // 获取当前激活的绘图工具
   const getActiveTool = () => {
@@ -1273,8 +1295,8 @@ const DigitalTwinEditor: React.FC = () => {
 
   // CNC机台相关状态
   const [cncMachines, setCncMachines] = useState<CNCMachine[]>([]);
-  const [isDraggingCNC, setIsDraggingCNC] = useState(false);
-  const [draggedCNCModel, setDraggedCNCModel] = useState<ProductModel | null>(null);
+  // 预留用于CNC拖拽状态管理
+  const [_draggedCNCModel, setDraggedCNCModel] = useState<ProductModel | null>(null);
   const [selectedCNCMachines, setSelectedCNCMachines] = useState<string[]>([]);
   const selectedCNCMachinesRef = useRef<string[]>([]);
   
@@ -1642,6 +1664,54 @@ const DigitalTwinEditor: React.FC = () => {
     setIsDrawingWall(false);
   }, []);
 
+  // 完成地面绘制
+  const completeFloorDrawing = useCallback(() => {
+    if (currentFloorPoints.length < 3) {
+      message.warning('地面区域至少需要3个点才能完成绘制');
+      return;
+    }
+
+    // 保存当前状态到撤销栈
+    saveStateToUndoStack();
+
+    // 创建新的地面区域
+    const newFloorArea: FloorArea = {
+      id: `floor-${Date.now()}`,
+      name: `地面区域${floorAreas.length + 1}`,
+      type: currentFloorType,
+      points: [...currentFloorPoints],
+      color: floorStyle.color,
+      opacity: floorStyle.opacity,
+      completed: true,
+      visible: true,
+      selected: false,
+      material: floorStyle.material,
+      texture: floorStyle.texture
+    };
+
+    // 添加到地面区域列表
+    setFloorAreas(prev => [...prev, newFloorArea]);
+
+    // 重置绘制状态
+    setCurrentFloorPoints([]);
+    setIsDrawingFloor(false);
+
+    // 自动切换回选择工具
+    setDrawingTools(prev => prev.map(tool => ({
+      ...tool,
+      active: tool.type === 'select'
+    })));
+
+    message.success('地面区域绘制完成');
+  }, [currentFloorPoints, currentFloorType, floorStyle, floorAreas.length, saveStateToUndoStack]);
+
+  // 取消地面绘制
+  const cancelFloorDrawing = useCallback(() => {
+    setCurrentFloorPoints([]);
+    setIsDrawingFloor(false);
+    message.info('已取消地面绘制');
+  }, []);
+
   // 绘图工具选择
   const selectDrawingTool = useCallback((toolId: string) => {
     // 如果正在绘制墙体，先完成当前墙体
@@ -1649,294 +1719,26 @@ const DigitalTwinEditor: React.FC = () => {
       finishCurrentWall();
     }
     
+    // 如果正在绘制地面，先取消当前地面绘制
+    if (isDrawingFloor) {
+      cancelFloorDrawing();
+    }
+    
     setDrawingTools(prev => prev.map(tool => ({
       ...tool,
       active: tool.id === toolId
     })));
-  }, [isDrawingWall, finishCurrentWall]);
-
-  // 键盘事件处理
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    console.log('⌨️ [KEYBOARD] 键盘事件触发:', {
-      key: e.key,
-      code: e.code,
-      ctrlKey: e.ctrlKey,
-      metaKey: e.metaKey,
-      target: e.target?.constructor?.name,
-      activeElement: document.activeElement?.tagName,
-      showCNCPropertiesPanel,
-      selectedCNCMachines: selectedCNCMachines.length,
-      cncMachines: cncMachines.length,
-      timestamp: new Date().toISOString()
-    });
     
-    if (e.key === ' ' && !e.repeat) {
-      // 空格键开始拖动模式（参考地图编辑器）
-      e.preventDefault();
-      if (!isDragging && canvasRef.current && !isSpacePressed) {
-        const canvas = canvasRef.current;
-        canvas.style.cursor = 'grab';
-        
-        // 保存当前画布模式
-        setPreviousCanvasMode(canvasOperationMode);
-        setIsSpacePressed(true);
-        
-        // 临时启用拖动模式
-        setCanvasOperationMode('drag');
-      }
-    } else if (e.key === 'Enter' && isDrawingWall && currentWall) {
-      // Enter键完成当前墙体绘制
-      finishCurrentWall();
-    } else if (e.key === 'Escape') {
-      // Escape键完全重置所有编辑状态
-      console.log('🔥 ESC键被按下，开始重置所有状态...');
-      
-      // 记录当前状态
-       console.log('📊 当前状态:', {
-         isDrawingWall,
-         isConnecting,
-         continuousConnecting,
-         bezierEditMode,
-         bezierDrawingState,
-         activeTool: getActiveTool()?.type,
-         selectedWalls: selectedWalls.length,
-         walls: walls.length
-       });
-      
-      // 退出贝塞尔曲线编辑模式
-      console.log('🎯 重置贝塞尔曲线编辑模式...');
-      setBezierEditMode({
-        isEditing: false,
-        wallId: null,
-        isDraggingControl: false,
-        activeControlPoint: null
-      });
-      
-      // 清除贝塞尔曲线绘制状态（包括控制点）
-      console.log('🎯 重置贝塞尔曲线绘制状态...');
-      setBezierDrawingState({
-        phase: 'idle',
-        startPoint: null,
-        endPoint: null,
-        controlPoint1: null,
-        controlPoint2: null,
-        isDraggingControl: false,
-        activeControlPoint: null,
-        continuousMode: false,
-        lastEndPoint: null,
-      });
-      
-      // 取消贝塞尔曲线绘制
-      if (bezierDrawingState.phase !== 'idle') {
-        console.log('🎯 取消贝塞尔曲线绘制...');
-        cancelBezierDrawing();
-      }
-      
-      // 退出连线模式
-      console.log('🎯 退出连线模式...');
-      setIsConnecting(false);
-      isConnectingRef.current = false;
-      setContinuousConnecting(false);
-      continuousConnectingRef.current = false;
-      setConnectingStartPoint(null);
-      setLastConnectedPoint(null);
-      
-      // 取消当前墙体绘制
-      if (isDrawingWall) {
-        console.log('🎯 取消当前墙体绘制...');
-        cancelCurrentWall();
-      }
-      
-      // 取消选择状态
-      console.log('🎯 取消选择状态...');
-      setSelectedWalls([]);
-      setIsSelecting(false);
-      setSelectionStart(null);
-      setSelectionEnd(null);
-      setSelectedEndpoint(null);
-      setIsDraggingEndpoint(false);
-      setSelectedSegments([]);
-      
-      // 清除端点相关状态
-      console.log('🎯 清除端点相关状态...');
-      setNearbyEndpoints([]);
-      setHoveredEndpoint(null);
-      
-      // 重置鼠标位置
-      console.log('🎯 重置鼠标位置...');
-      setMousePosition(null);
-      mousePositionRef.current = null;
-      
-      // 清除墙体的选中状态和端点状态
-      console.log('🎯 清除墙体选中状态...');
-      setWalls(prevWalls => 
-        prevWalls.map(wall => ({ 
-          ...wall, 
-          selected: false, 
-          selectedEndpoints: [] 
-        }))
-      );
-      
-      // 切换到选择工具
-      console.log('🎯 切换到选择工具...');
-      selectDrawingTool('select-wall');
-      
-      console.log('✅ ESC键重置完成');
-      message.info('已退出所有编辑模式');
-    } else if (e.key === 'Delete' || e.key === 'Backspace') {
-      // 🛡️ 检查是否在输入元素中按下Delete键，如果是则不执行删除操作
-      const activeElement = document.activeElement;
-      const isInputElement = activeElement && (
-        activeElement.tagName === 'INPUT' ||
-        activeElement.tagName === 'TEXTAREA' ||
-        (activeElement as HTMLElement).contentEditable === 'true' ||
-        activeElement.closest('.ant-input') ||
-        activeElement.closest('.ant-select') ||
-        activeElement.closest('.ant-slider')
-      );
-      
-      if (isInputElement) {
-        console.log('⚠️ [DELETE] 在输入元素中按下Delete键，跳过删除操作');
-        return;
-      }
-      
-      if (selectedSegments.length > 0) {
-        // Delete/Backspace键删除选中的线段
-        deleteSelectedSegments();
-      } else if (selectedWalls.length > 0) {
-        // Delete/Backspace键删除选中的墙体
-        // 保存当前状态到撤销栈
-        saveStateToUndoStack();
-        
-        // 先清理共享端点
-        walls.forEach(wall => {
-          if (selectedWalls.includes(wall.id) && wall.pointIds) {
-            wall.pointIds.forEach((pointId, index) => {
-              if (pointId) {
-                removeWallFromSharedPoint(pointId, wall.id, index);
-              }
-            });
-          }
-        });
-        
-        setWalls(prevWalls => prevWalls.filter(wall => !selectedWalls.includes(wall.id)));
-        setSelectedWalls([]);
-        message.success(`已删除 ${selectedWalls.length} 个墙体`);
-      } else if (selectedCNCMachines.length > 0) {
-        // Delete/Backspace键删除选中的CNC机台
-        console.log('🗑️ [DELETE] 尝试删除CNC机台');
-        console.log('🗑️ [DELETE] 选中的机台ID:', selectedCNCMachines);
-        console.log('🗑️ [DELETE] 属性面板是否打开:', showCNCPropertiesPanel);
-        console.log('🗑️ [DELETE] 当前编辑的机台ID:', cncPropertiesFormData?.cncId);
-        
-        // 🛡️ 增强保护机制：检查多种情况
-        const shouldBlockDeletion = (
-          // 情况1：属性面板正在打开且正在编辑选中的机台
-          (showCNCPropertiesPanel && cncPropertiesFormData?.cncId && selectedCNCMachines.includes(cncPropertiesFormData.cncId)) ||
-          // 情况2：刚刚关闭属性面板，但表单数据仍然存在（可能正在应用更改）
-          (!showCNCPropertiesPanel && cncPropertiesFormData?.cncId && selectedCNCMachines.includes(cncPropertiesFormData.cncId))
-        );
-        
-        if (shouldBlockDeletion) {
-          console.log('⚠️ [DELETE] 阻止删除：CNC机台正在编辑或刚刚编辑完成');
-          message.warning('CNC机台正在编辑或刚刚编辑完成，请稍后再试');
-          return;
-        }
-        
-        // 🛡️ 额外保护：检查CNC机台列表是否为空
-        if (cncMachines.length === 0) {
-          console.error('❌ [DELETE] CNC机台列表为空，无法执行删除操作');
-          message.error('CNC机台数据异常，无法执行删除操作');
-          return;
-        }
-        
-        setCncMachines(prevMachines => {
-          const filteredMachines = prevMachines.filter(machine => !selectedCNCMachines.includes(machine.id));
-          console.log('🗑️ [DELETE] 删除前机台数量:', prevMachines.length);
-          console.log('🗑️ [DELETE] 删除后机台数量:', filteredMachines.length);
-          return filteredMachines;
-        });
-        setSelectedCNCMachines([]);
-        message.success(`已删除 ${selectedCNCMachines.length} 个CNC机台`);
-      }
-    } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
-      // Ctrl+A 或 Cmd+A 全选墙体
-      e.preventDefault();
-      const allWallIds = walls.map(wall => wall.id);
-      setSelectedWalls(allWallIds);
-      setWalls(prevWalls => 
-        prevWalls.map(wall => ({ ...wall, selected: true }))
-      );
-      message.info(`已选中 ${allWallIds.length} 个墙体`);
-    } else if (selectedEndpoint && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-      // 方向键调整选中端点位置
-      console.log('方向键处理:', e.key, '选中端点:', selectedEndpoint);
-      e.preventDefault();
-      const moveDistance = e.shiftKey ? 10 : 1; // Shift键加速移动
-      let deltaX = 0;
-      let deltaY = 0;
-      
-      switch (e.key) {
-        case 'ArrowUp':
-          deltaY = -moveDistance;
-          break;
-        case 'ArrowDown':
-          deltaY = moveDistance;
-          break;
-        case 'ArrowLeft':
-          deltaX = -moveDistance;
-          break;
-        case 'ArrowRight':
-          deltaX = moveDistance;
-          break;
-      }
-      
-      // 更新端点位置
-      setWalls(prev => prev.map(wall => {
-        if (wall.id === selectedEndpoint.wallId) {
-          const newPoints = [...wall.points];
-          const oldPoint = newPoints[selectedEndpoint.pointIndex];
-          newPoints[selectedEndpoint.pointIndex] = {
-            x: oldPoint.x + deltaX,
-            y: oldPoint.y + deltaY
-          };
-          console.log('端点移动:', `从(${oldPoint.x}, ${oldPoint.y})移动到(${newPoints[selectedEndpoint.pointIndex].x}, ${newPoints[selectedEndpoint.pointIndex].y})`);
-          return { ...wall, points: newPoints };
-        }
-        return wall;
-      }));
+    // 如果选择的是地面绘制工具，初始化地面绘制状态
+    const selectedTool = drawingTools.find(tool => tool.id === toolId);
+    if (selectedTool?.type === 'floor') {
+      setIsDrawingFloor(true);
+      setCurrentFloorPoints([]);
+      message.info('开始绘制地面区域，点击画布添加点，右键或双击完成绘制');
     }
-  }, [
-    isDrawingWall, 
-    currentWall, 
-    selectedWalls, 
-    selectedSegments, 
-    isSelecting, 
-    walls, 
-    selectedEndpoint, 
-    bezierDrawingState, 
-    bezierEditMode,
-    isConnecting,
-    continuousConnecting,
-    cancelBezierDrawing, 
-    selectDrawingTool,
-    finishCurrentWall,
-    cancelCurrentWall,
-    setWalls,
-    setSelectedWalls,
-    setIsSelecting,
-    setSelectionStart,
-    setSelectionEnd,
-    setSelectedEndpoint,
-    setIsDraggingEndpoint,
-    setBezierEditMode,
-    setIsConnecting,
-    setContinuousConnecting,
-    setConnectingStartPoint,
-    setLastConnectedPoint,
-    setMousePosition
-  ]);
+  }, [isDrawingWall, isDrawingFloor, finishCurrentWall, cancelFloorDrawing, drawingTools]);
 
+  // 使用 ref 来获取最新的状态值，解决闭包问题
   // 使用 ref 来获取最新的状态值，解决闭包问题
   const selectedEndpointRef = useRef(selectedEndpoint);
   const selectedWallsRef = useRef(selectedWalls);
@@ -2214,10 +2016,10 @@ const DigitalTwinEditor: React.FC = () => {
     // 处理空格键释放事件
     const handleKeyUpEvent = (e: KeyboardEvent) => {
       if (e.key === ' ') {
-        // 空格键释放时恢复之前的画布操作模式
+        // 空格键释放时恢复选择模式
         if (isSpacePressed) {
           setIsSpacePressed(false);
-          setCanvasOperationMode(previousCanvasMode);
+          setCanvasOperationMode('select');
           
           // 恢复默认光标
           if (canvasRef.current) {
@@ -2233,7 +2035,7 @@ const DigitalTwinEditor: React.FC = () => {
       document.removeEventListener('keydown', handleKeyDownEvent);
       document.removeEventListener('keyup', handleKeyUpEvent);
     };
-  }, [isSpacePressed, previousCanvasMode, setCanvasOperationMode]); // 添加依赖项
+  }, [isSpacePressed, setCanvasOperationMode]); // 添加依赖项
 
 
 
@@ -2646,6 +2448,9 @@ const DigitalTwinEditor: React.FC = () => {
     if (activeTool && activeTool.type === 'wall') {
       // 墙体绘制模式
       handleWallDrawing(e);
+    } else if (activeTool && activeTool.type === 'floor') {
+      // 地面绘制模式
+      handleFloorDrawing(e);
     } else if (activeTool && activeTool.type === 'select') {
       // 选择工具模式
       handleSelectionStart(e);
@@ -2740,9 +2545,6 @@ const DigitalTwinEditor: React.FC = () => {
     
     // 检查是否双击了CNC机台，打开属性面板
     const clickedCNC = cncMachines.find(cnc => {
-      const distance = Math.sqrt(
-        Math.pow(point.x - cnc.x, 2) + Math.pow(point.y - cnc.y, 2)
-      );
       // 检查点击是否在CNC机台范围内（考虑机台尺寸）
       const halfWidth = (cnc.width || 2.0) * 20; // 转换为像素，假设1米=20像素
       const halfHeight = (cnc.height || 1.5) * 20;
@@ -2892,7 +2694,6 @@ const DigitalTwinEditor: React.FC = () => {
     }
     
     // 重置拖拽状态
-    setIsDraggingCNC(false);
     setDraggedCNCModel(null);
   };
 
@@ -3265,7 +3066,7 @@ const DigitalTwinEditor: React.FC = () => {
     if (activeTool.subType === 'line') {
       handleLineWallDrawing(point);
     } else if (activeTool.subType === 'bezier') {
-      handleBezierWallDrawing(point, e.shiftKey);
+      handleBezierWallDrawing(point);
     }
   };
 
@@ -3387,9 +3188,7 @@ const DigitalTwinEditor: React.FC = () => {
   };
 
   // 贝塞尔曲线墙体绘制 - 连续多点绘制模式
-  const handleBezierWallDrawing = (point: WallPoint, shiftKey: boolean = false) => {
-    // 如果是连续绘制模式且有上一个终点，则使用上一个终点作为起点
-    const actualStartPoint = continuousConnecting && lastConnectedPoint ? lastConnectedPoint : point;
+  const handleBezierWallDrawing = (point: WallPoint) => {
     
     if (continuousConnecting && lastConnectedPoint) {
       // 连续绘制模式：使用上一个终点作为起点，当前点作为终点
@@ -3450,8 +3249,6 @@ const DigitalTwinEditor: React.FC = () => {
     controlPoint2: WallPoint,
     shiftKey: boolean = false
   ) => {
-    const { continuousMode } = bezierDrawingState;
-
     // 创建新的贝塞尔曲线墙体
     const newWallId = `wall-${Date.now()}`;
     
@@ -3530,88 +3327,42 @@ const DigitalTwinEditor: React.FC = () => {
     }
   };
 
-  const finishBezierCurve = () => {
-    const { startPoint, endPoint, controlPoint1, controlPoint2 } = bezierDrawingState;
-    
-    if (startPoint && endPoint && controlPoint1 && controlPoint2) {
-      // 创建新的贝塞尔曲线墙体
-      const newWallId = `wall-${Date.now()}`;
-      
-      // 处理共享端点逻辑
-      const processSharedPoint = (point: WallPoint, wallId: string, pointIndex: number): { pointId: string | null, actualPoint: WallPoint } => {
-        const sharedPointThreshold = 15;
-        
-        const existingSharedPoint = findNearbySharedPoint(point.x, point.y, sharedPointThreshold);
-        if (existingSharedPoint) {
-          addWallToSharedPoint(existingSharedPoint.id, wallId, pointIndex);
-          return { pointId: existingSharedPoint.id, actualPoint: { x: existingSharedPoint.x, y: existingSharedPoint.y } };
-        }
-        
-        const nearbyWallEndpoints = findNearbyEndpoints(point, walls, sharedPointThreshold).filter(ep => 
-          ep.wallId !== wallId
-        );
-        const nearbyWallEndpoint = nearbyWallEndpoints.length > 0 ? nearbyWallEndpoints[0] : null;
-        
-        if (nearbyWallEndpoint) {
-          const sharedPointId = createSharedPoint(nearbyWallEndpoint.point.x, nearbyWallEndpoint.point.y);
-          addWallToSharedPoint(sharedPointId, nearbyWallEndpoint.wallId, nearbyWallEndpoint.pointIndex);
-          addWallToSharedPoint(sharedPointId, wallId, pointIndex);
-          return { pointId: sharedPointId, actualPoint: { x: nearbyWallEndpoint.point.x, y: nearbyWallEndpoint.point.y } };
-        }
-        
-        return { pointId: null, actualPoint: point };
-      };
 
-      const startPointResult = processSharedPoint(startPoint, newWallId, 0);
-      const endPointResult = processSharedPoint(endPoint, newWallId, 3);
 
-      // 创建贝塞尔曲线墙体（使用4个点的格式：起点、控制点1、控制点2、终点）
-      const newWall: Wall = {
-        id: newWallId,
-        type: 'bezier',
-        points: [startPointResult.actualPoint, controlPoint1, controlPoint2, endPointResult.actualPoint],
-        pointIds: [startPointResult.pointId, null, null, endPointResult.pointId], // 只有起点和终点可能有共享端点
-        thickness: wallStyle.thickness,
-        color: wallStyle.color,
-        completed: true
-      };
+  // 地面绘制处理函数
+  const handleFloorDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const activeTool = getActiveTool();
+    if (!activeTool || activeTool.type !== 'floor') return;
 
-      setWalls(prev => [...prev, newWall]);
-      message.success('贝塞尔曲线墙体绘制完成，按住Shift键可连续绘制');
-      
-      // 启用连续绘制模式，保存当前终点作为下一条曲线的起点
-      setBezierDrawingState({
-        phase: 'idle',
-        startPoint: null,
-        endPoint: null,
-        controlPoint1: null,
-        controlPoint2: null,
-        isDraggingControl: false,
-        activeControlPoint: null,
-        continuousMode: true,
-        lastEndPoint: endPointResult.actualPoint
-      });
+    const point = screenToCanvas(e.clientX, e.clientY);
+
+    // 添加点到当前绘制的地面区域
+    setCurrentFloorPoints(prev => [...prev, point]);
+
+    // 如果是第一个点，显示提示信息
+    if (currentFloorPoints.length === 0) {
+      message.info('继续点击添加地面区域的边界点，至少需要3个点');
+    } else if (currentFloorPoints.length === 1) {
+      message.info('继续点击添加第三个点，或右键完成绘制');
     } else {
-      // 如果没有完整的点信息，则完全重置状态
-      setBezierDrawingState({
-        phase: 'idle',
-        startPoint: null,
-        endPoint: null,
-        controlPoint1: null,
-        controlPoint2: null,
-        isDraggingControl: false,
-        activeControlPoint: null,
-        continuousMode: false,
-        lastEndPoint: null
-      });
+      message.info(`已添加${currentFloorPoints.length + 1}个点，右键完成绘制或继续添加点`);
     }
   };
 
+  // 右键菜单处理函数
+  const handleContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    e.preventDefault(); // 阻止默认右键菜单
 
-
-
-
-
+    const activeTool = getActiveTool();
+    
+    // 如果正在绘制地面，右键完成绘制
+    if (activeTool?.type === 'floor' && isDrawingFloor && currentFloorPoints.length >= 3) {
+      completeFloorDrawing();
+      message.success('地面区域绘制完成');
+    } else if (activeTool?.type === 'floor' && isDrawingFloor && currentFloorPoints.length < 3) {
+      message.warning('至少需要3个点才能完成地面区域绘制');
+    }
+  };
 
   // 选择工具相关函数
   const handleSelectionStart = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -4349,65 +4100,7 @@ const DigitalTwinEditor: React.FC = () => {
     });
   };
 
-  // 删除选中的线段
-  const deleteSelectedSegments = () => {
-    if (selectedSegments.length === 0) return;
-    
-    Modal.confirm({
-      title: '确认删除',
-      content: `确定要删除选中的 ${selectedSegments.length} 个线段吗？`,
-      onOk: () => {
-        setWalls(prevWalls => {
-          const newWalls = [...prevWalls];
-          
-          // 按墙体分组处理选中的线段
-          const segmentsByWall = selectedSegments.reduce((acc, segment) => {
-            if (!acc[segment.wallId]) {
-              acc[segment.wallId] = [];
-            }
-            acc[segment.wallId].push(segment.segmentIndex);
-            return acc;
-          }, {} as Record<string, number[]>);
-          
-          // 对每个墙体处理其选中的线段
-          Object.entries(segmentsByWall).forEach(([wallId, segmentIndices]) => {
-            const wallIndex = newWalls.findIndex(w => w.id === wallId);
-            if (wallIndex === -1) return;
-            
-            const wall = newWalls[wallIndex];
-            if (wall.points.length <= 2) {
-              // 如果墙体只有两个点（一个线段），删除整个墙体
-              newWalls.splice(wallIndex, 1);
-            } else {
-              // 删除指定的线段（移除对应的点）
-              const newPoints = [...wall.points];
-              // 按降序排序，从后往前删除，避免索引变化
-              segmentIndices.sort((a, b) => b - a);
-              
-              segmentIndices.forEach(segmentIndex => {
-                if (segmentIndex < newPoints.length - 1) {
-                  // 删除线段的终点（保留起点）
-                  newPoints.splice(segmentIndex + 1, 1);
-                }
-              });
-              
-              // 如果删除后点数少于2个，删除整个墙体
-              if (newPoints.length < 2) {
-                newWalls.splice(wallIndex, 1);
-              } else {
-                newWalls[wallIndex] = { ...wall, points: newPoints };
-              }
-            }
-          });
-          
-          return newWalls;
-        });
-        
-        setSelectedSegments([]);
-        message.success(`已删除 ${selectedSegments.length} 个线段`);
-      }
-    });
-  };
+
 
   // 过滤产品模型
   const getFilteredModels = () => {
@@ -5343,6 +5036,103 @@ const DigitalTwinEditor: React.FC = () => {
       ctx.restore();
     }
 
+    // 绘制已完成的地面（仅在顶视图模式下显示）
+    if (viewMode === 'top' && floorAreas.length > 0) {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+
+      floorAreas.forEach((floor: FloorArea) => {
+        if (floor.points.length >= 3) {
+          // 绘制地面填充
+          ctx.fillStyle = 'rgba(200, 200, 200, 0.3)'; // 浅灰色半透明填充
+          ctx.beginPath();
+          ctx.moveTo(floor.points[0].x, floor.points[0].y);
+          for (let i = 1; i < floor.points.length; i++) {
+            ctx.lineTo(floor.points[i].x, floor.points[i].y);
+          }
+          ctx.closePath();
+          ctx.fill();
+
+          // 绘制地面边框
+          ctx.strokeStyle = '#666666'; // 深灰色边框
+          ctx.lineWidth = 2 / scale;
+          ctx.setLineDash([]);
+          ctx.stroke();
+
+          // 绘制地面顶点
+          floor.points.forEach((point: WallPoint) => {
+            ctx.fillStyle = '#666666';
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, 3 / scale, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+      });
+
+      ctx.restore();
+    }
+
+    // 绘制正在绘制的地面
+    if (currentFloorPoints.length > 0) {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+
+      // 绘制已有的点和连线
+      if (currentFloorPoints.length >= 2) {
+        ctx.strokeStyle = '#1890ff'; // 蓝色预览线
+        ctx.lineWidth = 2 / scale;
+        ctx.setLineDash([5 / scale, 5 / scale]); // 虚线
+        ctx.beginPath();
+        ctx.moveTo(currentFloorPoints[0].x, currentFloorPoints[0].y);
+        for (let i = 1; i < currentFloorPoints.length; i++) {
+          ctx.lineTo(currentFloorPoints[i].x, currentFloorPoints[i].y);
+        }
+        ctx.stroke();
+      }
+
+      // 绘制预览填充（如果有3个或以上的点）
+      if (currentFloorPoints.length >= 3) {
+        ctx.fillStyle = 'rgba(24, 144, 255, 0.1)'; // 蓝色半透明填充
+        ctx.beginPath();
+        ctx.moveTo(currentFloorPoints[0].x, currentFloorPoints[0].y);
+        for (let i = 1; i < currentFloorPoints.length; i++) {
+          ctx.lineTo(currentFloorPoints[i].x, currentFloorPoints[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // 绘制当前地面的顶点
+      currentFloorPoints.forEach((point: WallPoint, index: number) => {
+        ctx.fillStyle = index === 0 ? '#52c41a' : '#1890ff'; // 起点绿色，其他点蓝色
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 4 / scale, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 添加白色边框
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2 / scale;
+        ctx.setLineDash([]);
+        ctx.stroke();
+      });
+
+      // 绘制从最后一个点到鼠标位置的预览线
+      if (mousePosition && currentFloorPoints.length >= 1) {
+        const lastPoint = currentFloorPoints[currentFloorPoints.length - 1];
+        ctx.strokeStyle = 'rgba(24, 144, 255, 0.5)'; // 半透明蓝色
+        ctx.lineWidth = 1 / scale;
+        ctx.setLineDash([3 / scale, 3 / scale]);
+        ctx.beginPath();
+        ctx.moveTo(lastPoint.x, lastPoint.y);
+        ctx.lineTo(mousePosition.x, mousePosition.y);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
     // 绘制CNC机台（仅在顶视图模式下显示）
     if (viewMode === 'top') {
       ctx.save();
@@ -5755,6 +5545,7 @@ const DigitalTwinEditor: React.FC = () => {
           onWheel={handleWheel}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
+          onContextMenu={handleContextMenu}
         />
       )}
 
@@ -6206,14 +5997,12 @@ const DigitalTwinEditor: React.FC = () => {
                   draggable={model.type === 'cnc'}
                   onDragStart={(e: React.DragEvent<HTMLDivElement>) => {
                     if (model.type === 'cnc') {
-                      setIsDraggingCNC(true);
                       setDraggedCNCModel(model);
                       e.dataTransfer.setData('text/plain', JSON.stringify(model));
                       e.dataTransfer.effectAllowed = 'copy';
                     }
                   }}
                   onDragEnd={() => {
-                    setIsDraggingCNC(false);
                     setDraggedCNCModel(null);
                   }}
                 >

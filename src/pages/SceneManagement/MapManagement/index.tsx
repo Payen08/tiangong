@@ -122,6 +122,19 @@ interface MapLine {
     cp2?: { x: number; y: number };
   };
   length?: number; // 线的长度
+  // 新增的12个字段
+  weight?: number; // 权重
+  vehicleExpansionSize?: number; // 车身膨胀大小（单位：m）
+  isDisabled?: boolean; // 是否禁用（默认启用）
+  isReverse?: boolean; // 是否倒车
+  drivingAngle?: number; // 行驶持夹角（度数，正负180度）
+  maxLinearVelocity?: number; // 最大线速度（单位：m/s）
+  maxLinearAcceleration?: number; // 最大线加速度（单位：m/s²）
+  maxLinearDeceleration?: number; // 最大线减速度（单位：m/s²）
+  maxAngularVelocity?: number; // 最大角速度（单位：rad/s）
+  maxAngularAcceleration?: number; // 最大角加速度（单位：rad/s²）
+  arrivalDistancePrecision?: number; // 到点距离精度（单位：m）
+  arrivalAnglePrecision?: number; // 到点角度精度（单位：度）
 }
 
 // 地图区域数据类型
@@ -470,7 +483,7 @@ const MapManagement: React.FC = () => {
   const [draggingPointId, setDraggingPointId] = useState<string | null>(null); // 正在拖拽的点ID
   const [pointDragStart, setPointDragStart] = useState<{x: number, y: number} | null>(null); // 点拖拽开始位置
   const [pointsInitialPositions, setPointsInitialPositions] = useState<Record<string, {x: number, y: number}>>({});  // 存储拖拽开始时所有选中点的初始位置
-  const [selectionInitialPosition, setSelectionInitialPosition] = useState<{start: {x: number, y: number}, end: {x: number, y: number}} | null>(null); // 存储拖拽开始时选中框的初始位置
+
   const [isDraggingSelection, setIsDraggingSelection] = useState(false); // 是否正在拖拽选中的元素组
   const [selectionDragStart, setSelectionDragStart] = useState<{x: number, y: number} | null>(null); // 选中元素组拖拽开始位置
   const [dragAccumulatedOffset, setDragAccumulatedOffset] = useState<{x: number, y: number}>({x: 0, y: 0}); // 拖拽累积偏移量
@@ -635,10 +648,7 @@ const MapManagement: React.FC = () => {
     
     // 保存选中框的初始位置
     if (selectionStart && selectionEnd) {
-      setSelectionInitialPosition({
-        start: { x: selectionStart.x, y: selectionStart.y },
-        end: { x: selectionEnd.x, y: selectionEnd.y }
-      });
+      // 记录选中框的初始位置（用于拖拽计算）
     }
     
     setIsDraggingPoint(true);
@@ -729,7 +739,7 @@ const MapManagement: React.FC = () => {
     setDraggingPointId(null);
     setPointDragStart(null);
     setPointsInitialPositions({});
-    setSelectionInitialPosition(null);  // 清空初始位置记录
+
     if (isDev) console.log('🎯 Point drag end');
   };
 
@@ -5300,6 +5310,7 @@ const MapManagement: React.FC = () => {
 
   // 工具选择处理
   const handleToolSelect = (toolType: string) => {
+    console.log('🔧 [工具选择] 选择工具:', toolType);
     if (isDev) console.log('🔧 [工具选择] 选择工具:', toolType);
     
     // 在黑白底图模式下，只允许选择特定工具
@@ -5520,7 +5531,9 @@ const MapManagement: React.FC = () => {
         type: '节点', // 默认类型
         x: x,
         y: y,
-        direction: 0 // 默认方向
+        direction: 0, // 默认方向
+        isDisabled: false, // 默认启用
+        noUturn: false // 默认不禁止掉头
       };
       
       // 保存历史记录（添加点之前）
@@ -5572,7 +5585,9 @@ const MapManagement: React.FC = () => {
         type: '站点', // 默认类型为站点
         x: x,
         y: y,
-        direction: 0 // 默认方向
+        direction: 0, // 默认方向
+        isDisabled: false, // 默认启用
+        noUturn: false // 默认不禁止掉头
       };
       
       // 保存历史记录（添加点之前）
@@ -5624,7 +5639,9 @@ const MapManagement: React.FC = () => {
         type: '停靠点', // 默认类型为停靠点
         x: x,
         y: y,
-        direction: 0 // 默认方向
+        direction: 0, // 默认方向
+        isDisabled: false, // 默认启用
+        noUturn: false // 默认不禁止掉头
       };
       
       // 保存历史记录（添加点之前）
@@ -5676,7 +5693,9 @@ const MapManagement: React.FC = () => {
         type: '充电点', // 默认类型为充电点
         x: x,
         y: y,
-        direction: 0 // 默认方向
+        direction: 0, // 默认方向
+        isDisabled: false, // 默认启用
+        noUturn: false // 默认不禁止掉头
       };
       
       // 保存历史记录（添加点之前）
@@ -5728,7 +5747,9 @@ const MapManagement: React.FC = () => {
         type: '临停点', // 默认类型为临停点
         x: x,
         y: y,
-        direction: 0 // 默认方向
+        direction: 0, // 默认方向
+        isDisabled: false, // 默认启用
+        noUturn: false // 默认不禁止掉头
       };
       
       // 保存历史记录（添加点之前）
@@ -5801,7 +5822,9 @@ const MapManagement: React.FC = () => {
         type: '节点',
         x: x,
         y: y,
-        direction: 0
+        direction: 0,
+        isDisabled: false, // 默认启用
+        noUturn: false // 默认不禁止掉头
       };
       
       if (isDev) console.log('🎯 [线工具-自动创建点] 创建新点', {
@@ -6087,17 +6110,30 @@ const MapManagement: React.FC = () => {
 
   // 双击点元素处理
   const handlePointDoubleClick = (event: React.MouseEvent, point: any) => {
+    console.log('🔍 [双击调试] 双击点事件触发', {
+      点ID: point.id,
+      点名称: point.name,
+      当前工具: selectedTool,
+      是否为选择工具: selectedTool === 'select'
+    });
+    
     event.stopPropagation();
     
     if (selectedTool === 'select') {
+      console.log('🔍 [双击调试] 工具检查通过，准备打开属性面板');
       // 打开编辑弹窗
       setEditingPoint(point);
       pointEditForm.setFieldsValue({
         name: point.name,
         type: point.type,
-        direction: point.direction
+        direction: point.direction,
+        isDisabled: point.isDisabled || false, // 是否禁用，默认启用
+        noUturn: point.noUturn || false // 是否禁止掉头，默认否
       });
       setPointEditModalVisible(true);
+      console.log('🔍 [双击调试] 属性面板已设置为显示');
+    } else {
+      console.log('🔍 [双击调试] 当前工具不是选择工具，无法打开属性面板');
     }
   };
 
@@ -7706,7 +7742,20 @@ const MapManagement: React.FC = () => {
       setEditingLine(line);
       lineEditForm.setFieldsValue({
         name: line.name,
-        type: line.type // 使用实际的路径类型值
+        type: line.type, // 使用实际的路径类型值
+        // 新增的12个字段
+        weight: line.weight,
+        vehicleExpansionSize: line.vehicleExpansionSize,
+        isDisabled: line.isDisabled || false,
+        isReverse: line.isReverse || false,
+        drivingAngle: line.drivingAngle,
+        maxLinearVelocity: line.maxLinearVelocity,
+        maxLinearAcceleration: line.maxLinearAcceleration,
+        maxLinearDeceleration: line.maxLinearDeceleration,
+        maxAngularVelocity: line.maxAngularVelocity,
+        maxAngularAcceleration: line.maxAngularAcceleration,
+        arrivalDistancePrecision: line.arrivalDistancePrecision,
+        arrivalAnglePrecision: line.arrivalAnglePrecision,
       });
     } else if (line.type === 'single-line') {
       // 单向直线：检查是否有重叠的其他单向线
@@ -7744,7 +7793,20 @@ const MapManagement: React.FC = () => {
         lineEditForm.setFieldsValue({
           name: targetLine.name,
           type: targetLine.type, // 使用实际的路径类型值
-          direction: `第${lineNumber}条线（共${totalLines}条重叠线）`
+          direction: `第${lineNumber}条线（共${totalLines}条重叠线）`,
+          // 新增的12个字段
+          weight: targetLine.weight,
+          vehicleExpansionSize: targetLine.vehicleExpansionSize,
+          isDisabled: targetLine.isDisabled || false,
+          isReverse: targetLine.isReverse || false,
+          drivingAngle: targetLine.drivingAngle,
+          maxLinearVelocity: targetLine.maxLinearVelocity,
+          maxLinearAcceleration: targetLine.maxLinearAcceleration,
+          maxLinearDeceleration: targetLine.maxLinearDeceleration,
+          maxAngularVelocity: targetLine.maxAngularVelocity,
+          maxAngularAcceleration: targetLine.maxAngularAcceleration,
+          arrivalDistancePrecision: targetLine.arrivalDistancePrecision,
+          arrivalAnglePrecision: targetLine.arrivalAnglePrecision,
         });
         
         message.info(`正在编辑第${lineNumber}条重叠线（共${totalLines}条）`);
@@ -7753,7 +7815,20 @@ const MapManagement: React.FC = () => {
         setEditingLine(line);
         lineEditForm.setFieldsValue({
           name: line.name,
-          type: line.type // 使用实际的路径类型值
+          type: line.type, // 使用实际的路径类型值
+          // 新增的12个字段
+          weight: line.weight,
+          vehicleExpansionSize: line.vehicleExpansionSize,
+          isDisabled: line.isDisabled || false,
+          isReverse: line.isReverse || false,
+          drivingAngle: line.drivingAngle,
+          maxLinearVelocity: line.maxLinearVelocity,
+          maxLinearAcceleration: line.maxLinearAcceleration,
+          maxLinearDeceleration: line.maxLinearDeceleration,
+          maxAngularVelocity: line.maxAngularVelocity,
+          maxAngularAcceleration: line.maxAngularAcceleration,
+          arrivalDistancePrecision: line.arrivalDistancePrecision,
+          arrivalAnglePrecision: line.arrivalAnglePrecision,
         });
       }
     } else {
@@ -7761,7 +7836,20 @@ const MapManagement: React.FC = () => {
        setEditingLine(line);
        lineEditForm.setFieldsValue({
            name: line.name,
-           type: line.type // 使用实际的路径类型值
+           type: line.type, // 使用实际的路径类型值
+           // 新增的12个字段
+           weight: line.weight,
+           vehicleExpansionSize: line.vehicleExpansionSize,
+           isDisabled: line.isDisabled || false,
+           isReverse: line.isReverse || false,
+           drivingAngle: line.drivingAngle,
+           maxLinearVelocity: line.maxLinearVelocity,
+           maxLinearAcceleration: line.maxLinearAcceleration,
+           maxLinearDeceleration: line.maxLinearDeceleration,
+           maxAngularVelocity: line.maxAngularVelocity,
+           maxAngularAcceleration: line.maxAngularAcceleration,
+           arrivalDistancePrecision: line.arrivalDistancePrecision,
+           arrivalAnglePrecision: line.arrivalAnglePrecision,
          });
      }
     
@@ -7773,12 +7861,25 @@ const MapManagement: React.FC = () => {
     if (!editingLine) return;
     
     try {
-      // 更新线数据，直接使用用户选择的路径类型
+      // 更新线数据，包含所有新增的12个字段
       setMapLines(prev => prev.map(line => 
         line.id === editingLine.id ? {
           ...line,
           name: values.name,
-          type: values.type // 直接使用选择的路径类型值
+          type: values.type, // 直接使用选择的路径类型值
+          // 新增的12个字段
+          weight: values.weight ? Number(values.weight) : undefined,
+          vehicleExpansionSize: values.vehicleExpansionSize ? Number(values.vehicleExpansionSize) : undefined,
+          isDisabled: values.isDisabled || false, // 默认启用
+          isReverse: values.isReverse || false,
+          drivingAngle: values.drivingAngle ? Number(values.drivingAngle) : undefined,
+          maxLinearVelocity: values.maxLinearVelocity ? Number(values.maxLinearVelocity) : undefined,
+          maxLinearAcceleration: values.maxLinearAcceleration ? Number(values.maxLinearAcceleration) : undefined,
+          maxLinearDeceleration: values.maxLinearDeceleration ? Number(values.maxLinearDeceleration) : undefined,
+          maxAngularVelocity: values.maxAngularVelocity ? Number(values.maxAngularVelocity) : undefined,
+          maxAngularAcceleration: values.maxAngularAcceleration ? Number(values.maxAngularAcceleration) : undefined,
+          arrivalDistancePrecision: values.arrivalDistancePrecision ? Number(values.arrivalDistancePrecision) : undefined,
+          arrivalAnglePrecision: values.arrivalAnglePrecision ? Number(values.arrivalAnglePrecision) : undefined,
         } : line
       ));
       
@@ -7852,7 +7953,9 @@ const MapManagement: React.FC = () => {
           description: '插入的节点',
           createTime: new Date().toISOString(),
           updateTime: new Date().toISOString(),
-          updateUser: '当前用户'
+          updateUser: '当前用户',
+          isDisabled: false, // 默认启用
+          noUturn: false // 默认不禁止掉头
         };
         
         // 创建两条新线段
@@ -14675,6 +14778,20 @@ const MapManagement: React.FC = () => {
             </Select>
           </Form.Item>
           
+          {/* 是否禁用字段 - 所有点类型都显示 */}
+          <Form.Item
+            name="isDisabled"
+            label="是否禁用"
+            initialValue={false}
+            style={{ marginBottom: 16 }}
+            tooltip="禁用后该点将不可用于路径规划"
+          >
+            <Select placeholder="请选择是否禁用" disabled={currentMode === 'view'}>
+              <Select.Option value={false}>否</Select.Option>
+              <Select.Option value={true}>是</Select.Option>
+            </Select>
+          </Form.Item>
+          
           {/* 根据点类型显示不同的字段 */}
           <Form.Item
             noStyle
@@ -14729,14 +14846,15 @@ const MapManagement: React.FC = () => {
                       />
                     </Form.Item>
                     
-                    {/* 是否禁止调头字段 */}
+                    {/* 是否禁止掉头字段 */}
                     <Form.Item
                       name="noUturn"
-                      label="是否禁止调头"
+                      label="是否禁止掉头"
                       initialValue={false}
                       style={{ marginBottom: 16 }}
+                      tooltip="禁止掉头后，机器人在此点不能进行掉头操作"
                     >
-                      <Select placeholder="请选择是否禁止调头" disabled={currentMode === 'view'}>
+                      <Select placeholder="请选择是否禁止掉头" disabled={currentMode === 'view'}>
                         <Select.Option value={false}>否</Select.Option>
                         <Select.Option value={true}>是</Select.Option>
                       </Select>
@@ -14969,14 +15087,15 @@ const MapManagement: React.FC = () => {
                     />
                   </Form.Item>
                   
-                  {/* 是否禁止调头字段 - 除节点外的所有类型都显示 */}
+                  {/* 是否禁止掉头字段 - 除节点外的所有类型都显示 */}
                   <Form.Item
                     name="noUturn"
-                    label="是否禁止调头"
+                    label="是否禁止掉头"
                     initialValue={false}
                     style={{ marginBottom: 16 }}
+                    tooltip="禁止掉头后，机器人在此点不能进行掉头操作"
                   >
-                    <Select placeholder="请选择是否禁止调头">
+                    <Select placeholder="请选择是否禁止掉头" disabled={currentMode === 'view'}>
                       <Select.Option value={false}>否</Select.Option>
                       <Select.Option value={true}>是</Select.Option>
                     </Select>
@@ -15538,6 +15657,266 @@ const MapManagement: React.FC = () => {
               addonAfter="实际距离"
             />
           </Form.Item>
+
+          {/* 新增的12个字段 */}
+          <Divider orientation="left" style={{ margin: '24px 0 16px 0', fontSize: '14px', fontWeight: 500 }}>
+            路径参数配置
+          </Divider>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="weight"
+                label="权重"
+                style={{ marginBottom: 16 }}
+              >
+                <Input 
+                  placeholder="请输入权重" 
+                  disabled={currentMode === 'view'}
+                  type="number"
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                      e.stopPropagation();
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="vehicleExpansionSize"
+                label="车身膨胀大小"
+                style={{ marginBottom: 16 }}
+              >
+                <Input 
+                  placeholder="默认空值" 
+                  disabled={currentMode === 'view'}
+                  type="number"
+                  step="0.01"
+                  addonAfter="m"
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                      e.stopPropagation();
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="isDisabled"
+                label="是否禁用"
+                valuePropName="checked"
+                style={{ marginBottom: 16 }}
+              >
+                <Switch 
+                  checkedChildren="禁用" 
+                  unCheckedChildren="启用" 
+                  disabled={currentMode === 'view'}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="isReverse"
+                label="是否倒车"
+                valuePropName="checked"
+                style={{ marginBottom: 16 }}
+              >
+                <Switch 
+                  checkedChildren="倒车" 
+                  unCheckedChildren="正向" 
+                  disabled={currentMode === 'view'}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            name="drivingAngle"
+            label="行驶持夹角"
+            style={{ marginBottom: 16 }}
+          >
+            <Input 
+              placeholder="默认空值，度数（正负180度）" 
+              disabled={currentMode === 'view'}
+              type="number"
+              min={-180}
+              max={180}
+              addonAfter="度"
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === 'Delete' || e.key === 'Backspace') {
+                  e.stopPropagation();
+                }
+              }}
+            />
+          </Form.Item>
+
+          <Divider orientation="left" style={{ margin: '24px 0 16px 0', fontSize: '14px', fontWeight: 500 }}>
+            速度与加速度配置
+          </Divider>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="maxLinearVelocity"
+                label="最大线速度"
+                style={{ marginBottom: 16 }}
+              >
+                <Input 
+                  placeholder="默认空值" 
+                  disabled={currentMode === 'view'}
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  addonAfter="m/s"
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                      e.stopPropagation();
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="maxLinearAcceleration"
+                label="最大线加速度"
+                style={{ marginBottom: 16 }}
+              >
+                <Input 
+                  placeholder="默认空值" 
+                  disabled={currentMode === 'view'}
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  addonAfter="m/s²"
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                      e.stopPropagation();
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="maxLinearDeceleration"
+                label="最大线减速度"
+                style={{ marginBottom: 16 }}
+              >
+                <Input 
+                  placeholder="默认空值" 
+                  disabled={currentMode === 'view'}
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  addonAfter="m/s²"
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                      e.stopPropagation();
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="maxAngularVelocity"
+                label="最大角速度"
+                style={{ marginBottom: 16 }}
+              >
+                <Input 
+                  placeholder="默认空值" 
+                  disabled={currentMode === 'view'}
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  addonAfter="rad/s"
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                      e.stopPropagation();
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            name="maxAngularAcceleration"
+            label="最大角加速度"
+            style={{ marginBottom: 16 }}
+          >
+            <Input 
+              placeholder="默认空值" 
+              disabled={currentMode === 'view'}
+              type="number"
+              step="0.01"
+              min={0}
+              addonAfter="rad/s²"
+              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                if (e.key === 'Delete' || e.key === 'Backspace') {
+                  e.stopPropagation();
+                }
+              }}
+            />
+          </Form.Item>
+
+          <Divider orientation="left" style={{ margin: '24px 0 16px 0', fontSize: '14px', fontWeight: 500 }}>
+            精度配置
+          </Divider>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="arrivalDistancePrecision"
+                label="到点距离精度"
+                style={{ marginBottom: 16 }}
+              >
+                <Input 
+                  placeholder="默认空值" 
+                  disabled={currentMode === 'view'}
+                  type="number"
+                  step="0.001"
+                  min={0}
+                  addonAfter="m"
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                      e.stopPropagation();
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="arrivalAnglePrecision"
+                label="到点角度精度"
+                style={{ marginBottom: 16 }}
+              >
+                <Input 
+                  placeholder="默认空值" 
+                  disabled={currentMode === 'view'}
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  addonAfter="度"
+                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                    if (e.key === 'Delete' || e.key === 'Backspace') {
+                      e.stopPropagation();
+                    }
+                  }}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
           
           <div style={{ 
             background: '#f5f5f5', 
