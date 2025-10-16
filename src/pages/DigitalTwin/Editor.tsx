@@ -135,9 +135,10 @@ interface FloorArea {
   opacity?: number;
   completed: boolean;
   visible?: boolean;
-  selected?: boolean;
   material?: string; // 材质类型
   texture?: string; // 纹理URL
+  thickness?: number; // 地面厚度 (Z轴，单位：m)，默认0.1m
+  selected?: boolean; // 选中状态
 }
 
 // 拓扑路网节点
@@ -195,10 +196,16 @@ interface FloorScene {
 interface ThreeDEditorProps {
   walls: Wall[];
   cncMachines: CNCMachine[];
+  floorAreas: FloorArea[]; // 地面区域数组
   selectedWall3DProps: {
     width: number;
     thickness: number;
     height: number;
+    color: string;
+    opacity: number;
+  };
+  selectedFloor3DProps: {
+    thickness: number;
     color: string;
     opacity: number;
   };
@@ -208,7 +215,7 @@ interface ThreeDEditorProps {
 }
 
 // 3D编辑器组件
-const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selectedWall3DProps, onWallSelect: _onWallSelect, onCNCMachineSelect: _onCNCMachineSelect, style }) => {
+const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, floorAreas, selectedWall3DProps, selectedFloor3DProps, onWallSelect: _onWallSelect, onCNCMachineSelect: _onCNCMachineSelect, style }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene>();
   const rendererRef = useRef<THREE.WebGLRenderer>();
@@ -216,8 +223,26 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
   const controlsRef = useRef<OrbitControls>();
   const wallMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const cncMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const textureCache = useRef<Map<string, THREE.CanvasTexture>>(new Map());
+  const floorMeshesRef = useRef<THREE.Mesh[]>([]);
   
   // 键盘控制状态（预留用于未来功能扩展）
+
+  // 安全纹理创建函数，避免重复创建纹理
+  const createSafeTexture = (canvas: HTMLCanvasElement, cacheKey: string): THREE.CanvasTexture => {
+    const cachedTexture = textureCache.current.get(cacheKey);
+    if (cachedTexture && cachedTexture.image) {
+      return cachedTexture;
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    
+    textureCache.current.set(cacheKey, texture);
+    return texture;
+  };
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -244,7 +269,7 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
       context.fillRect(0, 0, canvas.width, canvas.height);
       
       // 设置为场景背景
-      const texture = new THREE.CanvasTexture(canvas);
+      const texture = createSafeTexture(canvas, 'scene-background');
       scene.background = texture;
     };
     
@@ -311,7 +336,7 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
       context.fillStyle = gradient;
       context.fillRect(0, 0, canvas.width, canvas.height);
       
-      return new THREE.CanvasTexture(canvas);
+      return createSafeTexture(canvas, 'ground-texture');
     };
     
     const groundTexture = createGroundTexture();
@@ -353,7 +378,7 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
       context.textBaseline = 'middle';
       context.fillText(text, 32, 32);
       
-      const texture = new THREE.CanvasTexture(canvas);
+      const texture = createSafeTexture(canvas, `axis-label-${text}`);
       const material = new THREE.SpriteMaterial({ map: texture });
       const sprite = new THREE.Sprite(material);
       
@@ -441,6 +466,12 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
         controlsRef.current.dispose();
       }
       
+      // 清理纹理缓存
+      textureCache.current.forEach(texture => {
+        texture.dispose();
+      });
+      textureCache.current.clear();
+      
       if (mountRef.current && renderer.domElement) {
         mountRef.current.removeChild(renderer.domElement);
       }
@@ -474,33 +505,47 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
       const prev = points[(i - 1 + points.length) % points.length];
       const next = points[(i + 1) % points.length];
       
-      // 转换为3D坐标系（Y轴向上）
-      const currentPos = new THREE.Vector3(current.x / 100, 0, -current.y / 100);
-      const prevPos = new THREE.Vector3(prev.x / 100, 0, -prev.y / 100);
-      const nextPos = new THREE.Vector3(next.x / 100, 0, -next.y / 100);
+      // 使用与地面一致的坐标转换逻辑 - 移除Z轴镜像
+      const currentPos = new THREE.Vector3(current.x / 100 * 5, 0, current.y / 100 * 5);
+      const prevPos = new THREE.Vector3(prev.x / 100 * 5, 0, prev.y / 100 * 5);
+      const nextPos = new THREE.Vector3(next.x / 100 * 5, 0, next.y / 100 * 5);
       
       // 计算前一段和后一段的方向向量
       const prevDir = new THREE.Vector3().subVectors(currentPos, prevPos).normalize();
       const nextDir = new THREE.Vector3().subVectors(nextPos, currentPos).normalize();
       
-      // 计算法向量（垂直于墙体方向）
-      const prevNormal = new THREE.Vector3(-prevDir.z, 0, prevDir.x);
-      const nextNormal = new THREE.Vector3(-nextDir.z, 0, nextDir.x);
+      // 计算法向量（垂直于墙体方向，向右）
+      const prevNormal = new THREE.Vector3(-prevDir.z, 0, prevDir.x).normalize();
+      const nextNormal = new THREE.Vector3(-nextDir.z, 0, nextDir.x).normalize();
       
       // 计算角平分线法向量
-      const bisectorNormal = new THREE.Vector3()
-        .addVectors(prevNormal, nextNormal)
-        .normalize();
+      let bisectorNormal = new THREE.Vector3().addVectors(prevNormal, nextNormal);
+      
+      // 处理特殊情况：当两个法向量相反时（180度角）
+      if (bisectorNormal.length() < 0.001) {
+        // 使用任意一个法向量
+        bisectorNormal = prevNormal.clone();
+      } else {
+        bisectorNormal.normalize();
+      }
       
       // 计算角度和偏移距离
       const angle = prevDir.angleTo(nextDir);
       let offsetDistance = halfThickness;
       
       // 对于非直角，使用角平分线算法
-      if (Math.abs(angle) > 0.01) {
-        offsetDistance = halfThickness / Math.sin(Math.max(angle / 2, 0.1));
+      if (Math.abs(angle) > 0.01 && Math.abs(angle - Math.PI) > 0.01) {
+        const sinHalfAngle = Math.sin(Math.max(angle / 2, 0.01));
+        offsetDistance = halfThickness / sinHalfAngle;
         // 限制最大偏移，避免尖角过长
-        offsetDistance = Math.min(offsetDistance, halfThickness * 2);
+        offsetDistance = Math.min(offsetDistance, halfThickness * 3);
+      }
+      
+      // 确保偏移方向正确（检查是否为凸角）
+      const cross = new THREE.Vector3().crossVectors(prevDir, nextDir);
+      if (cross.y < 0) {
+        // 凹角，需要反向偏移
+        bisectorNormal.negate();
       }
       
       // 生成外轮廓和内轮廓顶点（底部和顶部）
@@ -513,13 +558,13 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
       
       // 外轮廓顶点（底部和顶部）
       outerVertices.push(
-        new THREE.Vector3().addVectors(currentPos, outerOffset), // 底部
+        new THREE.Vector3().addVectors(currentPos, outerOffset).setY(0), // 底部与地面对齐
         new THREE.Vector3().addVectors(currentPos, outerOffset).setY(height) // 顶部
       );
       
       // 内轮廓顶点（底部和顶部）
       innerVertices.push(
-        new THREE.Vector3().addVectors(currentPos, innerOffset), // 底部
+        new THREE.Vector3().addVectors(currentPos, innerOffset).setY(0), // 底部与地面对齐
         new THREE.Vector3().addVectors(currentPos, innerOffset).setY(height) // 顶部
       );
     }
@@ -528,7 +573,6 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
     const geometry = new THREE.BufferGeometry();
     const vertices: number[] = [];
     const indices: number[] = [];
-    const normals: number[] = [];
     
     // 添加所有顶点
     const allVertices = [...outerVertices, ...innerVertices];
@@ -549,12 +593,6 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
         baseIdx, baseIdx + 1, nextBaseIdx,
         nextBaseIdx, baseIdx + 1, nextBaseIdx + 1
       );
-      
-      // 计算法向量
-      const normal = new THREE.Vector3(-1, 0, 0); // 外法向量
-      for (let j = 0; j < 6; j++) {
-        normals.push(normal.x, normal.y, normal.z);
-      }
     }
     
     // 生成内墙面
@@ -569,36 +607,26 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
         baseIdx, nextBaseIdx, baseIdx + 1,
         nextBaseIdx, nextBaseIdx + 1, baseIdx + 1
       );
-      
-      // 计算法向量
-      const normal = new THREE.Vector3(1, 0, 0); // 内法向量
-      for (let j = 0; j < 6; j++) {
-        normals.push(normal.x, normal.y, normal.z);
-      }
     }
     
-    // 生成顶面和底面
-    // 顶面（外轮廓逆时针，内轮廓顺时针）
-    for (let i = 0; i < numPoints - 2; i++) {
-      // 外轮廓三角扇形
-      indices.push(1, (i + 1) * 2 + 1, (i + 2) * 2 + 1);
-      // 内轮廓三角扇形
+    // 生成顶面和底面（环带三角形，将外轮廓与内轮廓连接成带状）
+    for (let i = 0; i < numPoints; i++) {
+      const next = (i + 1) % numPoints;
+      const outerBase = i * 2;
+      const outerNextBase = next * 2;
+      const innerBase = innerOffset + i * 2;
+      const innerNextBase = innerOffset + next * 2;
+
+      // 顶面带（两个三角形）：外顶-外下一顶-内顶，外下一顶-内下一顶-内顶
       indices.push(
-        innerOffset + 1, 
-        innerOffset + (i + 2) * 2 + 1, 
-        innerOffset + (i + 1) * 2 + 1
+        outerBase + 1, outerNextBase + 1, innerBase + 1,
+        outerNextBase + 1, innerNextBase + 1, innerBase + 1
       );
-    }
-    
-    // 底面（外轮廓顺时针，内轮廓逆时针）
-    for (let i = 0; i < numPoints - 2; i++) {
-      // 外轮廓三角扇形
-      indices.push(0, (i + 2) * 2, (i + 1) * 2);
-      // 内轮廓三角扇形
+
+      // 底面带（两个三角形）：外底-内底-外下一底，外下一底-内底-内下一底
       indices.push(
-        innerOffset, 
-        innerOffset + (i + 1) * 2, 
-        innerOffset + (i + 2) * 2
+        outerBase, innerBase, outerNextBase,
+        outerNextBase, innerBase, innerNextBase
       );
     }
     
@@ -611,7 +639,8 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
     const material = new THREE.MeshLambertMaterial({
       color: props.color,
       transparent: true,
-      opacity: props.opacity
+      opacity: props.opacity,
+      side: THREE.DoubleSide // 匹配地面显示逻辑，避免单面剔除导致的方向问题
     });
     
     // 创建墙体网格
@@ -623,6 +652,15 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
     
     // 设置用户数据
     mesh.userData = { wallId: wall.id, segmentIndex: 0 };
+    
+    // 添加调试日志
+    console.log(`创建统一墙体 ${wall.id}:`, {
+      点数: numPoints,
+      厚度: halfThickness * 2,
+      顶点数: vertices.length / 3,
+      面片数: indices.length / 3,
+      墙体点坐标: wall.points
+    });
     
     // 添加到场景
     scene.add(mesh);
@@ -649,13 +687,15 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
       
       if (length2D < 5) continue; // 跳过过短的段
       
-      const length3D = length2D / 100;
+      const length3D = length2D / 100 * 5;
       
-      // 计算中心点和角度
-      const centerX = (start.x + end.x) / 2 / 100;
-      const centerY = props.height / 2;
-      const centerZ = -(start.y + end.y) / 2 / 100;
-      const angle = Math.atan2(deltaX, -deltaY);
+      // 计算中心点和角度 - 使用与地面相同的坐标变换逻辑
+      const centerX = (start.x + end.x) / 2 / 100 * 5;
+      const centerY = props.height / 2; // 墙体底部与地面对齐（地面在Y=0）
+      const centerZ = (start.y + end.y) / 2 / 100 * 5;
+      
+      // 角度计算：在3D坐标系中，X轴对应原2D的X轴，Z轴对应原2D的Y轴
+      const angle = Math.atan2(deltaX, deltaY);
       
       // 创建墙体几何体
       const geometry = new THREE.BoxGeometry(
@@ -703,11 +743,17 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
     walls.forEach((wall) => {
       if (wall.points.length < 2) return;
 
-      // 判断是否为闭合墙体
-      // 方法1：检查首尾点是否相同或非常接近（容差为5像素）
-      const isClosedByPosition = wall.points.length >= 3 && 
-        Math.abs(wall.points[0].x - wall.points[wall.points.length - 1].x) < 5 &&
-        Math.abs(wall.points[0].y - wall.points[wall.points.length - 1].y) < 5;
+      // 改进的墙体闭合检测逻辑
+      const firstPoint = wall.points[0];
+      const lastPoint = wall.points[wall.points.length - 1];
+      
+      // 方法1：检查首尾点位置距离（使用更宽松的容差）
+      const POSITION_TOLERANCE = 20; // 增加到20像素容差，适应手绘误差
+      const distance = Math.sqrt(
+        Math.pow(lastPoint.x - firstPoint.x, 2) + 
+        Math.pow(lastPoint.y - firstPoint.y, 2)
+      );
+      const isClosedByPosition = wall.points.length >= 3 && distance < POSITION_TOLERANCE;
       
       // 方法2：检查是否通过共享端点形成闭合（首尾点共享同一个端点ID）
       const isClosedBySharedPoint = wall.pointIds && 
@@ -716,7 +762,36 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
         wall.pointIds[wall.pointIds.length - 1] !== null &&
         wall.pointIds[0] === wall.pointIds[wall.pointIds.length - 1];
       
-      const isClosedWall = isClosedByPosition || isClosedBySharedPoint;
+      // 方法3：智能检测 - 如果墙体有足够多的点且形成近似闭合形状
+      const hasEnoughPoints = wall.points.length >= 4;
+      const isNearlyRectangular = hasEnoughPoints && distance < 40; // 更宽松的形状检测
+      
+      // 方法4：基于用户绘制意图 - 如果墙体已完成且点数合理
+      const isIntentionallyClosed = wall.completed && hasEnoughPoints && distance < 60;
+      
+      const isClosedWall = isClosedByPosition || isClosedBySharedPoint || isNearlyRectangular || isIntentionallyClosed;
+
+      // 调试信息：检查红色墙体的闭合状态
+      if (wall.id.includes('red') || wall.color === '#ff0000' || wall.color === 'red') {
+        console.log('🔴 红色墙体闭合检测 (改进版):', {
+          wallId: wall.id,
+          pointsCount: wall.points.length,
+          firstPoint,
+          lastPoint,
+          distance: distance.toFixed(2) + 'px',
+          tolerance: POSITION_TOLERANCE + 'px',
+          isClosedByPosition: `${isClosedByPosition} (距离 < ${POSITION_TOLERANCE}px)`,
+          pointIds: wall.pointIds,
+          firstPointId: wall.pointIds?.[0],
+          lastPointId: wall.pointIds?.[wall.pointIds.length - 1],
+          isClosedBySharedPoint,
+          hasEnoughPoints,
+          isNearlyRectangular: `${isNearlyRectangular} (距离 < 40px)`,
+          isIntentionallyClosed: `${isIntentionallyClosed} (已完成 && 点数>=4 && 距离 < 60px)`,
+          wallCompleted: wall.completed,
+          finalResult: `${isClosedWall} ⭐`
+        });
+      }
 
       if (isClosedWall) {
         // 对于闭合墙体，使用几何体合并技术创建单一无缝墙体
@@ -740,10 +815,12 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
     const depth3D = cnc.depth3D || 5;
     const height3D = cnc.height3D || 5;
     
-    // 转换2D坐标到3D坐标系（Y轴向上）
-    const x3D = cnc.x / 100; // 像素转米
-    const z3D = -cnc.y / 100; // 像素转米，Z轴翻转
-    const y3D = height3D / 2; // Y轴位置（高度的一半，使底部贴地）
+    // 使用与地面相同的坐标变换逻辑
+    // 地面使用: points[i].x / 100 * 5, points[i].y / 100 * 5
+    // CNC机台也应该使用相同的变换逻辑
+    const x3D = cnc.x / 100 * 5; // 世界坐标转米，缩放到3D场景
+    const z3D = cnc.y / 100 * 5; // 世界坐标转米，缩放到3D场景
+    const y3D = height3D / 2 - 0.01; // Y轴位置（底部与地面对齐，地面在Y=-0.01）
     
     // 创建主体几何体
     const mainGeometry = new THREE.BoxGeometry(width3D, height3D, depth3D);
@@ -801,6 +878,86 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
     }
   };
 
+  // 创建地面3D模型
+  const createFloorArea = (
+    floor: FloorArea,
+    scene: THREE.Scene,
+    meshMap: Map<string, THREE.Mesh>,
+    meshArray: THREE.Mesh[]
+  ) => {
+    console.log(`🏗️ 开始创建地面区域 ${floor.id}:`, {
+      points: floor.points?.length || 0,
+      color: floor.color,
+      opacity: floor.opacity,
+      thickness: floor.thickness
+    });
+    
+    const points = floor.points;
+    if (points.length < 3) {
+      console.log(`❌ 地面区域 ${floor.id} 点数不足 (${points.length} < 3)`);
+      return;
+    }
+
+    // 创建地面几何体
+    const shape = new THREE.Shape();
+    
+    // 转换第一个点为3D坐标系（Y轴向上） - 使用Z轴镜像，与原来的地面逻辑保持一致
+    const firstPoint = new THREE.Vector2(points[0].x / 100 * 5, -(points[0].y / 100 * 5));
+    shape.moveTo(firstPoint.x, firstPoint.y);
+    
+    // 添加其他点
+    for (let i = 1; i < points.length; i++) {
+      const point = new THREE.Vector2(points[i].x / 100 * 5, -(points[i].y / 100 * 5));
+      shape.lineTo(point.x, point.y);
+    }
+    
+    // 闭合路径
+    shape.closePath();
+    
+    // 创建拉伸几何体（地面有厚度）
+    const extrudeSettings = {
+      depth: floor.thickness,
+      bevelEnabled: false
+    };
+    
+    const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+    
+    // 旋转几何体，使其平躺在XZ平面上
+    geometry.rotateX(-Math.PI / 2);
+    
+    // 创建地面材质
+    const material = new THREE.MeshLambertMaterial({
+      color: floor.color,
+      transparent: true,
+      opacity: floor.opacity
+    });
+    
+    // 创建地面网格
+    const mesh = new THREE.Mesh(geometry, material);
+    
+    // 设置位置（地面稍微下移，避免与墙体底部Z-fighting）
+    mesh.position.y = -0.01;
+    
+    // 设置阴影
+    mesh.castShadow = false; // 地面通常不投射阴影
+    mesh.receiveShadow = true; // 地面接收阴影
+    
+    // 设置用户数据
+    mesh.userData = { 
+      floorId: floor.id, 
+      type: 'floor',
+      name: floor.name 
+    };
+    
+    // 添加到场景
+    scene.add(mesh);
+    meshMap.set(floor.id, mesh);
+    meshArray.push(mesh);
+    
+    console.log(`✅ 成功创建地面区域 ${floor.id}，已添加到场景中`);
+    console.log(`📊 当前场景中地面网格数量: ${meshArray.length}`);
+  };
+
   // 更新CNC机台3D模型
   useEffect(() => {
     if (!sceneRef.current) return;
@@ -816,6 +973,101 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, selecte
       createCNCMachine(cnc, sceneRef.current!, cncMeshesRef.current);
     });
   }, [cncMachines]);
+
+  // 地面渲染
+  useEffect(() => {
+    console.log('🏠 地面渲染useEffect触发，floorAreas数量:', floorAreas.length);
+    console.log('🏠 floorAreas详情:', floorAreas);
+    
+    if (!sceneRef.current || !floorMeshesRef.current) {
+      console.log('❌ 场景或地面网格引用不存在');
+      return;
+    }
+
+    // 清除旧的地面网格
+    floorMeshesRef.current.forEach(mesh => {
+      sceneRef.current?.remove(mesh);
+      mesh.geometry.dispose();
+      if (mesh.material instanceof THREE.Material) {
+        mesh.material.dispose();
+      }
+    });
+    floorMeshesRef.current.length = 0;
+
+    // 创建新的地面网格
+    const floorMeshMap = new Map<string, THREE.Mesh>();
+    floorAreas.forEach(floorArea => {
+      console.log(`🔍 检查地面区域 ${floorArea.id}:`, {
+        visible: floorArea.visible,
+        completed: floorArea.completed,
+        points: floorArea.points?.length || 0
+      });
+      
+      if (floorArea.visible && floorArea.completed) {
+        console.log(`✅ 创建地面区域 ${floorArea.id}`);
+        createFloorArea(floorArea, sceneRef.current!, floorMeshMap, floorMeshesRef.current);
+      } else {
+        console.log(`❌ 跳过地面区域 ${floorArea.id} - visible: ${floorArea.visible}, completed: ${floorArea.completed}`);
+      }
+    });
+    
+    console.log('🏠 地面渲染完成，创建的网格数量:', floorMeshesRef.current.length);
+  }, [floorAreas]);
+
+  // 地面属性实时预览效果
+  useEffect(() => {
+    if (!selectedFloor3DProps) return;
+    
+    console.log('🎨 更新地面属性预览:', selectedFloor3DProps);
+    
+    // 更新所有地面的材质属性
+    floorMeshesRef.current.forEach(mesh => {
+      const floorId = mesh.userData.floorId;
+      
+      if (mesh.material instanceof THREE.MeshLambertMaterial) {
+        // 更新材质颜色和透明度
+        mesh.material.color.setHex(parseInt(selectedFloor3DProps.color.replace('#', ''), 16));
+        mesh.material.opacity = selectedFloor3DProps.opacity;
+        mesh.material.needsUpdate = true;
+        
+        // 更新地面厚度（需要重新创建几何体）
+        const floorArea = floorAreas.find(floor => floor.id === floorId);
+        if (floorArea && floorArea.thickness !== selectedFloor3DProps.thickness) {
+          // 获取原始形状
+          const points = floorArea.points;
+          if (points.length >= 3) {
+            // 创建新的形状 - 使用Z轴镜像，与原来的地面逻辑保持一致
+            const shape = new THREE.Shape();
+            const firstPoint = new THREE.Vector2(points[0].x / 100 * 5, -(points[0].y / 100 * 5));
+            shape.moveTo(firstPoint.x, firstPoint.y);
+            
+            for (let i = 1; i < points.length; i++) {
+              const point = new THREE.Vector2(points[i].x / 100 * 5, -(points[i].y / 100 * 5));
+              shape.lineTo(point.x, point.y);
+            }
+            shape.closePath();
+            
+            // 创建新的拉伸几何体
+            const extrudeSettings = {
+              depth: selectedFloor3DProps.thickness,
+              bevelEnabled: false
+            };
+            
+            const newGeometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+            newGeometry.rotateX(-Math.PI / 2);
+            
+            // 释放旧几何体
+            if (mesh.geometry) {
+              mesh.geometry.dispose();
+            }
+            
+            // 应用新几何体
+            mesh.geometry = newGeometry;
+          }
+        }
+      }
+    });
+  }, [selectedFloor3DProps, floorAreas]);
 
   return (
     <div
@@ -1040,6 +1292,13 @@ const DigitalTwinEditor: React.FC = () => {
     opacity: 1.0 // 透明度
   });
 
+  // 选中地面的3D属性状态
+  const [selectedFloor3DProps, setSelectedFloor3DProps] = useState({
+    thickness: 0.1, // 地面厚度，单位：米
+    color: '#f0f0f0', // 地面颜色
+    opacity: 1.0 // 透明度
+  });
+
   // 选中墙体状态
   const [selectedWallId, setSelectedWallId] = useState<string | null>(null);
 
@@ -1064,6 +1323,8 @@ const DigitalTwinEditor: React.FC = () => {
     material: 'standard',
     texture: 'none'
   }); // 地面样式配置，预留用于未来的地面样式设置功能
+  const [showFloorVertices, setShowFloorVertices] = useState(false); // 控制地面顶点显示
+  const [floorPreviewMousePos, setFloorPreviewMousePos] = useState<WallPoint | null>(null); // 地面绘制预览鼠标位置
 
   // 获取当前激活的绘图工具
   const getActiveTool = () => {
@@ -1184,6 +1445,71 @@ const DigitalTwinEditor: React.FC = () => {
   const [sharedPoints, setSharedPoints] = useState<Map<string, SharedPoint>>(new Map());
   const sharedPointsRef = useRef<Map<string, SharedPoint>>(new Map()); // 用于实时访问
 
+
+
+  // 初始化画布偏移量，让原点显示在屏幕中心
+  useEffect(() => {
+    const initializeCanvasOffset = () => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        
+        // 确保画布已经有有效的尺寸
+        if (rect.width > 0 && rect.height > 0) {
+          const centerX = rect.width / 2;
+          const centerY = rect.height / 2;
+          
+          // 设置偏移量，使世界坐标原点(0,0)显示在屏幕中心
+          setOffsetX(centerX);
+          setOffsetY(centerY);
+          
+          console.log('🎯 初始化画布偏移量:', { centerX, centerY, canvasWidth: rect.width, canvasHeight: rect.height });
+        } else {
+          // 如果画布尺寸为0，延迟重试
+          console.log('⏳ 画布尺寸为0，延迟重试...');
+          setTimeout(initializeCanvasOffset, 100);
+        }
+      }
+    };
+
+    // 使用 requestAnimationFrame 确保DOM已经渲染完成
+    requestAnimationFrame(() => {
+      // 再添加一个小延迟确保画布完全渲染
+      setTimeout(initializeCanvasOffset, 50);
+    });
+  }, [viewMode]); // 当视图模式改变时重新计算
+
+  // 组件挂载时的初始化，确保页面刷新后原点在屏幕中心
+  useEffect(() => {
+    const initializeOnMount = () => {
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        
+        // 确保画布已经有有效的尺寸
+        if (rect.width > 0 && rect.height > 0) {
+          const centerX = rect.width / 2;
+          const centerY = rect.height / 2;
+          
+          // 设置偏移量，使世界坐标原点(0,0)显示在屏幕中心
+          setOffsetX(centerX);
+          setOffsetY(centerY);
+          
+          console.log('🚀 组件挂载时初始化画布偏移量:', { centerX, centerY, canvasWidth: rect.width, canvasHeight: rect.height });
+        } else {
+          // 如果画布尺寸为0，延迟重试
+          console.log('⏳ 组件挂载时画布尺寸为0，延迟重试...');
+          setTimeout(initializeOnMount, 100);
+        }
+      }
+    };
+
+    // 延迟执行，确保DOM完全渲染
+    const timer = setTimeout(initializeOnMount, 100);
+    
+    return () => clearTimeout(timer);
+  }, []); // 只在组件挂载时执行一次
+
   // 连线状态管理（参考地图编辑器）
   const [isConnecting, setIsConnecting] = useState(false); // 是否正在连线
   const [continuousConnecting, setContinuousConnecting] = useState(false); // 连续连线模式
@@ -1228,6 +1554,8 @@ const DigitalTwinEditor: React.FC = () => {
   const [lastClickedWall, setLastClickedWall] = useState<string | null>(null);
   // 线段选择状态
   const [selectedSegments, setSelectedSegments] = useState<{wallId: string, segmentIndex: number}[]>([]);
+  // 地面选择状态
+  const [selectedFloorAreas, setSelectedFloorAreas] = useState<string[]>([]);
 
   // 端点相关状态
   const [hoveredEndpoint, setHoveredEndpoint] = useState<{wallId: string, pointIndex: number} | null>(null);
@@ -1666,6 +1994,9 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 完成地面绘制
   const completeFloorDrawing = useCallback(() => {
+    console.log('🎯 completeFloorDrawing被调用，当前点数:', currentFloorPoints.length);
+    console.log('🎯 当前地面点:', currentFloorPoints);
+    
     if (currentFloorPoints.length < 3) {
       message.warning('地面区域至少需要3个点才能完成绘制');
       return;
@@ -1684,13 +2015,18 @@ const DigitalTwinEditor: React.FC = () => {
       opacity: floorStyle.opacity,
       completed: true,
       visible: true,
-      selected: false,
       material: floorStyle.material,
-      texture: floorStyle.texture
+      texture: floorStyle.texture,
+      thickness: 0.1 // 默认地面厚度为0.1米
     };
 
     // 添加到地面区域列表
-    setFloorAreas(prev => [...prev, newFloorArea]);
+    setFloorAreas(prev => {
+        const newAreas = [...prev, newFloorArea];
+      console.log('🎯 地面区域已添加，新的floorAreas:', newAreas);
+      console.log('🎯 新地面区域详情:', newFloorArea);
+      return newAreas;
+    });
 
     // 重置绘制状态
     setCurrentFloorPoints([]);
@@ -1734,7 +2070,7 @@ const DigitalTwinEditor: React.FC = () => {
     if (selectedTool?.type === 'floor') {
       setIsDrawingFloor(true);
       setCurrentFloorPoints([]);
-      message.info('开始绘制地面区域，点击画布添加点，右键或双击完成绘制');
+      message.info('开始绘制地面区域，点击画布添加点，ESC键完成绘制');
     }
   }, [isDrawingWall, isDrawingFloor, finishCurrentWall, cancelFloorDrawing, drawingTools]);
 
@@ -1742,6 +2078,7 @@ const DigitalTwinEditor: React.FC = () => {
   // 使用 ref 来获取最新的状态值，解决闭包问题
   const selectedEndpointRef = useRef(selectedEndpoint);
   const selectedWallsRef = useRef(selectedWalls);
+  const selectedFloorAreasRef = useRef(selectedFloorAreas);
   const wallsRef = useRef(walls);
   const isDrawingWallRef = useRef(isDrawingWall);
   const currentWallRef = useRef(currentWall);
@@ -1760,6 +2097,10 @@ const DigitalTwinEditor: React.FC = () => {
   useEffect(() => {
     selectedWallsRef.current = selectedWalls;
   }, [selectedWalls]);
+  
+  useEffect(() => {
+    selectedFloorAreasRef.current = selectedFloorAreas;
+  }, [selectedFloorAreas]);
   
   useEffect(() => {
     wallsRef.current = walls;
@@ -1782,6 +2123,17 @@ const DigitalTwinEditor: React.FC = () => {
     const handleKeyDownEvent = (e: KeyboardEvent) => {
       
       if (e.key === 'Escape') {
+        // 检查是否正在绘制地面
+        if (isDrawingFloor && currentFloorPoints.length >= 3) {
+          // ESC键完成地面绘制
+          completeFloorDrawing();
+          return;
+        } else if (isDrawingFloor) {
+          // 如果地面点数不足，取消绘制
+          cancelFloorDrawing();
+          return;
+        }
+        
         // ESC键取消所有选择
         setSelectedWalls([]);
         setSelectedSegments([]);
@@ -1829,11 +2181,15 @@ const DigitalTwinEditor: React.FC = () => {
           return;
         }
         
-        // 删除选中的墙体或CNC机台
+        // 删除选中的墙体、地面或CNC机台
         if (selectedWallsRef.current.length > 0) {
           setWalls(prev => prev.filter(wall => !selectedWallsRef.current.includes(wall.id)));
           setSelectedWalls([]);
           message.success(`已删除 ${selectedWallsRef.current.length} 个墙体`);
+        } else if (selectedFloorAreasRef.current.length > 0) {
+          setFloorAreas(prev => prev.filter(floor => !selectedFloorAreasRef.current.includes(floor.id)));
+          setSelectedFloorAreas([]);
+          message.success(`已删除 ${selectedFloorAreasRef.current.length} 个地面区域`);
         } else if (selectedCNCMachinesRef.current.length > 0) {
           console.log('🗑️ [DELETE-REF] 尝试删除CNC机台 (通过Ref)');
           console.log('🗑️ [DELETE-REF] 选中的机台ID:', selectedCNCMachinesRef.current);
@@ -2035,7 +2391,14 @@ const DigitalTwinEditor: React.FC = () => {
       document.removeEventListener('keydown', handleKeyDownEvent);
       document.removeEventListener('keyup', handleKeyUpEvent);
     };
-  }, [isSpacePressed, setCanvasOperationMode]); // 添加依赖项
+  }, [
+    isSpacePressed, 
+    setCanvasOperationMode,
+    isDrawingFloor,
+    currentFloorPoints,
+    completeFloorDrawing,
+    cancelFloorDrawing
+  ]); // 添加地面绘制相关依赖项
 
 
 
@@ -2069,6 +2432,8 @@ const DigitalTwinEditor: React.FC = () => {
     const currentPoint = sharedPointsRef.current?.get(pointId);
     
     if (currentPoint) {
+      console.log(`🔄 开始更新共享端点: ${pointId}, 新位置: (${x}, ${y})`);
+      
       // 先更新共享端点位置
       setSharedPoints(prev => {
         const newMap = new Map(prev);
@@ -2078,11 +2443,14 @@ const DigitalTwinEditor: React.FC = () => {
       
       // 然后更新所有连接到此共享端点的墙体
       setWalls(prevWalls => {
-        return prevWalls.map(wall => {
+        const updatedWalls = prevWalls.map(wall => {
           const connection = currentPoint.connectedWalls.find(conn => conn.wallId === wall.id);
           if (connection) {
             const newPoints = [...wall.points];
+            const oldPoint = newPoints[connection.pointIndex];
             newPoints[connection.pointIndex] = { x, y };
+            
+            console.log(`📍 更新墙体 ${wall.id} 的端点 ${connection.pointIndex}: (${oldPoint.x}, ${oldPoint.y}) -> (${x}, ${y})`);
             
             // 确保 pointIds 数组与 points 数组保持一致
             const newPointIds = wall.pointIds ? [...wall.pointIds] : new Array(wall.points.length).fill(null);
@@ -2097,7 +2465,19 @@ const DigitalTwinEditor: React.FC = () => {
           }
           return wall;
         });
+        
+        console.log(`✅ 共享端点更新完成，影响了 ${currentPoint.connectedWalls.length} 个墙体`);
+        return updatedWalls;
       });
+      
+      // 强制触发3D重新渲染 - 使用setTimeout确保状态更新完成后再次触发
+      setTimeout(() => {
+        console.log(`🎯 强制触发3D重新渲染 - 端点: ${pointId}`);
+        setWalls(prevWalls => {
+          // 创建新数组引用强制重新渲染，但保持内容不变
+          return [...prevWalls];
+        });
+      }, 10); // 稍微延迟确保状态更新完成
     }
   }, []);
 
@@ -2398,6 +2778,9 @@ const DigitalTwinEditor: React.FC = () => {
           setSelectedCNCMachines([]);
         }
       }
+      
+      // 注释掉地面检测逻辑，让它在handleSelectionStart中处理
+      // 这样可以确保墙体检测优先于地面检测
     }
 
     // 检查是否点击了编辑模式下的控制点或手柄
@@ -2844,13 +3227,7 @@ const DigitalTwinEditor: React.FC = () => {
       const currentIsConnecting = isConnectingRef.current;
       const currentContinuousConnecting = continuousConnectingRef.current;
       
-      console.log('🔍 鼠标移动条件判断:', {
-        activeTool: activeTool?.type,
-        isDrawingWall,
-        isConnecting: currentIsConnecting,
-        continuousConnecting: currentContinuousConnecting,
-        condition: activeTool && activeTool.type === 'wall' && (isDrawingWall || currentIsConnecting || currentContinuousConnecting)
-      });
+
       
       if (activeTool && activeTool.type === 'wall' && (isDrawingWall || currentIsConnecting || currentContinuousConnecting)) {
         const nearby = findNearbyEndpoints(point, walls);
@@ -2859,6 +3236,13 @@ const DigitalTwinEditor: React.FC = () => {
       } else {
         setNearbyEndpoints([]);
       }
+    }
+    
+    // 地面绘制预览 - 当有地面绘制点时显示虚线跟随
+    if (activeTool && activeTool.type === 'floor' && isDrawingFloor && currentFloorPoints.length > 0) {
+      setFloorPreviewMousePos(point);
+    } else {
+      setFloorPreviewMousePos(null);
     }
     
     // 地图编辑器风格的连线预览 - 使用优化的鼠标位置更新
@@ -3339,13 +3723,21 @@ const DigitalTwinEditor: React.FC = () => {
     // 添加点到当前绘制的地面区域
     setCurrentFloorPoints(prev => [...prev, point]);
 
+    // 显示顶点
+    setShowFloorVertices(true);
+
+    // 设置定时器隐藏顶点
+    setTimeout(() => {
+      setShowFloorVertices(false);
+    }, 1500); // 1.5秒后隐藏顶点
+
     // 如果是第一个点，显示提示信息
     if (currentFloorPoints.length === 0) {
       message.info('继续点击添加地面区域的边界点，至少需要3个点');
     } else if (currentFloorPoints.length === 1) {
-      message.info('继续点击添加第三个点，或右键完成绘制');
+      message.info('继续点击添加第三个点，或ESC键完成绘制');
     } else {
-      message.info(`已添加${currentFloorPoints.length + 1}个点，右键完成绘制或继续添加点`);
+      message.info(`已添加${currentFloorPoints.length + 1}个点，ESC键完成绘制或继续添加点`);
     }
   };
 
@@ -3353,19 +3745,14 @@ const DigitalTwinEditor: React.FC = () => {
   const handleContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
     e.preventDefault(); // 阻止默认右键菜单
 
-    const activeTool = getActiveTool();
-    
-    // 如果正在绘制地面，右键完成绘制
-    if (activeTool?.type === 'floor' && isDrawingFloor && currentFloorPoints.length >= 3) {
-      completeFloorDrawing();
-      message.success('地面区域绘制完成');
-    } else if (activeTool?.type === 'floor' && isDrawingFloor && currentFloorPoints.length < 3) {
-      message.warning('至少需要3个点才能完成地面区域绘制');
-    }
+    // 右键菜单功能已移除，地面绘制现在使用ESC键完成
+    // 可以在这里添加其他右键菜单功能
   };
 
   // 选择工具相关函数
   const handleSelectionStart = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    console.log('🎯 handleSelectionStart 被调用！');
+    
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -3373,25 +3760,35 @@ const DigitalTwinEditor: React.FC = () => {
     const y = (e.clientY - rect.top - offsetY) / scale;
     const point = { x, y };
     
-    console.log('点击事件开始:', { x, y, scale, offsetX, offsetY });
+    console.log('🎯 点击事件开始:', { 
+      screenX: e.clientX, 
+      screenY: e.clientY, 
+      rectLeft: rect.left, 
+      rectTop: rect.top,
+      canvasX: e.clientX - rect.left,
+      canvasY: e.clientY - rect.top,
+      worldX: x, 
+      worldY: y, 
+      scale, 
+      offsetX, 
+      offsetY 
+    });
 
     // 获取当前激活的工具
     const activeTool = getActiveTool();
     const isSelectTool = activeTool?.type === 'select';
     
-    console.log('当前工具状态:', { activeTool, isSelectTool });
+    console.log('🎯 点击检测:', { x, y, isSelectTool, activeTool: activeTool?.type });
 
     // 检查是否点击了墙体端点 - 端点选择优先级最高
     const endpointHit = checkEndpointClick(point, walls);
-    console.log('端点点击检测结果:', { endpointHit, x, y });
+    console.log('端点检测:', { endpointHit });
     if (endpointHit) {
-      console.log('🎯 端点命中，设置选中状态:', endpointHit);
+      console.log('端点命中:', endpointHit);
       setSelectedEndpoint(endpointHit);
-      // 立即更新 ref，确保键盘事件能立即访问到最新的选中端点
       selectedEndpointRef.current = endpointHit;
-      console.log('🔄 设置selectedEndpoint完成，当前值:', endpointHit, '，ref值:', selectedEndpointRef.current);
       setIsDraggingEndpoint(true);
-      // 清除其他选择状态，但保留端点选择
+      // 清除其他选择状态
       setSelectedWalls([]);
       setSelectedSegments([]);
       setBezierEditMode({
@@ -3400,34 +3797,32 @@ const DigitalTwinEditor: React.FC = () => {
         isDraggingControl: false,
         activeControlPoint: null
       });
-      console.log('✅ 端点选中处理完成，提前返回');
       return;
     }
 
-    // 检查是否点击了线段（不提前返回，让墙体编辑模式优先）
+    // 检查是否点击了线段
     const segmentHit = checkSegmentHit(x, y);
-    console.log('线段点击检测结果:', { segmentHit, x, y });
+    console.log('线段检测:', { segmentHit });
 
     // 检查是否点击了墙体
     const wallHit = checkWallHit(x, y);
-    console.log('墙体点击检测结果:', { wallHit, x, y });
+    console.log('墙体检测:', { wallHit, isSelectTool });
     
     // 处理墙体点击 - 只在选择工具模式下响应
     if (wallHit && isSelectTool) {
       const currentTime = Date.now();
-      const timeDiff = currentTime - lastClickTime;
       const clickedWall = walls.find(wall => wall.id === wallHit);
       
-      console.log('找到点击的墙体:', { wallHit, clickedWall, isSelectTool });
-      
-      // 检查是否为双击（300ms内点击同一墙体）
-      if (timeDiff < 300 && lastClickedWall === wallHit) {
-        // 双击打开属性面板
-        openPropertiesPanel(wallHit);
-        setLastClickTime(0);
-        setLastClickedWall(null);
-        return;
-      }
+      console.log('墙体点击处理:', { 
+        wallHit, 
+        clickedWall: clickedWall ? {
+          id: clickedWall.id,
+          type: clickedWall.type,
+          points: clickedWall.points,
+          selected: clickedWall.selected
+        } : null, 
+        isSelectTool 
+      });
       
       // 单击线段的选择逻辑 - 参考地图管理的实现
       if (clickedWall && clickedWall.completed) {
@@ -3435,64 +3830,68 @@ const DigitalTwinEditor: React.FC = () => {
           wallId: wallHit,
           wallType: clickedWall.type,
           currentBezierEditMode: bezierEditMode,
-          isSelectTool
+          isSelectTool,
+          isDoubleClick: currentTime - lastClickTime < 300 && lastClickedWall === wallHit
         });
         
-        // 检查是否已经在编辑这条线段
-        if (bezierEditMode.isEditing && bezierEditMode.wallId === wallHit) {
-          // 如果已经在编辑，则退出编辑模式
-          console.log('退出贝塞尔编辑模式');
-          setBezierEditMode({
-            isEditing: false,
-            wallId: null,
-            isDraggingControl: false,
-            activeControlPoint: null
-          });
-          // 清除选择状态
-          setSelectedWalls([]);
-          message.info('已退出线段编辑模式');
+        // 检查是否为双击
+        const isDoubleClick = currentTime - lastClickTime < 300 && lastClickedWall === wallHit;
+        
+        if (isDoubleClick) {
+          // 双击打开属性面板
+          console.log('双击打开属性面板:', wallHit);
+          openPropertiesPanel(wallHit);
+          setLastClickTime(0);
+          setLastClickedWall(null);
+          // 清空地面选择状态
+          setSelectedFloorAreas([]);
+          return;
         } else {
-          // 单击进入编辑模式 - 实现单选逻辑
-          console.log('进入贝塞尔编辑模式:', wallHit);
-          setBezierEditMode({
-            isEditing: true,
-            wallId: wallHit,
-            isDraggingControl: false,
-            activeControlPoint: null
-          });
+          // 单击选择墙体逻辑
+          console.log('单击选择墙体:', wallHit);
           
-          // 单选逻辑：只选择当前点击的墙体，清除其他所有选择状态
-          setSelectedWalls([wallHit]);
-          setSelectedSegments([]);
-          setSelectedEndpoint(null);
+          // 如果当前在编辑模式且点击的是其他墙体，退出编辑模式
+          if (bezierEditMode.isEditing && bezierEditMode.wallId !== wallHit) {
+            setBezierEditMode({
+              isEditing: false,
+              wallId: null,
+              isDraggingControl: false,
+              activeControlPoint: null
+            });
+            console.log('退出贝塞尔编辑模式');
+          }
           
-          // 调试日志
-          console.log('设置编辑模式:', {
-            wallId: wallHit,
-            wallType: clickedWall.type,
-            pointsLength: clickedWall.points ? clickedWall.points.length : 0,
-            points: clickedWall.points,
-            bezierEditMode: {
-              isEditing: true,
-              wallId: wallHit
+          // 实现单选逻辑：只选择当前点击的墙体
+          setSelectedWalls(prev => {
+            const isAlreadySelected = prev.includes(wallHit);
+            if (isAlreadySelected) {
+              // 如果已选中，取消选择
+              console.log('取消选择墙体:', wallHit);
+              return [];
+            } else {
+              // 单选：只选择当前点击的墙体
+              console.log('选择墙体:', wallHit);
+              return [wallHit];
             }
           });
           
-          if (clickedWall.type === 'bezier') {
-            message.info('进入贝塞尔曲线编辑模式，拖拽控制点调整曲线形状');
-          } else {
-            message.info('进入直线编辑模式，拖拽中点调整线段弧度');
-          }
+          // 清除其他选择状态（包括地面选择）
+          setSelectedSegments([]);
+          setSelectedEndpoint(null);
+          setSelectedFloorAreas([]);
+          
+          // 记录点击时间和墙体ID用于双击检测
+          setLastClickTime(currentTime);
+          setLastClickedWall(wallHit);
+          return;
         }
-        
-        setLastClickTime(0);
-        setLastClickedWall(null);
-        return;
       }
       
       // 记录点击时间和墙体ID
       setLastClickTime(currentTime);
       setLastClickedWall(wallHit);
+      // 清空地面选择状态
+      setSelectedFloorAreas([]);
       return;
     }
 
@@ -3516,6 +3915,52 @@ const DigitalTwinEditor: React.FC = () => {
       
       // 清空其他选择状态
       setSelectedWalls([]);
+      setSelectedFloorAreas([]);
+      setBezierEditMode({
+        isEditing: false,
+        wallId: null,
+        isDraggingControl: false,
+        activeControlPoint: null
+      });
+      return;
+    }
+
+    // 检查地面点击
+    const floorHit = checkFloorHit(x, y);
+    console.log('🔍 地面检测结果:', {
+      floorHit: floorHit,
+      点击坐标: { x, y },
+      地面数量: floorAreas.length,
+      地面ID: floorHit || '无',
+      isSelectTool: isSelectTool,
+      地面检测条件: floorHit && isSelectTool
+    });
+    
+    if (floorHit && isSelectTool) {
+      const hitFloor = floorAreas.find(floor => floor.id === floorHit);
+      console.log('✅ 进入地面点击处理逻辑:', {
+        floorHit: floorHit,
+        地面名称: hitFloor?.name || '未知',
+        地面坐标数量: hitFloor?.points?.length || 0,
+        isSelectTool: isSelectTool
+      });
+      // 单选地面逻辑
+      setSelectedFloorAreas(prev => {
+        const existingIndex = prev.indexOf(floorHit);
+        
+        if (existingIndex >= 0) {
+          // 如果点击的是已选中的地面，取消选择
+          return [];
+        } else {
+          // 单选：只选择当前点击的地面
+          return [floorHit];
+        }
+      });
+      
+      // 清空其他选择状态
+      setSelectedWalls([]);
+      setSelectedSegments([]);
+      setSelectedEndpoint(null);
       setBezierEditMode({
         isEditing: false,
         wallId: null,
@@ -3529,6 +3974,7 @@ const DigitalTwinEditor: React.FC = () => {
     setSelectedWalls([]);
     setSelectedSegments([]);
     setSelectedEndpoint(null);
+    setSelectedFloorAreas([]);
     setBezierEditMode({
       isEditing: false,
       wallId: null,
@@ -3546,13 +3992,32 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 检查墙体点击
   const checkWallHit = (x: number, y: number): string | null => {
-    const hitThreshold = 10 / scale; // 墙体点击阈值
+    const hitThreshold = 15 / scale; // 墙体点击阈值，增加阈值使墙体更容易被选中
     const clickPoint = { x, y };
     
-    console.log('checkWallHit 开始检测:', { x, y, hitThreshold, wallsCount: walls.length });
+    console.log('🔍 checkWallHit 开始检测:', { 
+      clickX: x, 
+      clickY: y, 
+      hitThreshold, 
+      scale,
+      thresholdInPixels: 10,
+      wallsCount: walls.length 
+    });
     
     for (const wall of walls) {
-      console.log('检查墙体:', { wallId: wall.id, type: wall.type, pointsLength: wall.points.length });
+      console.log('🔎 检查墙体:', { 
+        wallId: wall.id, 
+        type: wall.type, 
+        pointsLength: wall.points.length,
+        completed: wall.completed,
+        points: wall.points
+      });
+      
+      // 只检查已完成的墙体
+      if (!wall.completed) {
+        console.log('⏭️ 跳过未完成的墙体:', wall.id);
+        continue;
+      }
       
       if (wall.type === 'line' && wall.points.length >= 2) {
         for (let i = 0; i < wall.points.length - 1; i++) {
@@ -3561,9 +4026,18 @@ const DigitalTwinEditor: React.FC = () => {
           
           // 计算点到线段的距离
           const distance = pointToLineDistance(x, y, p1.x, p1.y, p2.x, p2.y);
-          console.log('直线墙体距离检测:', { wallId: wall.id, distance, hitThreshold });
+          console.log('📏 直线墙体距离检测:', { 
+            wallId: wall.id, 
+            segmentIndex: i,
+            p1: { x: p1.x, y: p1.y },
+            p2: { x: p2.x, y: p2.y },
+            clickPoint: { x, y },
+            distance, 
+            hitThreshold,
+            isHit: distance <= hitThreshold
+          });
           if (distance <= hitThreshold) {
-            console.log('直线墙体命中:', wall.id);
+            console.log('✅ 直线墙体命中:', wall.id);
             return wall.id;
           }
         }
@@ -3584,7 +4058,7 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 检查线段点击 - 返回具体的线段信息（只处理直线墙体）
   const checkSegmentHit = (x: number, y: number): {wallId: string, segmentIndex: number} | null => {
-    const hitThreshold = 10 / scale; // 线段点击阈值
+    const hitThreshold = 15 / scale; // 线段点击阈值，与墙体检测阈值保持一致
     
     for (const wall of walls) {
       // 只处理直线墙体，贝塞尔曲线由 checkWallHit 函数专门处理
@@ -3601,6 +4075,35 @@ const DigitalTwinEditor: React.FC = () => {
         }
       }
       // 移除贝塞尔曲线检测逻辑，让 checkWallHit 函数专门处理贝塞尔曲线
+    }
+    return null;
+  };
+
+  // 检查地面点击 - 使用射线投射算法判断点是否在多边形内
+  const checkFloorHit = (x: number, y: number): string | null => {
+    for (const floor of floorAreas) {
+      if (!floor.visible || !floor.completed || floor.points.length < 3) {
+        continue;
+      }
+      
+      // 使用射线投射算法判断点是否在多边形内
+      let inside = false;
+      const points = floor.points;
+      
+      for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const xi = points[i].x;
+        const yi = points[i].y;
+        const xj = points[j].x;
+        const yj = points[j].y;
+        
+        if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+          inside = !inside;
+        }
+      }
+      
+      if (inside) {
+        return floor.id;
+      }
     }
     return null;
   };
@@ -3720,6 +4223,33 @@ const DigitalTwinEditor: React.FC = () => {
     
     message.success('墙体属性更新成功');
     closePropertiesPanel();
+  };
+
+  // 实时更新地面属性
+  const updateFloorPropertiesRealtime = (newProps: Partial<typeof selectedFloor3DProps>) => {
+    if (floorAreas.length > 0) {
+      setFloorAreas(prevFloors => 
+        prevFloors.map(floor => ({
+          ...floor,
+          ...newProps
+        }))
+      );
+    }
+  };
+
+
+
+  // 重置地面属性
+  const resetFloorProperties = () => {
+    const resetProps = {
+      thickness: 0.2,
+      color: '#8B4513',
+      opacity: 0.8
+    };
+    setSelectedFloor3DProps(resetProps);
+    // 实时更新地面属性
+    updateFloorPropertiesRealtime(resetProps);
+    message.info('地面属性已重置');
   };
 
   // 打开CNC机台属性面板
@@ -4360,11 +4890,179 @@ const DigitalTwinEditor: React.FC = () => {
          ctx.lineTo(endX, y);
          ctx.stroke();
        }
+
+      // 绘制世界坐标原点标记
+      const originSize = 20 / scale; // 原点标记大小，根据缩放调整
+      const axisLength = 40 / scale; // 坐标轴长度
+      
+      // 绘制坐标轴
+      ctx.lineWidth = 3 / scale;
+      
+      // X轴 (红色)
+      ctx.strokeStyle = '#ff0000';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(axisLength, 0);
+      ctx.stroke();
+      
+      // Y轴 (绿色)
+      ctx.strokeStyle = '#00ff00';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, axisLength);
+      ctx.stroke();
+      
+      // 绘制原点圆圈
+      ctx.strokeStyle = '#000000';
+      ctx.fillStyle = '#ffffff';
+      ctx.lineWidth = 2 / scale;
+      ctx.beginPath();
+      ctx.arc(0, 0, originSize / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      
+      // 绘制原点标签
+      ctx.fillStyle = '#000000';
+      ctx.font = `${12 / scale}px Arial`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('(0,0)', originSize / 2 + 5 / scale, -5 / scale);
        
        ctx.restore();
      }
 
-    // 绘制已完成的墙体（仅在顶视图模式下显示）
+    // 绘制已完成的地面（仅在顶视图模式下显示）- 先绘制地面，确保墙体在地面之上
+    if (viewMode === 'top' && floorAreas.length > 0) {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+
+      floorAreas.forEach((floor: FloorArea) => {
+        if (floor.points.length >= 3) {
+          const isSelected = floor.selected || selectedFloorAreas.includes(floor.id);
+          
+          // 绘制地面填充
+          ctx.fillStyle = isSelected 
+            ? 'rgba(24, 144, 255, 0.3)' // 选中时蓝色半透明填充
+            : 'rgba(200, 200, 200, 0.3)'; // 默认浅灰色半透明填充
+          ctx.beginPath();
+          ctx.moveTo(floor.points[0].x, floor.points[0].y);
+          for (let i = 1; i < floor.points.length; i++) {
+            ctx.lineTo(floor.points[i].x, floor.points[i].y);
+          }
+          ctx.closePath();
+          ctx.fill();
+
+          // 绘制地面边框
+          ctx.strokeStyle = isSelected 
+            ? '#1890ff' // 选中时蓝色边框
+            : '#666666'; // 默认深灰色边框
+          ctx.lineWidth = isSelected 
+            ? 3 / scale // 选中时更粗的边框
+            : 2 / scale; // 默认边框宽度
+          ctx.setLineDash([]);
+          ctx.stroke();
+
+          // 绘制地面顶点
+          floor.points.forEach((point: WallPoint) => {
+            ctx.fillStyle = isSelected 
+              ? '#1890ff' // 选中时蓝色顶点
+              : '#666666'; // 默认深灰色顶点
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, isSelected ? 4 / scale : 3 / scale, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+      });
+
+      ctx.restore();
+    }
+
+    // 绘制正在绘制的地面
+    if (currentFloorPoints.length > 0) {
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+
+      // 绘制预览填充（如果有3个或以上的点）
+      if (currentFloorPoints.length >= 3) {
+        ctx.fillStyle = 'rgba(24, 144, 255, 0.1)'; // 蓝色半透明填充
+        ctx.beginPath();
+        ctx.moveTo(currentFloorPoints[0].x, currentFloorPoints[0].y);
+        for (let i = 1; i < currentFloorPoints.length; i++) {
+          ctx.lineTo(currentFloorPoints[i].x, currentFloorPoints[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // 绘制地面区域预览填充（当有2个或更多点时）
+      if (floorPreviewMousePos && currentFloorPoints.length >= 2) {
+        // 创建包含鼠标位置的预览点数组
+        const previewPoints = [...currentFloorPoints, floorPreviewMousePos];
+        
+        // 绘制预览区域填充
+        ctx.fillStyle = 'rgba(24, 144, 255, 0.15)'; // 更浅的蓝色半透明填充
+        ctx.beginPath();
+        ctx.moveTo(previewPoints[0].x, previewPoints[0].y);
+        for (let i = 1; i < previewPoints.length; i++) {
+          ctx.lineTo(previewPoints[i].x, previewPoints[i].y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        
+        // 绘制预览区域边框
+        ctx.strokeStyle = 'rgba(24, 144, 255, 0.4)'; // 半透明蓝色边框
+        ctx.lineWidth = 1 / scale;
+        ctx.setLineDash([4 / scale, 4 / scale]); // 虚线边框
+        ctx.stroke();
+        ctx.setLineDash([]); // 重置为实线
+      }
+
+      // 绘制地面预览虚线（从最后一个点到鼠标位置）
+      if (floorPreviewMousePos && currentFloorPoints.length > 0) {
+        const lastPoint = currentFloorPoints[currentFloorPoints.length - 1];
+        
+        ctx.strokeStyle = '#1890ff'; // 蓝色虚线
+        ctx.lineWidth = 2 / scale;
+        ctx.setLineDash([8 / scale, 4 / scale]); // 虚线样式
+        
+        ctx.beginPath();
+        ctx.moveTo(lastPoint.x, lastPoint.y);
+        ctx.lineTo(floorPreviewMousePos.x, floorPreviewMousePos.y);
+        ctx.stroke();
+        
+        // 如果有3个或以上的点，还要绘制从鼠标位置到起点的虚线
+        if (currentFloorPoints.length >= 3) {
+          const firstPoint = currentFloorPoints[0];
+          ctx.beginPath();
+          ctx.moveTo(floorPreviewMousePos.x, floorPreviewMousePos.y);
+          ctx.lineTo(firstPoint.x, firstPoint.y);
+          ctx.stroke();
+        }
+        
+        ctx.setLineDash([]); // 重置为实线
+      }
+
+      // 绘制已放置的地面点
+      currentFloorPoints.forEach((point: WallPoint, index: number) => {
+        ctx.fillStyle = '#1890ff'; // 蓝色点
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 4 / scale, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // 为起点添加特殊标记
+        if (index === 0) {
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2 / scale;
+          ctx.stroke();
+        }
+      });
+
+      ctx.restore();
+    }
+
+    // 绘制已完成的墙体（仅在顶视图模式下显示）- 墙体在地面之上
     if (viewMode === 'top') {
       ctx.save();
       ctx.translate(offsetX, offsetY);
@@ -5036,103 +5734,6 @@ const DigitalTwinEditor: React.FC = () => {
       ctx.restore();
     }
 
-    // 绘制已完成的地面（仅在顶视图模式下显示）
-    if (viewMode === 'top' && floorAreas.length > 0) {
-      ctx.save();
-      ctx.translate(offsetX, offsetY);
-      ctx.scale(scale, scale);
-
-      floorAreas.forEach((floor: FloorArea) => {
-        if (floor.points.length >= 3) {
-          // 绘制地面填充
-          ctx.fillStyle = 'rgba(200, 200, 200, 0.3)'; // 浅灰色半透明填充
-          ctx.beginPath();
-          ctx.moveTo(floor.points[0].x, floor.points[0].y);
-          for (let i = 1; i < floor.points.length; i++) {
-            ctx.lineTo(floor.points[i].x, floor.points[i].y);
-          }
-          ctx.closePath();
-          ctx.fill();
-
-          // 绘制地面边框
-          ctx.strokeStyle = '#666666'; // 深灰色边框
-          ctx.lineWidth = 2 / scale;
-          ctx.setLineDash([]);
-          ctx.stroke();
-
-          // 绘制地面顶点
-          floor.points.forEach((point: WallPoint) => {
-            ctx.fillStyle = '#666666';
-            ctx.beginPath();
-            ctx.arc(point.x, point.y, 3 / scale, 0, Math.PI * 2);
-            ctx.fill();
-          });
-        }
-      });
-
-      ctx.restore();
-    }
-
-    // 绘制正在绘制的地面
-    if (currentFloorPoints.length > 0) {
-      ctx.save();
-      ctx.translate(offsetX, offsetY);
-      ctx.scale(scale, scale);
-
-      // 绘制已有的点和连线
-      if (currentFloorPoints.length >= 2) {
-        ctx.strokeStyle = '#1890ff'; // 蓝色预览线
-        ctx.lineWidth = 2 / scale;
-        ctx.setLineDash([5 / scale, 5 / scale]); // 虚线
-        ctx.beginPath();
-        ctx.moveTo(currentFloorPoints[0].x, currentFloorPoints[0].y);
-        for (let i = 1; i < currentFloorPoints.length; i++) {
-          ctx.lineTo(currentFloorPoints[i].x, currentFloorPoints[i].y);
-        }
-        ctx.stroke();
-      }
-
-      // 绘制预览填充（如果有3个或以上的点）
-      if (currentFloorPoints.length >= 3) {
-        ctx.fillStyle = 'rgba(24, 144, 255, 0.1)'; // 蓝色半透明填充
-        ctx.beginPath();
-        ctx.moveTo(currentFloorPoints[0].x, currentFloorPoints[0].y);
-        for (let i = 1; i < currentFloorPoints.length; i++) {
-          ctx.lineTo(currentFloorPoints[i].x, currentFloorPoints[i].y);
-        }
-        ctx.closePath();
-        ctx.fill();
-      }
-
-      // 绘制当前地面的顶点
-      currentFloorPoints.forEach((point: WallPoint, index: number) => {
-        ctx.fillStyle = index === 0 ? '#52c41a' : '#1890ff'; // 起点绿色，其他点蓝色
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, 4 / scale, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // 添加白色边框
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2 / scale;
-        ctx.setLineDash([]);
-        ctx.stroke();
-      });
-
-      // 绘制从最后一个点到鼠标位置的预览线
-      if (mousePosition && currentFloorPoints.length >= 1) {
-        const lastPoint = currentFloorPoints[currentFloorPoints.length - 1];
-        ctx.strokeStyle = 'rgba(24, 144, 255, 0.5)'; // 半透明蓝色
-        ctx.lineWidth = 1 / scale;
-        ctx.setLineDash([3 / scale, 3 / scale]);
-        ctx.beginPath();
-        ctx.moveTo(lastPoint.x, lastPoint.y);
-        ctx.lineTo(mousePosition.x, mousePosition.y);
-        ctx.stroke();
-      }
-
-      ctx.restore();
-    }
-
     // 绘制CNC机台（仅在顶视图模式下显示）
     if (viewMode === 'top') {
       ctx.save();
@@ -5250,10 +5851,9 @@ const DigitalTwinEditor: React.FC = () => {
         ctx.lineWidth = 2 / scale;
         
         // 绘制矩形（支持不同的宽高）
-        // 修正坐标映射：与透视图保持一致的坐标转换
-        // 透视图转换：x3D = (machine.x - 400) / 10, z3D = -(machine.y - 300) / 10
-        // 反向转换：canvasX = x3D * 10 + 400, canvasY = -z3D * 10 + 300
-        // 但为了保持顶视图的直观性，我们使用原始坐标但确保比例一致
+        // 修正坐标映射：与3D视图保持一致的坐标转换
+        // 3D转换：x3D = machine.x / 100 * 5, z3D = machine.y / 100 * 5
+        // 2D和3D现在使用统一的坐标系统，移除Z轴镜像
         const canvasX = machine.x;
         const canvasY = machine.y;
         
@@ -5486,12 +6086,12 @@ const DigitalTwinEditor: React.FC = () => {
       ctx.restore();
     }
 
-  }, [scale, offsetX, offsetY, walls, currentWall, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, cncMachines, selectedCNCMachines, viewMode]);
+  }, [scale, offsetX, offsetY, walls, currentWall, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, cncMachines, selectedCNCMachines, viewMode, floorAreas, selectedFloorAreas, currentFloorPoints, isDrawingFloor, showFloorVertices, floorPreviewMousePos]);
 
   // 画布初始化和重绘
   useEffect(() => {
     drawCanvas();
-  }, [scale, offsetX, offsetY, walls, currentWall, mousePosition, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, drawCanvas, viewMode, cncMachines, selectedCNCMachines, forceRedraw]);
+  }, [scale, offsetX, offsetY, walls, currentWall, mousePosition, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, drawCanvas, viewMode, cncMachines, selectedCNCMachines, forceRedraw, floorAreas, selectedFloorAreas, currentFloorPoints, isDrawingFloor, showFloorVertices, floorPreviewMousePos]);
 
   // 监听窗口大小变化
   useEffect(() => {
@@ -5554,7 +6154,9 @@ const DigitalTwinEditor: React.FC = () => {
         <ThreeDEditor
           walls={walls}
           cncMachines={cncMachines}
+          floorAreas={floorAreas}
           selectedWall3DProps={selectedWall3DProps}
+          selectedFloor3DProps={selectedFloor3DProps}
           onWallSelect={handleWallSelect}
           onCNCMachineSelect={(cncId) => {
             setCncMachines(prev => prev.map(cnc => ({
@@ -5807,6 +6409,200 @@ const DigitalTwinEditor: React.FC = () => {
               onClick={resetWall3DSettings}
             >
               重置
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 透视图模式下的悬浮地面属性设置面板 */}
+      {viewMode === 'perspective' && (
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          left: '20px',
+          width: '280px',
+          background: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: '12px',
+          padding: '20px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          zIndex: 15,
+          maxHeight: 'calc(100vh - 40px)',
+          overflowY: 'auto'
+        }}>
+          <div style={{
+            fontSize: '16px',
+            fontWeight: 600,
+            marginBottom: '20px',
+            color: '#1f2937',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <BorderInnerOutlined style={{ color: '#1890ff' }} />
+            地面属性设置
+            <span style={{
+              fontSize: '12px',
+              background: '#1890ff',
+              color: 'white',
+              padding: '2px 6px',
+              borderRadius: '10px',
+              fontWeight: 500
+            }}>
+              {floorAreas.length}
+            </span>
+          </div>
+
+          {/* 地面尺寸设置 */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ 
+              fontSize: '14px', 
+              fontWeight: 500, 
+              marginBottom: '12px',
+              color: '#374151'
+            }}>
+              尺寸设置
+            </div>
+            
+            {/* 厚度滑块 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>厚度 (Z轴)</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {selectedFloor3DProps.thickness.toFixed(2)}m
+                </span>
+              </div>
+              <Slider
+                 min={0.01}
+                 max={0.5}
+                 step={0.01}
+                 value={selectedFloor3DProps.thickness}
+                 onChange={(value) => {
+                   const newThickness = value || 0.01;
+                   setSelectedFloor3DProps(prev => ({ ...prev, thickness: newThickness }));
+                   updateFloorPropertiesRealtime({ thickness: newThickness });
+                 }}
+                 tooltip={{ formatter: (value) => `${value}m` }}
+               />
+            </div>
+          </div>
+
+          {/* 外观设置 */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ 
+              fontSize: '14px', 
+              fontWeight: 500, 
+              marginBottom: '12px',
+              color: '#374151'
+            }}>
+              外观设置
+            </div>
+            
+            {/* 颜色选择器 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                fontSize: '13px', 
+                color: '#6b7280',
+                marginBottom: '8px'
+              }}>
+                地面颜色
+              </div>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                {['#f0f0f0', '#e5e7eb', '#d1d5db', '#9ca3af', '#6b7280', '#374151', '#1f2937', '#ffffff'].map(color => (
+                  <div
+                    key={color}
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      backgroundColor: color,
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      border: selectedFloor3DProps.color === color ? '3px solid #1890ff' : '2px solid #e5e7eb',
+                      boxSizing: 'border-box',
+                      transition: 'all 0.2s ease',
+                      boxShadow: color === '#ffffff' ? 'inset 0 0 0 1px #e5e7eb' : 'none'
+                    }}
+                    onClick={() => {
+                      setSelectedFloor3DProps(prev => ({ ...prev, color }));
+                      updateFloorPropertiesRealtime({ color });
+                    }}
+                  />
+                ))}
+              </div>
+              <ColorPicker
+                value={selectedFloor3DProps.color}
+                onChange={(color) => {
+                  const newColor = color.toHexString();
+                  setSelectedFloor3DProps(prev => ({ ...prev, color: newColor }));
+                  updateFloorPropertiesRealtime({ color: newColor });
+                }}
+                showText
+                size="small"
+                style={{ width: '100%' }}
+              />
+            </div>
+
+            {/* 透明度滑块 */}
+            <div>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>透明度</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {Math.round(selectedFloor3DProps.opacity * 100)}%
+                </span>
+              </div>
+              <Slider
+                 min={0.1}
+                 max={1}
+                 step={0.05}
+                 value={selectedFloor3DProps.opacity}
+                 onChange={(value) => {
+                   const newOpacity = value || 0.1;
+                   setSelectedFloor3DProps(prev => ({ ...prev, opacity: newOpacity }));
+                   updateFloorPropertiesRealtime({ opacity: newOpacity });
+                 }}
+                 tooltip={{ formatter: (value) => `${Math.round((value || 0) * 100)}%` }}
+               />
+            </div>
+          </div>
+
+          {/* 操作按钮 */}
+          <div style={{ 
+            display: 'flex', 
+            gap: '8px',
+            borderTop: '1px solid #e5e7eb',
+            paddingTop: '16px'
+          }}>
+            <Button 
+              size="small"
+              style={{ width: '100%' }}
+              onClick={resetFloorProperties}
+            >
+              重置属性
             </Button>
           </div>
         </div>

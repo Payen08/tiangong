@@ -45,10 +45,35 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
   const spanningElevatorRef = useRef<THREE.Mesh | null>(null);
   const elevatorEdgesRef = useRef<THREE.LineSegments | null>(null);
   const startPathMovementRef = useRef<(() => void) | null>(null);
+  const textureCache = useRef<Map<string, THREE.Texture>>(new Map());
   
   // 初始相机位置 - 适合全部楼层视图
   const initialCameraPosition = { x: 0, y: 67.5, z: 100 }; // 调整为全部楼层视图的相机位置
   const initialCameraTarget = { x: 0, y: 27.5, z: 0 }; // 目标点设为二楼中心位置
+
+  // 安全的纹理创建函数
+  const createSafeTexture = (canvas: HTMLCanvasElement, cacheKey: string): THREE.Texture => {
+    // 检查缓存
+    if (textureCache.current.has(cacheKey)) {
+      const cachedTexture = textureCache.current.get(cacheKey)!;
+      if (cachedTexture && cachedTexture.image) {
+        return cachedTexture;
+      }
+    }
+    
+    // 创建新纹理
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    
+    // 缓存纹理
+    textureCache.current.set(cacheKey, texture);
+    
+    return texture;
+  };
 
   useEffect(() => {
     if (isDev) console.log('[ThreeScene] useEffect 开始执行');
@@ -104,7 +129,7 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
       context.textAlign = 'center';
       context.fillText(text, 32, 40);
       
-      const texture = new THREE.CanvasTexture(canvas);
+      const texture = createSafeTexture(canvas, `axis-label-${text}`);
       const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.position.copy(position);
@@ -275,7 +300,7 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
         context.fillText('CRM', canvas.width / 2, canvas.height / 2);
         
         // 创建纹理和Sprite
-        const texture = new THREE.CanvasTexture(canvas);
+        const texture = createSafeTexture(canvas, 'robot-label-CRM');
         texture.needsUpdate = true;
         const spriteMaterial = new THREE.SpriteMaterial({
           map: texture,
@@ -377,8 +402,8 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
         // 彻底解决间距问题：使用超大缩放比例确保机台间距足够大
         // 转换为3D坐标系：X轴向右，Z轴向前（画布Y轴对应3D的-Z轴）
         // 使用1:100缩放比例，确保80像素间距转换为0.8米间距，但通过额外间距倍数放大
-        const x3D = (machine.x - 400) / 100 * 5; // 额外乘以5倍，增大间距
-        const z3D = -(machine.y - 300) / 100 * 5; // 额外乘以5倍，增大间距 
+        const x3D = machine.x / 100 * 5; // 移除固定偏移，与2D视图动态坐标系统一致
+        const z3D = machine.y / 100 * 5; // 移除Z轴镜像，与地面和墙体保持一致 
         
         // 大幅减小机台尺寸，确保绝对不重叠
         // 使用1米3D尺寸，配合4米间距（80像素*5倍=4米），确保足够的空隙
@@ -1057,7 +1082,7 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
 
     // 为每个楼层创建地面
     const createFloorPlane = (y: number, floorGroup: THREE.Group) => {
-      const planeGeometry = new THREE.PlaneGeometry(150, 150);
+      const planeGeometry = new THREE.PlaneGeometry(500, 500); // 扩大地面尺寸以容纳更大范围的墙体
       const planeMaterial = new THREE.MeshStandardMaterial({
         color: 0x2a2a3a,
         side: THREE.DoubleSide,
@@ -1144,7 +1169,7 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
       context.textBaseline = 'middle';
       context.fillText(text, 64, 64);
       
-      const texture = new THREE.CanvasTexture(canvas);
+      const texture = createSafeTexture(canvas, `floor-label-${text}`);
       const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
       const sprite = new THREE.Sprite(spriteMaterial);
       sprite.position.copy(position);
@@ -1214,6 +1239,54 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
       if (autoTestTimer) {
         clearTimeout(autoTestTimer);
       }
+      
+      // 清理场景中的所有对象和资源
+      scene.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          // 清理几何体
+          if (object.geometry) {
+            object.geometry.dispose();
+          }
+          // 清理材质
+          if (object.material) {
+            if (Array.isArray(object.material)) {
+              object.material.forEach(material => {
+                if (material.map) material.map.dispose();
+                material.dispose();
+              });
+            } else {
+              if (object.material.map) object.material.map.dispose();
+              object.material.dispose();
+            }
+          }
+        } else if (object instanceof THREE.Line || object instanceof THREE.LineSegments) {
+          // 清理线条几何体和材质
+          if (object.geometry) {
+            object.geometry.dispose();
+          }
+          if (object.material) {
+            object.material.dispose();
+          }
+        } else if (object instanceof THREE.Sprite) {
+          // 清理精灵材质和纹理
+          if (object.material) {
+            if (object.material.map) {
+              object.material.map.dispose();
+            }
+            object.material.dispose();
+          }
+        }
+      });
+      
+      // 清理场景
+      scene.clear();
+      
+      // 清理纹理缓存
+      textureCache.current.forEach((texture) => {
+        texture.dispose();
+      });
+      textureCache.current.clear();
+      
       if (renderer.domElement.parentNode) {
         renderer.domElement.parentNode.removeChild(renderer.domElement);
       }
