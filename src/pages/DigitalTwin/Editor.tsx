@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Button, Select, Space, Typography, Input, InputNumber, List, Card, Divider, Modal, Form, message, Row, Col, Slider, ColorPicker } from 'antd';
+import { Button, Select, Space, Typography, Input, InputNumber, List, Card, Divider, Modal, Form, message, Row, Col, Slider, ColorPicker, Progress } from 'antd';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
 import {
   ReloadOutlined,
   EyeInvisibleOutlined,
@@ -77,6 +79,12 @@ interface CNCMachine {
     y?: number;        // Y轴旋转角度 (度)
     z?: number;        // Z轴旋转角度 (度)
   };
+  // GLB模型相关参数
+  currentModel?: string;    // 当前使用的模型ID ('custom' 表示自定义GLB模型)
+  modelFile?: File | null;  // GLB模型文件对象
+  modelUrl?: string;        // GLB模型文件URL (用于预览)
+  modelFileName?: string;   // GLB模型文件名 (用于显示)
+  modelFileBase64?: string; // GLB模型文件Base64编码 (用于存储)
 }
 
 // 绘图工具类型定义
@@ -195,6 +203,7 @@ interface FloorScene {
 // 3D编辑器组件ref接口
 interface ThreeDEditorRef {
   resetView: () => void;
+  updateCNCMachines: (machines: CNCMachine[]) => void;
 }
 
 // 3D编辑器组件接口
@@ -231,7 +240,7 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
   const textureCache = useRef<Map<string, THREE.CanvasTexture>>(new Map());
   const floorMeshesRef = useRef<THREE.Mesh[]>([]);
 
-  // 暴露重置视图方法
+  // 暴露重置视图方法和更新CNC机台方法
   React.useImperativeHandle(ref, () => ({
     resetView: () => {
       if (cameraRef.current && controlsRef.current) {
@@ -249,6 +258,27 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
       } else {
         console.error('3D相机或控制器引用不存在');
       }
+    },
+    updateCNCMachines: (machines: CNCMachine[]) => {
+      console.log('🔄 [3D-EDITOR] updateCNCMachines 被调用，机台数量:', machines.length);
+      
+      if (!sceneRef.current) {
+        console.warn('⚠️ [3D-EDITOR] 场景引用不存在，无法更新CNC机台');
+        return;
+      }
+      
+      // 清除现有的CNC机台模型
+      cncMeshesRef.current.forEach((mesh) => {
+        sceneRef.current!.remove(mesh);
+      });
+      cncMeshesRef.current.clear();
+      
+      // 重新创建CNC机台模型
+      machines.forEach((cnc) => {
+        createCNCMachine(cnc, sceneRef.current!, cncMeshesRef.current);
+      });
+      
+      console.log('✅ [3D-EDITOR] CNC机台更新完成');
     }
   }), []);
   
@@ -824,18 +854,151 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
     scene: THREE.Scene,
     meshMap: Map<string, THREE.Mesh>
   ) => {
+    console.log('🎯 [模型] 开始创建CNC机台3D模型:', {
+      id: cnc.id,
+      name: cnc.name,
+      currentModel: cnc.currentModel,
+      modelUrl: cnc.modelUrl,
+      modelFileName: cnc.modelFileName,
+      hasModelFile: !!cnc.modelFile
+    });
+
     // 获取3D参数，如果没有则使用默认值
     const width3D = cnc.width3D || 5;
     const depth3D = cnc.depth3D || 5;
     const height3D = cnc.height3D || 5;
     
     // 使用与地面相同的坐标变换逻辑
-    // 地面使用: points[i].x / 100 * 5, points[i].y / 100 * 5
-    // CNC机台也应该使用相同的变换逻辑
     const x3D = cnc.x / 100 * 5; // 世界坐标转米，缩放到3D场景
     const z3D = cnc.y / 100 * 5; // 世界坐标转米，缩放到3D场景
     const y3D = height3D / 2 - 0.01; // Y轴位置（底部与地面对齐，地面在Y=-0.01）
     
+    // 创建组合对象
+    const cncGroup = new THREE.Group();
+    cncGroup.userData = { 
+      cncId: cnc.id, 
+      type: 'cnc',
+      name: cnc.name 
+    };
+    
+    // 检查是否使用自定义GLB模型
+    if (cnc.currentModel === 'custom' && cnc.modelUrl) {
+      console.log('🎯 [模型] 加载自定义GLB模型到主场景:', {
+        modelUrl: cnc.modelUrl,
+        modelFileName: cnc.modelFileName,
+        position: { x: x3D, y: y3D, z: z3D }
+      });
+      
+      const loader = new GLTFLoader();
+      
+      // 配置DRACOLoader以支持DRACO压缩
+      const dracoLoader = new DRACOLoader();
+      dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+      loader.setDRACOLoader(dracoLoader);
+      
+      loader.load(
+        cnc.modelUrl,
+        (gltf) => {
+          const model = gltf.scene;
+          
+          // 设置模型位置
+          model.position.set(x3D, y3D, z3D);
+          
+          // 设置模型缩放（使用CNC机台的缩放参数，如果没有则使用默认值1）
+          const scale = cnc.scale || 1;
+          model.scale.setScalar(scale);
+          
+          // 设置模型旋转（使用CNC机台的旋转参数，如果没有则使用默认值0）
+          model.rotation.set(
+            ((cnc.rotation?.x || 0) * Math.PI) / 180,
+            ((cnc.rotation?.y || 0) * Math.PI) / 180,
+            ((cnc.rotation?.z || 0) * Math.PI) / 180
+          );
+
+          // 遍历模型中的所有网格，设置基本属性
+          model.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              
+              // 设置材质属性
+              if (child.material) {
+                if (Array.isArray(child.material)) {
+                  child.material.forEach((mat) => {
+                    if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshLambertMaterial) {
+                      // 保留原始颜色，只设置透明度
+                      const opacity = cnc.opacity !== undefined ? cnc.opacity : 1;
+                      mat.transparent = opacity < 1;
+                      mat.opacity = opacity;
+                    }
+                  });
+                } else if (child.material instanceof THREE.MeshStandardMaterial || child.material instanceof THREE.MeshLambertMaterial) {
+                  // 保留原始颜色，只设置透明度
+                  const opacity = cnc.opacity !== undefined ? cnc.opacity : 1;
+                  child.material.transparent = opacity < 1;
+                  child.material.opacity = opacity;
+                }
+              }
+            }
+          });
+
+          // 将GLB模型添加到CNC组
+          cncGroup.add(model);
+          
+          console.log('✅ [模型] GLB模型已成功加载并添加到主场景:', {
+            cncId: cnc.id,
+            modelFileName: cnc.modelFileName,
+            modelPosition: model.position,
+            modelScale: model.scale,
+            modelRotation: model.rotation,
+            groupChildren: cncGroup.children.length
+          });
+        },
+        (progress) => {
+          console.log('🎯 [模型] GLB模型加载进度:', {
+            cncId: cnc.id,
+            progress: (progress.loaded / progress.total * 100).toFixed(1) + '%'
+          });
+        },
+        (error) => {
+          console.error('❌ [模型] GLB模型加载失败，使用默认立方体:', {
+            cncId: cnc.id,
+            error: error,
+            modelUrl: cnc.modelUrl,
+            modelFileName: cnc.modelFileName
+          });
+          
+          // 加载失败时创建默认立方体
+          createDefaultCNCModel(cncGroup, width3D, height3D, depth3D, x3D, y3D, z3D, cnc);
+        }
+      );
+    } else {
+      console.log('🎯 [模型] 使用默认立方体模型:', {
+        cncId: cnc.id,
+        currentModel: cnc.currentModel,
+        dimensions: { width3D, height3D, depth3D }
+      });
+      
+      // 使用默认立方体模型
+      createDefaultCNCModel(cncGroup, width3D, height3D, depth3D, x3D, y3D, z3D, cnc);
+    }
+    
+    // 添加到场景和映射
+    scene.add(cncGroup);
+    meshMap.set(cnc.id, cncGroup as any);
+  };
+
+  // 创建默认CNC立方体模型的辅助函数
+  const createDefaultCNCModel = (
+    cncGroup: THREE.Group,
+    width3D: number,
+    height3D: number,
+    depth3D: number,
+    x3D: number,
+    y3D: number,
+    z3D: number,
+    cnc: CNCMachine
+  ) => {
     // 创建主体几何体
     const mainGeometry = new THREE.BoxGeometry(width3D, height3D, depth3D);
     
@@ -860,21 +1023,9 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
     const wireframe = new THREE.LineSegments(edges, lineMaterial);
     wireframe.position.copy(mainMesh.position);
     
-    // 创建组合对象
-    const cncGroup = new THREE.Group();
+    // 添加到CNC组
     cncGroup.add(mainMesh);
     cncGroup.add(wireframe);
-    
-    // 设置用户数据
-    cncGroup.userData = { 
-      cncId: cnc.id, 
-      type: 'cnc',
-      name: cnc.name 
-    };
-    
-    // 添加到场景
-    scene.add(cncGroup);
-    meshMap.set(cnc.id, cncGroup as any);
     
     // 如果选中，添加选中指示器
     if (cnc.selected) {
@@ -890,6 +1041,13 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
       indicator.position.copy(mainMesh.position);
       cncGroup.add(indicator);
     }
+    
+    console.log('✅ [模型] 默认立方体模型创建完成:', {
+      cncId: cnc.id,
+      position: { x: x3D, y: y3D, z: z3D },
+      dimensions: { width3D, height3D, depth3D },
+      groupChildren: cncGroup.children.length
+    });
   };
 
   // 创建地面3D模型
@@ -1614,8 +1772,21 @@ const DigitalTwinEditor: React.FC = () => {
     rotationX: number;
     rotationY: number;
     rotationZ: number;
+    // 模型相关字段
+    currentModel: string;
+    modelFile?: File | null;
+    modelUrl?: string;
+    modelFileName?: string;  // 添加缺失的modelFileName字段
+    modelFileBase64?: string; // GLB模型文件Base64编码 (用于存储)
   } | null>(null);
   const [cncPropertiesForm] = Form.useForm();
+
+  // 模型导入相关状态
+  const [isImportingModel, setIsImportingModel] = useState(false);
+  const [modelImportProgress, setModelImportProgress] = useState(0);
+  const [availablePresetModels] = useState([
+    { id: 'default', name: '默认正方体', url: null }
+  ]);
 
   // 防抖状态更新函数
   const debouncedUpdateCncFormData = useCallback(
@@ -1636,6 +1807,37 @@ const DigitalTwinEditor: React.FC = () => {
 
   // CNC机台相关状态
   const [cncMachines, setCncMachines] = useState<CNCMachine[]>([]);
+  
+  // 添加调试日志监听cncMachines变化
+  useEffect(() => {
+    console.log('🔍 [DEBUG] cncMachines数组状态变化:', {
+      length: cncMachines.length,
+      machines: cncMachines.map(cnc => ({
+        id: cnc.id,
+        name: cnc.name,
+        currentModel: cnc.currentModel,
+        modelUrl: cnc.modelUrl,
+        modelFileName: cnc.modelFileName,
+        hasModelFile: !!cnc.modelFile,
+        position: { x: cnc.x, y: cnc.y }
+      }))
+    });
+    
+    // 特别检查已上传模型的CNC机台
+    const machinesWithCustomModels = cncMachines.filter(cnc => cnc.currentModel === 'custom');
+    if (machinesWithCustomModels.length > 0) {
+      console.log('🎯 [模型] 发现自定义模型的CNC机台:', machinesWithCustomModels.map(cnc => ({
+        id: cnc.id,
+        name: cnc.name,
+        currentModel: cnc.currentModel,
+        modelUrl: cnc.modelUrl,
+        modelFileName: cnc.modelFileName,
+        hasModelFile: !!cnc.modelFile,
+        modelUrlValid: cnc.modelUrl ? cnc.modelUrl.startsWith('blob:') : false
+      })));
+    }
+  }, [cncMachines]);
+  
   // 预留用于CNC拖拽状态管理
   const [_draggedCNCModel, setDraggedCNCModel] = useState<ProductModel | null>(null);
   const [selectedCNCMachines, setSelectedCNCMachines] = useState<string[]>([]);
@@ -1685,12 +1887,27 @@ const DigitalTwinEditor: React.FC = () => {
     console.log('🔍 [USEEFFECT] showCNCPropertiesPanel:', showCNCPropertiesPanel);
     console.log('🔍 [USEEFFECT] cncPropertiesFormData存在:', !!cncPropertiesFormData);
     console.log('🔍 [USEEFFECT] cncPropertiesFormData详细数据:', cncPropertiesFormData);
+    console.log('🔍 [USEEFFECT] 场景状态:', {
+      hasScene: !!cncPreviewSceneRef.current,
+      hasRenderer: !!cncPreviewRendererRef.current
+    });
     
     if (showCNCPropertiesPanel && cncPropertiesFormData) {
-      console.log('✅ [USEEFFECT] 条件满足，即将调用updateCNCPreviewMesh');
-      updateCNCPreviewMesh();
+      // 延迟更新，确保场景初始化完成
+      const timer = setTimeout(() => {
+        // 检查场景是否已初始化
+        if (cncPreviewSceneRef.current && cncPreviewRendererRef.current) {
+          console.log('✅ [USEEFFECT] 场景已初始化，调用updateCNCPreview加载GLB模型');
+          updateCNCPreview(cncPropertiesFormData);
+        } else {
+          console.log('⏳ [USEEFFECT] 场景未初始化，调用updateCNCPreviewMesh创建默认几何体');
+          updateCNCPreviewMesh();
+        }
+      }, 200); // 延迟200ms，确保场景初始化完成
+      
+      return () => clearTimeout(timer);
     } else {
-      console.log('❌ [USEEFFECT] 条件不满足，跳过updateCNCPreviewMesh调用');
+      console.log('❌ [USEEFFECT] 条件不满足，跳过3D预览更新');
       console.log('❌ [USEEFFECT] 原因分析:', {
         showCNCPropertiesPanel,
         cncPropertiesFormDataExists: !!cncPropertiesFormData
@@ -3185,7 +3402,12 @@ const DigitalTwinEditor: React.FC = () => {
           // 3D参数默认值 - 确保与间距比例协调，避免重叠
           width3D: 1,    // 3D宽度（X轴，单位：m），配合4米间距绝对避免重叠
           depth3D: 1,    // 3D深度（Z轴，单位：m），配合4米间距绝对避免重叠
-          height3D: 1    // 3D高度（Y轴，单位：m），配合4米间距绝对避免重叠
+          height3D: 1,   // 3D高度（Y轴，单位：m），配合4米间距绝对避免重叠
+          // GLB模型相关字段初始化
+          currentModel: 'default',  // 默认使用预设模型
+          modelFile: null,          // 初始无自定义模型文件
+          modelUrl: undefined,      // 初始无模型URL
+          modelFileName: undefined  // 初始无模型文件名
         };
         
         // 保存当前状态到撤销栈
@@ -4485,8 +4707,31 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 打开CNC机台属性面板
   const openCNCPropertiesPanel = (cncId: string) => {
+    console.log('🔧 [DEBUG] openCNCPropertiesPanel - 开始打开CNC属性面板, cncId:', cncId);
+    
     const cnc = cncMachines.find(c => c.id === cncId);
+    console.log('🔧 [DEBUG] openCNCPropertiesPanel - 找到的CNC机台数据:', cnc);
+    
     if (cnc) {
+      console.log('🎯 [模型] openCNCPropertiesPanel - CNC机台GLB模型字段:', {
+        currentModel: cnc.currentModel,
+        modelFile: cnc.modelFile,
+        modelUrl: cnc.modelUrl,
+        modelFileName: cnc.modelFileName
+      });
+      
+      // 为自定义GLB模型重新生成有效的URL
+      let modelUrl = cnc.modelUrl;
+      if (cnc.currentModel === 'custom' && cnc.modelFile) {
+        // 释放旧的URL（如果存在）
+        if (cnc.modelUrl && cnc.modelUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(cnc.modelUrl);
+        }
+        // 为模型文件创建新的有效URL
+        modelUrl = URL.createObjectURL(cnc.modelFile);
+        console.log('🔧 [DEBUG] openCNCPropertiesPanel - 为GLB模型重新生成URL:', modelUrl);
+      }
+
       const formData = {
         cncId: cnc.id,
         name: cnc.name || 'CNC机台-001',
@@ -4500,11 +4745,40 @@ const DigitalTwinEditor: React.FC = () => {
         scale: cnc.scale || 1.0,
         rotationX: cnc.rotation?.x || 0,
         rotationY: cnc.rotation?.y || 0,
-        rotationZ: cnc.rotation?.z || 0
+        rotationZ: cnc.rotation?.z || 0,
+        // 模型相关字段 - 使用重新生成的URL
+        currentModel: cnc.currentModel || 'default',
+        modelFile: cnc.modelFile || null,
+        modelUrl: modelUrl,
+        modelFileName: cnc.modelFileName || undefined
       };
+      
+      console.log('🔧 [DEBUG] openCNCPropertiesPanel - 构建的表单数据:', formData);
+      console.log('🎯 [模型] openCNCPropertiesPanel - 表单数据中的GLB模型字段:', {
+        currentModel: formData.currentModel,
+        modelFile: formData.modelFile,
+        modelUrl: formData.modelUrl,
+        modelFileName: formData.modelFileName
+      });
+      
+      // 如果重新生成了URL，同时更新CNC机台数据中的URL，确保数据一致性
+      if (formData.currentModel === 'custom' && cnc.modelFile && formData.modelUrl !== cnc.modelUrl) {
+        const updatedCncMachines = cncMachines.map(machine => 
+          machine.id === cncId 
+            ? { ...machine, modelUrl: formData.modelUrl }
+            : machine
+        );
+        setCncMachines(updatedCncMachines);
+        console.log('🔧 [DEBUG] openCNCPropertiesPanel - 已更新CNC机台数据中的URL');
+      }
+      
       setCncPropertiesFormData(formData);
       cncPropertiesForm.setFieldsValue(formData);
       setShowCNCPropertiesPanel(true);
+      
+      console.log('🔧 [DEBUG] openCNCPropertiesPanel - 属性面板已打开，3D预览将由useEffect处理');
+    } else {
+      console.error('❌ [DEBUG] openCNCPropertiesPanel - 未找到CNC机台, cncId:', cncId);
     }
   };
 
@@ -4543,6 +4817,273 @@ const DigitalTwinEditor: React.FC = () => {
       console.log('🔧 [DEBUG] 延迟重绘画布');
       drawCanvas();
     }, 100);
+  };
+
+  // 处理模型文件导入
+  const handleModelFileImport = async (file: File) => {
+    if (!cncPropertiesFormData) return;
+
+    try {
+      setIsImportingModel(true);
+      setModelImportProgress(0);
+
+      // 模拟文件处理进度
+      const progressInterval = setInterval(() => {
+        setModelImportProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
+
+      // 创建文件URL用于预览
+      const fileUrl = URL.createObjectURL(file);
+      
+      console.log('🎯 [模型] GLB模型导入 - 文件信息:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        url: fileUrl
+      });
+      
+      // 更新表单数据 - 注意：不保存File对象，只保存文件信息
+      const updatedFormData = {
+        ...cncPropertiesFormData,
+        currentModel: 'custom',
+        modelFile: null, // 不保存File对象，避免序列化问题
+        modelUrl: fileUrl,
+        modelFileName: file.name
+      };
+      
+      setCncPropertiesFormData(updatedFormData);
+      
+      // 同步更新表单字段值
+      if (cncPropertiesForm) {
+        cncPropertiesForm.setFieldsValue({
+          currentModel: 'custom',
+          modelFile: null, // 不保存File对象
+          modelUrl: fileUrl,
+          modelFileName: file.name
+        });
+      }
+      
+      console.log('🎯 [模型] GLB模型导入 - 更新后的表单数据:', updatedFormData);
+      
+      // 模拟处理延迟
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setModelImportProgress(100);
+      message.success(`模型文件 "${file.name}" 导入成功！`);
+      
+      // 更新3D预览
+      updateCNCPreview(updatedFormData);
+      
+    } catch (error) {
+      console.error('模型文件导入失败:', error);
+      message.error('模型文件导入失败，请检查文件格式');
+    } finally {
+      setIsImportingModel(false);
+      setTimeout(() => setModelImportProgress(0), 1000);
+    }
+  };
+
+  // 处理预设模型切换
+  const handlePresetModelChange = (presetId: string) => {
+    if (!cncPropertiesFormData) return;
+
+    const preset = availablePresetModels.find(p => p.id === presetId);
+    if (!preset) return;
+
+    const updatedFormData = {
+      ...cncPropertiesFormData,
+      currentModel: presetId,
+      modelFile: null,
+      modelUrl: preset.url || undefined,
+      modelFileName: undefined
+    };
+    
+    setCncPropertiesFormData(updatedFormData);
+    
+    // 同步更新表单字段值
+    if (cncPropertiesForm) {
+      cncPropertiesForm.setFieldsValue({
+        currentModel: presetId,
+        modelFile: null,
+        modelUrl: preset.url || undefined,
+        modelFileName: undefined
+      });
+    }
+    
+    message.success(`已切换到 "${preset.name}" 模型`);
+    
+    // 更新3D预览
+    updateCNCPreview(updatedFormData);
+  };
+
+  // 更新CNC 3D预览
+  const updateCNCPreview = (formData: typeof cncPropertiesFormData) => {
+    console.log('🔄 updateCNCPreview 被调用，参数:', {
+      formData: formData ? {
+        currentModel: formData.currentModel,
+        modelUrl: formData.modelUrl,
+        modelFile: formData.modelFile?.name
+      } : null,
+      hasScene: !!cncPreviewSceneRef.current,
+      hasRenderer: !!cncPreviewRendererRef.current
+    });
+    
+    if (!formData || !cncPreviewSceneRef.current || !cncPreviewRendererRef.current) {
+      console.warn('⚠️ updateCNCPreview 提前返回，缺少必要条件');
+      return;
+    }
+
+    // 移除现有的机台模型
+    if (cncPreviewMeshRef.current) {
+      cncPreviewSceneRef.current.remove(cncPreviewMeshRef.current);
+      cncPreviewMeshRef.current = null;
+    }
+
+    // 处理自定义GLB模型
+    if (formData.currentModel === 'custom' && formData.modelUrl) {
+      console.log('🎯 [模型] 开始加载自定义GLB模型:', {
+        modelUrl: formData.modelUrl,
+        modelFileName: formData.modelFileName,
+        modelFileExists: !!formData.modelFile
+      });
+      
+      const loader = new GLTFLoader();
+      
+      // 配置DRACOLoader以支持DRACO压缩
+      const dracoLoader = new DRACOLoader();
+      dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+      loader.setDRACOLoader(dracoLoader);
+      loader.load(
+        formData.modelUrl,
+        (gltf) => {
+          const model = gltf.scene;
+          
+          // 设置模型属性
+          model.position.set(0, 0, 0);
+          model.scale.setScalar(formData.scale);
+          model.rotation.set(
+            (formData.rotationX * Math.PI) / 180,
+            (formData.rotationY * Math.PI) / 180,
+            (formData.rotationZ * Math.PI) / 180
+          );
+
+          // 遍历模型中的所有网格，设置基本属性
+          model.traverse((child) => {
+            if (child instanceof THREE.Mesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              
+              // 只设置透明度，保留原始颜色
+              if (child.material) {
+                if (Array.isArray(child.material)) {
+                   child.material.forEach((mat) => {
+                     if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshLambertMaterial) {
+                       // 保留原始颜色，只设置透明度
+                       mat.transparent = formData.opacity < 1;
+                       mat.opacity = formData.opacity;
+                     }
+                   });
+                 } else if (child.material instanceof THREE.MeshStandardMaterial || child.material instanceof THREE.MeshLambertMaterial) {
+                   // 保留原始颜色，只设置透明度
+                   child.material.transparent = formData.opacity < 1;
+                   child.material.opacity = formData.opacity;
+                 }
+              }
+            }
+          });
+
+          // 添加到场景
+          if (cncPreviewSceneRef.current) {
+            cncPreviewSceneRef.current.add(model);
+            cncPreviewMeshRef.current = model as any; // GLB模型是Group类型，需要类型转换
+            
+            // 渲染场景
+            if (cncPreviewControlsRef.current) {
+              cncPreviewControlsRef.current.update();
+            }
+            cncPreviewRendererRef.current?.render(cncPreviewSceneRef.current, cncPreviewCameraRef.current!);
+            
+            console.log('✅ [模型] GLB模型已成功加载并渲染到预览场景:', {
+              modelFileName: formData.modelFileName,
+              modelPosition: model.position,
+              modelScale: model.scale,
+              modelRotation: model.rotation
+            });
+          }
+        },
+        (progress) => {
+          console.log('GLB模型加载进度:', (progress.loaded / progress.total * 100) + '%');
+        },
+        (error) => {
+          console.error('❌ [GLB_LOAD] GLB模型加载失败:', {
+            error: error,
+            modelUrl: formData.modelUrl,
+            modelFileName: formData.modelFileName
+          });
+          message.error('GLB模型加载失败，请检查文件格式');
+          
+          // 加载失败时使用默认几何体
+          createDefaultPreviewMesh(formData);
+        }
+      );
+      return;
+    }
+
+    // 处理预设模型（非custom类型）
+    if (formData.currentModel !== 'custom') {
+      createDefaultPreviewMesh(formData);
+    }
+  };
+
+  // 创建默认预览网格
+  const createDefaultPreviewMesh = (formData: typeof cncPropertiesFormData) => {
+    if (!cncPreviewSceneRef.current || !formData) return;
+
+    // 根据当前模型类型创建新的几何体
+    let geometry: THREE.BufferGeometry;
+    
+    switch (formData.currentModel) {
+      default:
+        // 默认正方体
+        geometry = new THREE.BoxGeometry(formData.width, formData.height, formData.depth3D);
+    }
+
+    // 创建材质
+    const material = new THREE.MeshLambertMaterial({
+      color: formData.color,
+      transparent: true,
+      opacity: formData.opacity
+    });
+
+    // 创建网格
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(0, formData.height / 2, 0);
+    mesh.scale.setScalar(formData.scale);
+    mesh.rotation.set(
+      (formData.rotationX * Math.PI) / 180,
+      (formData.rotationY * Math.PI) / 180,
+      (formData.rotationZ * Math.PI) / 180
+    );
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+
+    // 添加到场景
+    cncPreviewSceneRef.current.add(mesh);
+    cncPreviewMeshRef.current = mesh;
+
+    // 渲染场景
+    if (cncPreviewControlsRef.current) {
+      cncPreviewControlsRef.current.update();
+    }
+    if (cncPreviewRendererRef.current && cncPreviewCameraRef.current) {
+      cncPreviewRendererRef.current.render(cncPreviewSceneRef.current, cncPreviewCameraRef.current);
+    }
   };
 
   // 初始化CNC机台3D预览场景
@@ -4766,8 +5307,30 @@ const DigitalTwinEditor: React.FC = () => {
 
       rotationX: (values.rotationX !== null && values.rotationX !== undefined) ? values.rotationX : (currentCNC?.rotation?.x || 0),
       rotationY: (values.rotationY !== null && values.rotationY !== undefined) ? values.rotationY : (currentCNC?.rotation?.y || 0),
-      rotationZ: (values.rotationZ !== null && values.rotationZ !== undefined) ? values.rotationZ : (currentCNC?.rotation?.z || 0)
+      rotationZ: (values.rotationZ !== null && values.rotationZ !== undefined) ? values.rotationZ : (currentCNC?.rotation?.z || 0),
+
+      // GLB模型相关字段 - 优先使用表单数据，然后是当前CNC数据
+      currentModel: values.currentModel || cncPropertiesFormData?.currentModel || currentCNC?.currentModel || 'default',
+      modelFile: values.modelFile || cncPropertiesFormData?.modelFile || currentCNC?.modelFile || null,
+      modelUrl: values.modelUrl || cncPropertiesFormData?.modelUrl || currentCNC?.modelUrl || null,
+      modelFileName: values.modelFileName || cncPropertiesFormData?.modelFileName || currentCNC?.modelFileName || null,
+      modelFileBase64: values.modelFileBase64 || cncPropertiesFormData?.modelFileBase64 || currentCNC?.modelFileBase64 || null
     };
+    
+    console.log('🎯 [模型] updateCNCProperties - GLB模型字段处理:', {
+      'values.currentModel': values.currentModel,
+      'cncPropertiesFormData.currentModel': cncPropertiesFormData?.currentModel,
+      'currentCNC.currentModel': currentCNC?.currentModel,
+      'final.currentModel': safeValues.currentModel,
+      'values.modelUrl': values.modelUrl,
+      'cncPropertiesFormData.modelUrl': cncPropertiesFormData?.modelUrl,
+      'currentCNC.modelUrl': currentCNC?.modelUrl,
+      'final.modelUrl': safeValues.modelUrl,
+      'values.modelFileName': values.modelFileName,
+      'cncPropertiesFormData.modelFileName': cncPropertiesFormData?.modelFileName,
+      'currentCNC.modelFileName': currentCNC?.modelFileName,
+      'final.modelFileName': safeValues.modelFileName
+    });
     
     console.log('🛡️ [DEBUG] 处理后的安全值:', safeValues);
     console.log('🔄 [DEBUG] 准备调用 setCncMachines 更新状态');
@@ -4798,7 +5361,13 @@ const DigitalTwinEditor: React.FC = () => {
               x: safeValues.rotationX,
               y: safeValues.rotationY,
               z: safeValues.rotationZ
-            }
+            },
+
+            // 保存GLB模型信息
+            currentModel: safeValues.currentModel,
+            modelFile: safeValues.modelFile,
+            modelUrl: safeValues.modelUrl,
+            modelFileName: safeValues.modelFileName
           };
           console.log('✨ [DEBUG] 生成的更新后CNC数据:', updatedCnc);
           return updatedCnc;
@@ -4812,6 +5381,12 @@ const DigitalTwinEditor: React.FC = () => {
       console.log('📊 [DEBUG] 最终更新后的所有CNC机台数量:', updatedCncs.length);
       console.log('📋 [DEBUG] 最终更新后的所有CNC机台列表:', updatedCncs.map(cnc => ({ id: cnc.id, name: cnc.name })));
       console.log('🔄 [DEBUG] setCncMachines 回调函数即将返回新状态');
+      
+      // 同步更新3D视图中的CNC机台
+      if (threeDEditorRef.current && threeDEditorRef.current.updateCNCMachines) {
+        console.log('🔄 [DEBUG] 调用3D编辑器的updateCNCMachines方法同步更新3D视图');
+        threeDEditorRef.current.updateCNCMachines(updatedCncs);
+      }
       
       return updatedCncs;
     });
@@ -6120,8 +6695,26 @@ const DigitalTwinEditor: React.FC = () => {
           position: { x: machine.x, y: machine.y },
           dimensions2D: { width: machine.width, height: machine.height },
           dimensions3D: { width3D: machine.width3D, height3D: machine.height3D, depth3D: machine.depth3D },
-          color: machine.color
+          color: machine.color,
+          // 关键模型状态信息
+          currentModel: machine.currentModel,
+          modelUrl: machine.modelUrl,
+          modelFileName: machine.modelFileName,
+          hasModelFile: !!machine.modelFile,
+          modelUrlValid: machine.modelUrl && machine.modelUrl.startsWith('blob:')
         });
+        
+        // 特别关注自定义模型的机台
+        if (machine.currentModel === 'custom') {
+          console.log(`🎯 [DEBUG] 发现自定义模型的CNC机台:`, {
+            id: machine.id,
+            name: machine.name,
+            modelUrl: machine.modelUrl,
+            modelFileName: machine.modelFileName,
+            hasModelFile: !!machine.modelFile,
+            modelUrlValid: machine.modelUrl && machine.modelUrl.startsWith('blob:')
+          });
+        }
         
         // 设置CNC机台的样式
         const isSelected = selectedCNCMachines.includes(machine.id);
@@ -8146,7 +8739,11 @@ const DigitalTwinEditor: React.FC = () => {
               height: { value: values.height, type: typeof values.height },
               depth3D: { value: values.depth3D, type: typeof values.depth3D },
               name: { value: values.name, type: typeof values.name },
-              color: { value: values.color, type: typeof values.color }
+              color: { value: values.color, type: typeof values.color },
+              currentModel: { value: values.currentModel, type: typeof values.currentModel },
+              modelFile: { value: values.modelFile, type: typeof values.modelFile },
+              modelUrl: { value: values.modelUrl, type: typeof values.modelUrl },
+              modelFileName: { value: values.modelFileName, type: typeof values.modelFileName }
             });
             
             console.log('🔧 [DEBUG] 准备调用updateCNCProperties函数');
@@ -8421,6 +9018,20 @@ const DigitalTwinEditor: React.FC = () => {
                     />
                   </div>
                 </Form.Item>
+
+                {/* 隐藏的GLB模型字段 - 确保模型信息能够被表单验证和提交 */}
+                <Form.Item name="currentModel" style={{ display: 'none' }}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="modelFile" style={{ display: 'none' }}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="modelUrl" style={{ display: 'none' }}>
+                  <Input />
+                </Form.Item>
+                <Form.Item name="modelFileName" style={{ display: 'none' }}>
+                  <Input />
+                </Form.Item>
               </Card>
 
               {/* 3D渲染参数和旋转控制区域 */}
@@ -8626,41 +9237,150 @@ const DigitalTwinEditor: React.FC = () => {
           </Col>
           
           <Col span={10}>
-            <Card 
-              title={
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <EyeOutlined style={{ color: '#722ed1' }} />
-                  <span>3D实时预览</span>
-                </div>
-              }
-              style={{ height: '700px' }}
-              bodyStyle={{ padding: '16px', height: 'calc(100% - 57px)' }}
-            >
-              <div 
-                id="cnc-preview-container"
-                style={{ 
-                  height: '100%', 
-                  background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  border: '1px dashed #d9d9d9',
-                  borderRadius: '8px',
-                  position: 'relative'
-                }}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', height: '700px' }}>
+              {/* 3D实时预览区域 */}
+              <Card 
+                title={
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <EyeOutlined style={{ color: '#722ed1' }} />
+                    <span>3D实时预览</span>
+                  </div>
+                }
+                style={{ flex: 1 }}
+                bodyStyle={{ padding: '16px', height: 'calc(100% - 57px)' }}
               >
-                <div style={{ textAlign: 'center', color: '#666' }}>
-                  <ToolOutlined style={{ fontSize: '48px', marginBottom: '16px', color: '#722ed1' }} />
-                  <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>3D实时预览</div>
-                  <div style={{ fontSize: '12px', color: '#999' }}>
-                    实时显示机台3D效果
-                  </div>
-                  <div style={{ fontSize: '11px', color: '#ccc', marginTop: '12px' }}>
-                    调整左侧参数查看实时变化
+                <div 
+                  id="cnc-preview-container"
+                  style={{ 
+                    height: '100%', 
+                    background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center',
+                    border: '1px dashed #d9d9d9',
+                    borderRadius: '8px',
+                    position: 'relative'
+                  }}
+                >
+                  <div style={{ textAlign: 'center', color: '#666' }}>
+                    <ToolOutlined style={{ fontSize: '48px', marginBottom: '16px', color: '#722ed1' }} />
+                    <div style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>3D实时预览</div>
+                    <div style={{ fontSize: '12px', color: '#999' }}>
+                      实时显示机台3D效果
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#ccc', marginTop: '12px' }}>
+                      调整左侧参数查看实时变化
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+
+              {/* 模型替换区域 */}
+              <Card 
+                title={
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AppstoreOutlined style={{ color: '#fa8c16' }} />
+                      <span>模型替换</span>
+                    </div>
+                    {/* 预设模型选择 - 移动到标题右侧 */}
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {availablePresetModels.map((preset) => (
+                        <Button
+                          key={preset.id}
+                          size="small"
+                          type={cncPropertiesFormData?.currentModel === preset.id ? 'primary' : 'default'}
+                          style={{ 
+                            fontSize: '10px', 
+                            height: '24px'
+                          }}
+                          onClick={() => handlePresetModelChange(preset.id)}
+                        >
+                          {preset.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                }
+                style={{ height: '200px' }}
+                bodyStyle={{ padding: '16px', height: 'calc(100% - 57px)' }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: '100%' }}>
+                  {/* 当前模型信息 */}
+                  <div style={{ 
+                    padding: '8px 12px', 
+                    background: '#f8f9fa', 
+                    borderRadius: '6px',
+                    border: '1px solid #e8e8e8'
+                  }}>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>当前模型</div>
+                    <div style={{ fontSize: '14px', fontWeight: 500, color: '#333' }}>
+                      {(() => {
+                        const currentModel = cncPropertiesFormData?.currentModel;
+                        if (currentModel === 'custom') {
+                          // 自定义模型：优先显示文件名
+                          return cncPropertiesFormData?.modelFileName || 
+                                 cncPropertiesFormData?.modelFile?.name || 
+                                 '自定义模型';
+                        } else if (currentModel && currentModel !== 'default') {
+                          // 预设模型：查找对应的模型名称
+                          const presetModel = availablePresetModels.find(p => p.id === currentModel);
+                          return presetModel?.name || '未知预设模型';
+                        } else {
+                          // 默认模型
+                          return '默认正方体模型';
+                        }
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* 模型导入按钮 */}
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <Button 
+                      type="primary"
+                      icon={<PlusOutlined />}
+                      style={{ width: '100%' }}
+                      loading={isImportingModel}
+                      onClick={() => {
+                        // 创建文件输入元素
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = '.obj,.fbx,.gltf,.glb,.dae,.3ds,.ply,.stl';
+                        input.multiple = false;
+                        
+                        input.onchange = (e: Event) => {
+                          const target = e.target as HTMLInputElement;
+                          const file = target.files?.[0];
+                          if (file) {
+                            handleModelFileImport(file);
+                          }
+                        };
+                        
+                        input.click();
+                      }}
+                    >
+                      {isImportingModel ? '导入中...' : '导入3D模型'}
+                    </Button>
+                    
+                    {/* 导入进度条 */}
+                    {isImportingModel && modelImportProgress > 0 && (
+                      <div style={{ width: '100%' }}>
+                        <Progress 
+                          percent={modelImportProgress} 
+                          size="small" 
+                          status={modelImportProgress === 100 ? 'success' : 'active'}
+                          showInfo={false}
+                        />
+                      </div>
+                    )}
+                    
+                    <div style={{ fontSize: '11px', color: '#999', textAlign: 'center' }}>
+                      支持格式: OBJ, FBX, GLTF, GLB, DAE, 3DS, PLY, STL
+                    </div>
+                  </div>
+                </div>
+              </Card>
+            </div>
           </Col>
         </Row>
       </Modal>

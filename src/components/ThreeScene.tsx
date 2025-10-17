@@ -1,6 +1,8 @@
 import { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
 
 // CNC机台接口定义
 interface CNCMachine {
@@ -17,6 +19,24 @@ interface CNCMachine {
   depth3D?: number;    // 3D深度（Z轴，单位：m）
   width3D?: number;    // 3D宽度（X轴，单位：m）
   height3D?: number;   // 3D高度（Y轴，单位：m）
+  // 新增3D渲染参数
+  opacity?: number;    // 透明度 (0-1)
+  scale?: number;      // 整体缩放 (0.1-5.0)
+  lighting?: {         // 光照参数
+    intensity?: number;    // 光照强度 (0-2)
+    ambient?: number;      // 环境光强度 (0-1)
+    directional?: number;  // 方向光强度 (0-2)
+  };
+  rotation?: {         // 旋转参数
+    x?: number;        // X轴旋转角度 (度)
+    y?: number;        // Y轴旋转角度 (度)
+    z?: number;        // Z轴旋转角度 (度)
+  };
+  // GLB模型相关参数
+  currentModel?: string;    // 当前使用的模型ID ('custom' 表示自定义GLB模型)
+  modelFile?: File | null;  // GLB模型文件对象
+  modelUrl?: string;        // GLB模型文件URL (用于预览)
+  modelFileName?: string;   // GLB模型文件名 (用于显示)
 }
 
 export interface ThreeSceneRef {
@@ -26,6 +46,7 @@ export interface ThreeSceneRef {
   setFloorView: (floor: number) => void;
   setAllFloorsView: () => void;
   testRobotMovement: () => void;
+  updateCNCMachines: (machines: CNCMachine[]) => void;
 }
 
 interface ThreeSceneProps {
@@ -41,6 +62,7 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
   const animationIdRef = useRef<number | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
   const floorGroupsRef = useRef<THREE.Group[]>([]);
   const spanningElevatorRef = useRef<THREE.Mesh | null>(null);
   const elevatorEdgesRef = useRef<THREE.LineSegments | null>(null);
@@ -87,6 +109,7 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
     // Scene
     const scene = new THREE.Scene();
     scene.background = null; // 设置为透明背景
+    sceneRef.current = scene; // 存储场景引用
 
     // Camera
     const camera = new THREE.PerspectiveCamera(
@@ -156,39 +179,145 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
     directionalLight.castShadow = true;
     scene.add(directionalLight);
 
-    // CNC Machine representation
+    // CNC Machine representation - 支持GLB模型加载
     const createCNCMachine = (
       position: THREE.Vector3, 
       floorGroup: THREE.Group, 
+      machine: CNCMachine,
       dimensions: { width: number; height: number; depth: number } = { width: 5, height: 5, depth: 5 },
       color: number = 0x0077ff
     ) => {
-      const geometry = new THREE.BoxGeometry(dimensions.width, dimensions.height, dimensions.depth);
-      const material = new THREE.MeshStandardMaterial({ 
-        color: color,
-        metalness: 0.3,
-        roughness: 0.4,
-        transparent: true,
-        opacity: 0.9
-      });
-      const cube = new THREE.Mesh(geometry, material);
-      cube.position.copy(position);
-      cube.castShadow = true;
-      cube.receiveShadow = true;
-      
-      // 添加描边效果
-      const edgesGeometry = new THREE.EdgesGeometry(geometry);
-      const edgesMaterial = new THREE.LineBasicMaterial({ 
-        color: 0x0099ff, // 亮蓝色描边
-        linewidth: 2
-      });
-      const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
-      edges.position.copy(position);
-      
-      floorGroup.add(cube);
-      floorGroup.add(edges);
-      
-      return { cube, edges };
+      // 检查是否使用自定义GLB模型
+      if (machine.currentModel === 'custom' && machine.modelUrl) {
+        // 加载自定义GLB模型
+        const loader = new GLTFLoader();
+        
+        // 配置DRACO解码器（如果需要）
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+        loader.setDRACOLoader(dracoLoader);
+        
+        loader.load(
+          machine.modelUrl,
+          (gltf) => {
+            const model = gltf.scene;
+            
+            // 设置模型位置
+            model.position.copy(position);
+            
+            // 应用缩放
+            const scale = machine.scale || 1;
+            model.scale.set(scale, scale, scale);
+            
+            // 应用旋转
+            if (machine.rotation) {
+              model.rotation.x = THREE.MathUtils.degToRad(machine.rotation.x || 0);
+              model.rotation.y = THREE.MathUtils.degToRad(machine.rotation.y || 0);
+              model.rotation.z = THREE.MathUtils.degToRad(machine.rotation.z || 0);
+            }
+            
+            // 遍历模型中的所有网格，设置材质属性
+            model.traverse((child) => {
+              if (child instanceof THREE.Mesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+                
+                // 设置透明度
+                if (machine.opacity !== undefined && child.material) {
+                  if (Array.isArray(child.material)) {
+                    child.material.forEach(mat => {
+                      mat.transparent = true;
+                      mat.opacity = machine.opacity!;
+                    });
+                  } else {
+                    child.material.transparent = true;
+                    child.material.opacity = machine.opacity;
+                  }
+                }
+              }
+            });
+            
+            // 设置模型名称以便后续识别
+            model.name = `cnc-model-${machine.id}`;
+            
+            // 添加到场景
+            floorGroup.add(model);
+          },
+          (progress) => {
+            // 加载进度（可选）
+            console.log('GLB模型加载进度:', (progress.loaded / progress.total * 100) + '%');
+          },
+          (error) => {
+            console.error('GLB模型加载失败:', error);
+            // 加载失败时创建默认几何体
+            createDefaultCNCMesh();
+          }
+        );
+        
+        // 创建默认几何体的函数
+        const createDefaultCNCMesh = () => {
+          const geometry = new THREE.BoxGeometry(dimensions.width, dimensions.height, dimensions.depth);
+          const material = new THREE.MeshStandardMaterial({ 
+            color: color,
+            metalness: 0.3,
+            roughness: 0.4,
+            transparent: true,
+            opacity: machine.opacity || 0.9
+          });
+          const cube = new THREE.Mesh(geometry, material);
+          cube.position.copy(position);
+          cube.castShadow = true;
+          cube.receiveShadow = true;
+          cube.name = `cnc-default-${machine.id}`;
+          
+          // 添加描边效果
+          const edgesGeometry = new THREE.EdgesGeometry(geometry);
+          const edgesMaterial = new THREE.LineBasicMaterial({ 
+            color: 0x0099ff,
+            linewidth: 2
+          });
+          const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+          edges.position.copy(position);
+          edges.name = `cnc-edges-${machine.id}`;
+          
+          floorGroup.add(cube);
+          floorGroup.add(edges);
+          
+          return { cube, edges };
+        };
+        
+        return null; // GLB模型异步加载，不返回立即对象
+      } else {
+        // 使用默认几何体
+        const geometry = new THREE.BoxGeometry(dimensions.width, dimensions.height, dimensions.depth);
+        const material = new THREE.MeshStandardMaterial({ 
+          color: color,
+          metalness: 0.3,
+          roughness: 0.4,
+          transparent: true,
+          opacity: machine.opacity || 0.9
+        });
+        const cube = new THREE.Mesh(geometry, material);
+        cube.position.copy(position);
+        cube.castShadow = true;
+        cube.receiveShadow = true;
+        cube.name = `cnc-default-${machine.id}`;
+        
+        // 添加描边效果
+        const edgesGeometry = new THREE.EdgesGeometry(geometry);
+        const edgesMaterial = new THREE.LineBasicMaterial({ 
+          color: 0x0099ff,
+          linewidth: 2
+        });
+        const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+        edges.position.copy(position);
+        edges.name = `cnc-edges-${machine.id}`;
+        
+        floorGroup.add(cube);
+        floorGroup.add(edges);
+        
+        return { cube, edges };
+      }
     };
 
     // CRM Mobile Robot representation - 立体圆角矩形
@@ -419,16 +548,29 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
         createCNCMachine(
           new THREE.Vector3(x3D, floor1Y, z3D), 
           floor1Group, 
+          machine,
           dimensions,
           color
         );
       });
     } else {
       // 如果没有传入CNC机台数据，使用默认的网格布局
-      floor1Rows.forEach(row => {
+      floor1Rows.forEach((row, rowIndex) => {
         for (let col = 0; col < 6; col++) {
           const x = startX + col * spacing;
-          createCNCMachine(new THREE.Vector3(x, floor1Y, row.z), floor1Group);
+          // 创建默认的CNC机台对象
+          const defaultMachine: CNCMachine = {
+            id: `default-floor1-${rowIndex}-${col}`,
+            x: x,
+            y: row.z,
+            width: 5,
+            height: 5,
+            name: `默认CNC-${rowIndex}-${col}`,
+            type: 'cnc',
+            color: '#0077ff',
+            currentModel: 'default'
+          };
+          createCNCMachine(new THREE.Vector3(x, floor1Y, row.z), floor1Group, defaultMachine);
         }
       });
     }
@@ -1050,10 +1192,22 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
     ];
     
     // 创建二楼设备
-    floor2Rows.forEach(row => {
+    floor2Rows.forEach((row, rowIndex) => {
       for (let col = 0; col < 6; col++) {
         const x = startX + col * spacing;
-        createCNCMachine(new THREE.Vector3(x, floor2Y, row.z), floor2Group);
+        // 创建默认的CNC机台对象
+        const defaultMachine: CNCMachine = {
+          id: `default-floor2-${rowIndex}-${col}`,
+          x: x,
+          y: row.z,
+          width: 5,
+          height: 5,
+          name: `默认CNC-2F-${rowIndex}-${col}`,
+          type: 'cnc',
+          color: '#ff8844',
+          currentModel: 'default'
+        };
+        createCNCMachine(new THREE.Vector3(x, floor2Y, row.z), floor2Group, defaultMachine);
       }
     });
 
@@ -1070,10 +1224,22 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
     ];
     
     // 创建三楼设备
-    floor3Rows.forEach(row => {
+    floor3Rows.forEach((row, rowIndex) => {
       for (let col = 0; col < 6; col++) {
         const x = startX + col * spacing;
-        createCNCMachine(new THREE.Vector3(x, floor3Y, row.z), floor3Group);
+        // 创建默认的CNC机台对象
+        const defaultMachine: CNCMachine = {
+          id: `default-floor3-${rowIndex}-${col}`,
+          x: x,
+          y: row.z,
+          width: 5,
+          height: 5,
+          name: `默认CNC-3F-${rowIndex}-${col}`,
+          type: 'cnc',
+          color: '#4488ff',
+          currentModel: 'default'
+        };
+        createCNCMachine(new THREE.Vector3(x, floor3Y, row.z), floor3Group, defaultMachine);
       }
     });
 
@@ -1427,6 +1593,179 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
     }
   };
 
+  // 更新CNC机台模型的函数
+  const updateCNCMachines = (machines: CNCMachine[]) => {
+    if (!sceneRef.current || !floorGroupsRef.current.length) {
+      console.warn('场景或楼层组未初始化，无法更新CNC机台');
+      return;
+    }
+
+    const floor1Group = floorGroupsRef.current[0]; // 一楼组
+
+    // 移除现有的CNC机台模型
+    const objectsToRemove: THREE.Object3D[] = [];
+    floor1Group.traverse((child) => {
+      if (child.name && (child.name.startsWith('cnc-model-') || child.name.startsWith('cnc-default-') || child.name.startsWith('cnc-edges-'))) {
+        objectsToRemove.push(child);
+      }
+    });
+    
+    objectsToRemove.forEach(obj => {
+      floor1Group.remove(obj);
+      // 清理几何体和材质
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry?.dispose();
+        if (Array.isArray(obj.material)) {
+          obj.material.forEach(mat => mat.dispose());
+        } else {
+          obj.material?.dispose();
+        }
+      }
+    });
+
+    // 重新创建CNC机台模型
+    const floor1Y = 2.5;
+    machines.forEach(machine => {
+      // 将2D坐标转换为3D坐标 - 与初始化场景时的坐标转换保持一致
+      const x3D = machine.x / 100 * 3; // 移除固定偏移，与2D视图动态坐标系统一致
+      const z3D = machine.y / 100 * 3; // 移除Z轴镜像，与地面和墙体保持一致
+
+      // 获取3D尺寸，如果没有设置则使用默认值
+      const dimensions = {
+        width: machine.width3D || 5,
+        height: machine.height3D || 5,
+        depth: machine.depth3D || 5
+      };
+
+      // 解析颜色
+      const color = parseInt(machine.color.replace('#', '0x'));
+
+      // 创建CNC机台
+      console.log(`🔍 [ThreeScene] 处理CNC机台 ${machine.id}:`, {
+        currentModel: machine.currentModel,
+        modelUrl: machine.modelUrl,
+        modelFileName: machine.modelFileName,
+        position: { x3D, z3D }
+      });
+      
+       if (machine.currentModel === 'custom' && machine.modelUrl) {
+         console.log(`🚀 [ThreeScene] 开始加载GLB模型 - CNC: ${machine.id}, URL: ${machine.modelUrl}`);
+         // 加载自定义GLB模型
+         const loader = new GLTFLoader();
+         const dracoLoader = new DRACOLoader();
+         dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+         loader.setDRACOLoader(dracoLoader);
+         
+         loader.load(
+           machine.modelUrl,
+           (gltf) => {
+             console.log(`✅ [ThreeScene] GLB模型加载成功 - CNC: ${machine.id}`);
+             const model = gltf.scene;
+             model.position.set(x3D, floor1Y, z3D);
+             
+             // 应用缩放和旋转
+             const scale = machine.scale || 1;
+             model.scale.set(scale, scale, scale);
+             
+             if (machine.rotation) {
+               model.rotation.x = THREE.MathUtils.degToRad(machine.rotation.x || 0);
+               model.rotation.y = THREE.MathUtils.degToRad(machine.rotation.y || 0);
+               model.rotation.z = THREE.MathUtils.degToRad(machine.rotation.z || 0);
+             }
+             
+             // 设置材质属性
+             model.traverse((child) => {
+               if (child instanceof THREE.Mesh) {
+                 child.castShadow = true;
+                 child.receiveShadow = true;
+                 
+                 if (machine.opacity !== undefined && child.material) {
+                   if (Array.isArray(child.material)) {
+                     child.material.forEach(mat => {
+                       mat.transparent = true;
+                       mat.opacity = machine.opacity!;
+                     });
+                   } else {
+                     child.material.transparent = true;
+                     child.material.opacity = machine.opacity;
+                   }
+                 }
+               }
+             });
+             
+             model.name = `cnc-model-${machine.id}`;
+             floor1Group.add(model);
+             console.log(`🎯 [ThreeScene] GLB模型已添加到场景 - CNC: ${machine.id}, 位置: (${x3D}, ${floor1Y}, ${z3D})`);
+           },
+           undefined,
+           (error) => {
+             console.error(`❌ [ThreeScene] GLB模型加载失败 - CNC: ${machine.id}, URL: ${machine.modelUrl}`, error);
+             // 加载失败时创建默认几何体
+             createDefaultCNCMesh();
+           }
+         );
+         
+         const createDefaultCNCMesh = () => {
+           const geometry = new THREE.BoxGeometry(dimensions.width, dimensions.height, dimensions.depth);
+           const material = new THREE.MeshStandardMaterial({ 
+             color: color,
+             metalness: 0.3,
+             roughness: 0.4,
+             transparent: true,
+             opacity: machine.opacity || 0.9
+           });
+           const cube = new THREE.Mesh(geometry, material);
+           cube.position.set(x3D, floor1Y, z3D);
+           cube.castShadow = true;
+           cube.receiveShadow = true;
+           cube.name = `cnc-default-${machine.id}`;
+           
+           const edgesGeometry = new THREE.EdgesGeometry(geometry);
+           const edgesMaterial = new THREE.LineBasicMaterial({ 
+             color: 0x0099ff,
+             linewidth: 2
+           });
+           const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+           edges.position.set(x3D, floor1Y, z3D);
+           edges.name = `cnc-edges-${machine.id}`;
+           
+           floor1Group.add(cube);
+           floor1Group.add(edges);
+         };
+       } else {
+         console.log(`📦 [ThreeScene] 使用默认几何体 - CNC: ${machine.id}, currentModel: ${machine.currentModel}`);
+         // 使用默认几何体
+         const geometry = new THREE.BoxGeometry(dimensions.width, dimensions.height, dimensions.depth);
+         const material = new THREE.MeshStandardMaterial({ 
+           color: color,
+           metalness: 0.3,
+           roughness: 0.4,
+           transparent: true,
+           opacity: machine.opacity || 0.9
+         });
+         const cube = new THREE.Mesh(geometry, material);
+         cube.position.set(x3D, floor1Y, z3D);
+         cube.castShadow = true;
+         cube.receiveShadow = true;
+         cube.name = `cnc-default-${machine.id}`;
+         
+         const edgesGeometry = new THREE.EdgesGeometry(geometry);
+         const edgesMaterial = new THREE.LineBasicMaterial({ 
+           color: 0x0099ff,
+           linewidth: 2
+         });
+         const edges = new THREE.LineSegments(edgesGeometry, edgesMaterial);
+         edges.position.set(x3D, floor1Y, z3D);
+         edges.name = `cnc-edges-${machine.id}`;
+         
+         floor1Group.add(cube);
+         floor1Group.add(edges);
+       }
+    });
+
+    console.log(`已更新 ${machines.length} 个CNC机台模型`);
+  };
+
   // 暴露方法给父组件
   useImperativeHandle(ref, () => ({
     resetView,
@@ -1439,7 +1778,8 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
       if (startPathMovementRef.current) {
         startPathMovementRef.current();
       }
-    }
+    },
+    updateCNCMachines
   }), []);
 
 
