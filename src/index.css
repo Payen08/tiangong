@@ -176,3 +176,15 @@ body {
 .floor-selector-dropdown .ant-select-item-option-selected:hover {
   background-color: rgba(24, 144, 255, 0.3) !important;
 }
+
+/* 地面属性面板弹出动画 */
+@keyframes fadeInDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

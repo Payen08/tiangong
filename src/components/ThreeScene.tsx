@@ -402,8 +402,8 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
         // 彻底解决间距问题：使用超大缩放比例确保机台间距足够大
         // 转换为3D坐标系：X轴向右，Z轴向前（画布Y轴对应3D的-Z轴）
         // 使用1:100缩放比例，确保80像素间距转换为0.8米间距，但通过额外间距倍数放大
-        const x3D = machine.x / 100 * 5; // 移除固定偏移，与2D视图动态坐标系统一致
-        const z3D = machine.y / 100 * 5; // 移除Z轴镜像，与地面和墙体保持一致 
+        const x3D = machine.x / 100 * 3; // 移除固定偏移，与2D视图动态坐标系统一致
+      const z3D = machine.y / 100 * 3; // 移除Z轴镜像，与地面和墙体保持一致 
         
         // 大幅减小机台尺寸，确保绝对不重叠
         // 使用1米3D尺寸，配合4米间距（80像素*5倍=4米），确保足够的空隙
@@ -1296,7 +1296,14 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
 
   // 重置视图到初始位置
   const resetView = () => {
+    console.log('resetView 方法被调用');
+    console.log('初始相机位置:', initialCameraPosition);
+    console.log('初始相机目标:', initialCameraTarget);
+    
     if (cameraRef.current && controlsRef.current) {
+      console.log('重置前相机位置:', cameraRef.current.position);
+      console.log('重置前控制器目标:', controlsRef.current.target);
+      
       // 重置相机位置
       cameraRef.current.position.set(
         initialCameraPosition.x,
@@ -1313,6 +1320,14 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
       
       // 更新控制器
       controlsRef.current.update();
+      
+      console.log('重置后相机位置:', cameraRef.current.position);
+      console.log('重置后控制器目标:', controlsRef.current.target);
+    } else {
+      console.error('相机或控制器引用为空:', {
+        camera: !!cameraRef.current,
+        controls: !!controlsRef.current
+      });
     }
   };
 

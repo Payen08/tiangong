@@ -192,6 +192,11 @@ interface FloorScene {
   increaseUpdate?: boolean; // 是否增量更新
 }
 
+// 3D编辑器组件ref接口
+interface ThreeDEditorRef {
+  resetView: () => void;
+}
+
 // 3D编辑器组件接口
 interface ThreeDEditorProps {
   walls: Wall[];
@@ -215,7 +220,7 @@ interface ThreeDEditorProps {
 }
 
 // 3D编辑器组件
-const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, floorAreas, selectedWall3DProps, selectedFloor3DProps, onWallSelect: _onWallSelect, onCNCMachineSelect: _onCNCMachineSelect, style }) => {
+const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ walls, cncMachines, floorAreas, selectedWall3DProps, selectedFloor3DProps, onWallSelect: _onWallSelect, onCNCMachineSelect: _onCNCMachineSelect, style }, ref) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene>();
   const rendererRef = useRef<THREE.WebGLRenderer>();
@@ -225,6 +230,27 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, floorAr
   const cncMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const textureCache = useRef<Map<string, THREE.CanvasTexture>>(new Map());
   const floorMeshesRef = useRef<THREE.Mesh[]>([]);
+
+  // 暴露重置视图方法
+  React.useImperativeHandle(ref, () => ({
+    resetView: () => {
+      if (cameraRef.current && controlsRef.current) {
+        console.log('3D重置视图被调用');
+        console.log('重置前相机位置:', cameraRef.current.position);
+        console.log('重置前控制器目标:', controlsRef.current.target);
+        
+        // 重置相机位置和控制器目标到初始值
+        cameraRef.current.position.set(10, 10, 10);
+        controlsRef.current.target.set(0, 0, 0);
+        controlsRef.current.update();
+        
+        console.log('重置后相机位置:', cameraRef.current.position);
+        console.log('重置后控制器目标:', controlsRef.current.target);
+      } else {
+        console.error('3D相机或控制器引用不存在');
+      }
+    }
+  }), []);
   
   // 键盘控制状态（预留用于未来功能扩展）
 
@@ -317,48 +343,36 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, floorAr
     fillLight.position.set(-10, 5, -5);
     scene.add(fillLight);
 
-    // 添加优化地面 - 微妙的层次感
-    const groundGeometry = new THREE.PlaneGeometry(30, 30, 16, 16);
-    
-    // 创建地面渐变纹理
-    const createGroundTexture = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = 256;
-      canvas.height = 256;
-      const context = canvas.getContext('2d')!;
+
+
+    // 添加无限网格辅助线 - 创建视觉上的无限延伸效果
+    const createInfiniteGrid = () => {
+      // 创建多层网格，从密集到稀疏，模拟无限延伸
+      const grids: THREE.GridHelper[] = [];
       
-      // 创建径向渐变 - 中心稍亮，边缘稍暗
-      const gradient = context.createRadialGradient(128, 128, 0, 128, 128, 128);
-      gradient.addColorStop(0, '#ffffff');    // 中心白色
-      gradient.addColorStop(0.6, '#fafafa');  // 中间区域
-      gradient.addColorStop(1, '#f0f0f0');    // 边缘稍暗
+      // 主网格 - 密集网格，用于近距离参考
+      const mainGrid = new THREE.GridHelper(200, 200, 0x999999, 0xdddddd);
+      mainGrid.material.transparent = true;
+      mainGrid.material.opacity = 0.6;
+      grids.push(mainGrid);
       
-      context.fillStyle = gradient;
-      context.fillRect(0, 0, canvas.width, canvas.height);
+      // 中距离网格 - 稍微稀疏
+      const midGrid = new THREE.GridHelper(1000, 100, 0xaaaaaa, 0xe8e8e8);
+      midGrid.material.transparent = true;
+      midGrid.material.opacity = 0.3;
+      grids.push(midGrid);
       
-      return createSafeTexture(canvas, 'ground-texture');
+      // 远距离网格 - 非常稀疏，用于远景参考
+      const farGrid = new THREE.GridHelper(2000, 40, 0xbbbbbb, 0xf0f0f0);
+      farGrid.material.transparent = true;
+      farGrid.material.opacity = 0.15;
+      grids.push(farGrid);
+      
+      return grids;
     };
     
-    const groundTexture = createGroundTexture();
-    groundTexture.wrapS = THREE.RepeatWrapping;
-    groundTexture.wrapT = THREE.RepeatWrapping;
-    groundTexture.repeat.set(1, 1);
-    
-    const groundMaterial = new THREE.MeshLambertMaterial({ 
-      map: groundTexture,
-      color: 0xffffff
-    });
-    
-    const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    // 添加优化网格辅助线 - 配合景深效果
-    const gridHelper = new THREE.GridHelper(30, 30, 0x999999, 0xdddddd);
-    gridHelper.material.transparent = true;
-    gridHelper.material.opacity = 0.5;
-    scene.add(gridHelper);
+    const infiniteGrids = createInfiniteGrid();
+    infiniteGrids.forEach(grid => scene.add(grid));
 
     // 添加坐标轴辅助线
     const axesHelper = new THREE.AxesHelper(5);
@@ -1078,7 +1092,7 @@ const ThreeDEditor: React.FC<ThreeDEditorProps> = ({ walls, cncMachines, floorAr
       }}
     />
   );
-};
+});
 
 // 模拟产品模型数据
 const mockProductModels: ProductModel[] = [
@@ -1282,6 +1296,10 @@ const DigitalTwinEditor: React.FC = () => {
   
   // 强制重绘状态 - 用于解决视图切换时的画布变形问题
   const [forceRedraw, setForceRedraw] = useState(0);
+
+  // 属性面板显示状态
+  const [showWallPropertiesPanel, setShowWallPropertiesPanel] = useState(false);
+  const [showFloorPropertiesPanel, setShowFloorPropertiesPanel] = useState(false);
   
   // 选中墙体的3D属性状态
   const [selectedWall3DProps, setSelectedWall3DProps] = useState({
@@ -1304,6 +1322,7 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 画布相关状态
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const threeDEditorRef = useRef<ThreeDEditorRef>(null);
   const [scale, setScale] = useState(1);
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);// 画布拖拽状态
@@ -1509,6 +1528,39 @@ const DigitalTwinEditor: React.FC = () => {
     
     return () => clearTimeout(timer);
   }, []); // 只在组件挂载时执行一次
+
+  // 监听面板状态变化，重新计算偏移量以保持原点在屏幕中心
+  useEffect(() => {
+    const recalculateOffset = () => {
+      const canvas = canvasRef.current;
+      if (canvas && viewMode === 'top') {
+        // 延迟执行，确保DOM布局更新完成
+        setTimeout(() => {
+          const rect = canvas.getBoundingClientRect();
+          
+          if (rect.width > 0 && rect.height > 0) {
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            
+            // 重新设置偏移量，使世界坐标原点(0,0)显示在屏幕中心
+            setOffsetX(centerX);
+            setOffsetY(centerY);
+            
+            console.log('🔄 面板状态变化，重新计算偏移量:', { 
+              centerX, 
+              centerY, 
+              canvasWidth: rect.width, 
+              canvasHeight: rect.height,
+              leftPanelVisible,
+              rightPanelVisible
+            });
+          }
+        }, 50); // 50ms延迟确保CSS动画和布局更新完成
+      }
+    };
+
+    recalculateOffset();
+  }, [leftPanelVisible, rightPanelVisible, viewMode]); // 监听面板状态和视图模式变化
 
   // 连线状态管理（参考地图编辑器）
   const [isConnecting, setIsConnecting] = useState(false); // 是否正在连线
@@ -1784,9 +1836,50 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 重置视图
   const resetView = () => {
+    console.log('🔄 重置视图被调用, 当前视图模式:', viewMode);
+    
+    // 如果是3D透视图模式，调用ThreeDEditor的resetView方法
+    if (viewMode === 'perspective' && threeDEditorRef.current) {
+      console.log('📐 调用3D编辑器的重置视图方法');
+      threeDEditorRef.current.resetView();
+      return;
+    }
+    
+    // 2D模式的重置逻辑
+    console.log('📋 执行2D视图重置');
+    
+    // 重置缩放比例
     setScale(1);
-    setOffsetX(0);
-    setOffsetY(0);
+    
+    // 获取画布尺寸并计算中心位置
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const rect = canvas.getBoundingClientRect();
+      
+      if (rect.width > 0 && rect.height > 0) {
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+        
+        // 将偏移量设置为画布中心，使世界坐标原点(0,0)显示在屏幕中心
+        setOffsetX(centerX);
+        setOffsetY(centerY);
+        
+        console.log('✅ 2D视图已重置到中心位置:', { 
+          centerX, 
+          centerY, 
+          canvasWidth: rect.width, 
+          canvasHeight: rect.height 
+        });
+      } else {
+        console.warn('⚠️ 画布尺寸无效，使用默认偏移量');
+        setOffsetX(0);
+        setOffsetY(0);
+      }
+    } else {
+      console.warn('⚠️ 画布引用不存在，使用默认偏移量');
+      setOffsetX(0);
+      setOffsetY(0);
+    }
   };
 
   // 顶视图 - 切换到顶视图模式
@@ -4237,6 +4330,26 @@ const DigitalTwinEditor: React.FC = () => {
     }
   };
 
+  // 实时更新墙体属性
+  const updateWallPropertiesRealtime = (newProps: Partial<typeof selectedWall3DProps>) => {
+    if (!selectedWallId) return;
+
+    setWalls(prevWalls => 
+      prevWalls.map(wall => {
+        if (wall.id === selectedWallId) {
+          return {
+            ...wall,
+            width: newProps.width !== undefined ? newProps.width : wall.width,
+            thickness: newProps.thickness !== undefined ? newProps.thickness * 100 : wall.thickness, // 转换为像素
+            height: newProps.height !== undefined ? newProps.height * 100 : wall.height, // 转换为像素
+            color: newProps.color !== undefined ? newProps.color : wall.color
+          };
+        }
+        return wall;
+      })
+    );
+  };
+
 
 
   // 重置地面属性
@@ -6152,6 +6265,7 @@ const DigitalTwinEditor: React.FC = () => {
       {/* 透视图编辑器 */}
           {viewMode === 'perspective' && (
         <ThreeDEditor
+          ref={threeDEditorRef}
           walls={walls}
           cncMachines={cncMachines}
           floorAreas={floorAreas}
@@ -6178,7 +6292,7 @@ const DigitalTwinEditor: React.FC = () => {
       )}
 
       {/* 透视图模式下的悬浮墙体属性设置面板 */}
-      {viewMode === 'perspective' && (
+      {viewMode === 'perspective' && showWallPropertiesPanel && (
         <div style={{
           position: 'absolute',
           top: '20px',
@@ -6243,7 +6357,11 @@ const DigitalTwinEditor: React.FC = () => {
                  max={10}
                  step={0.1}
                  value={selectedWall3DProps.width}
-                 onChange={(value) => setSelectedWall3DProps(prev => ({ ...prev, width: value || 0.1 }))}
+                 onChange={(value) => {
+                   const newWidth = value || 0.1;
+                   setSelectedWall3DProps(prev => ({ ...prev, width: newWidth }));
+                   updateWallPropertiesRealtime({ width: newWidth });
+                 }}
                  tooltip={{ formatter: (value) => `${value}m` }}
                />
             </div>
@@ -6273,7 +6391,11 @@ const DigitalTwinEditor: React.FC = () => {
                  max={1}
                  step={0.01}
                  value={selectedWall3DProps.thickness}
-                 onChange={(value) => setSelectedWall3DProps(prev => ({ ...prev, thickness: value || 0.05 }))}
+                 onChange={(value) => {
+                   const newThickness = value || 0.05;
+                   setSelectedWall3DProps(prev => ({ ...prev, thickness: newThickness }));
+                   updateWallPropertiesRealtime({ thickness: newThickness });
+                 }}
                  tooltip={{ formatter: (value) => `${value}m` }}
                />
             </div>
@@ -6303,7 +6425,11 @@ const DigitalTwinEditor: React.FC = () => {
                  max={8}
                  step={0.1}
                  value={selectedWall3DProps.height}
-                 onChange={(value) => setSelectedWall3DProps(prev => ({ ...prev, height: value || 0.5 }))}
+                 onChange={(value) => {
+                   const newHeight = value || 0.5;
+                   setSelectedWall3DProps(prev => ({ ...prev, height: newHeight }));
+                   updateWallPropertiesRealtime({ height: newHeight });
+                 }}
                  tooltip={{ formatter: (value) => `${value}m` }}
                />
             </div>
@@ -6344,7 +6470,10 @@ const DigitalTwinEditor: React.FC = () => {
                       transition: 'all 0.2s ease',
                       boxShadow: color === '#ffffff' ? 'inset 0 0 0 1px #e5e7eb' : 'none'
                     }}
-                    onClick={() => setSelectedWall3DProps(prev => ({ ...prev, color }))}
+                    onClick={() => {
+                      setSelectedWall3DProps(prev => ({ ...prev, color }));
+                      updateWallPropertiesRealtime({ color });
+                    }}
                   />
                 ))}
               </div>
@@ -6382,7 +6511,11 @@ const DigitalTwinEditor: React.FC = () => {
                  max={1}
                  step={0.05}
                  value={selectedWall3DProps.opacity}
-                 onChange={(value) => setSelectedWall3DProps(prev => ({ ...prev, opacity: value || 0.1 }))}
+                 onChange={(value) => {
+                   const newOpacity = value || 0.1;
+                   setSelectedWall3DProps(prev => ({ ...prev, opacity: newOpacity }));
+                   updateWallPropertiesRealtime({ opacity: newOpacity });
+                 }}
                  tooltip={{ formatter: (value) => `${Math.round((value || 0) * 100)}%` }}
                />
             </div>
@@ -6396,30 +6529,22 @@ const DigitalTwinEditor: React.FC = () => {
             paddingTop: '16px'
           }}>
             <Button 
-              type="primary" 
               size="small"
-              style={{ flex: 1 }}
-              onClick={applyWall3DSettings}
-              disabled={!selectedWallId}
-            >
-              应用设置
-            </Button>
-            <Button 
-              size="small"
+              style={{ width: '100%' }}
               onClick={resetWall3DSettings}
             >
-              重置
+              重置属性
             </Button>
           </div>
         </div>
       )}
 
       {/* 透视图模式下的悬浮地面属性设置面板 */}
-      {viewMode === 'perspective' && (
+      {viewMode === 'perspective' && showFloorPropertiesPanel && (
         <div style={{
           position: 'absolute',
           top: '20px',
-          left: '20px',
+          right: '20px',
           width: '280px',
           background: 'rgba(255, 255, 255, 0.95)',
           borderRadius: '12px',
@@ -6696,20 +6821,22 @@ const DigitalTwinEditor: React.FC = () => {
           >
             透视图
           </Button>
-          <Button 
-            icon={allPanelsVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
-            size="small"
-            type="text"
-            onClick={toggleAllPanels}
-            style={{
-              color: '#666',
-              backgroundColor: 'rgba(0, 0, 0, 0.05)',
-              border: 'none',
-              borderRadius: '4px'
-            }}
-          >
-            {allPanelsVisible ? '隐藏全部' : '显示全部'}
-          </Button>
+          {viewMode === 'top' && (
+            <Button 
+              icon={allPanelsVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+              size="small"
+              type="text"
+              onClick={toggleAllPanels}
+              style={{
+                color: '#666',
+                backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                border: 'none',
+                borderRadius: '4px'
+              }}
+            >
+              {allPanelsVisible ? '隐藏全部' : '显示全部'}
+            </Button>
+          )}
           <Button
             icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
             size="small"
@@ -6724,6 +6851,49 @@ const DigitalTwinEditor: React.FC = () => {
           >
             {isFullscreen ? '退出全屏' : '全屏'}
           </Button>
+          {/* 地面属性和墙体属性按钮只在透视图模式下显示 */}
+          {viewMode === 'perspective' && (
+            <>
+              <Button
+                icon={<BorderInnerOutlined />}
+                size="small"
+                type="text"
+                onClick={() => {
+                  setShowFloorPropertiesPanel(!showFloorPropertiesPanel);
+                  if (!showFloorPropertiesPanel) {
+                    setShowWallPropertiesPanel(false);
+                  }
+                }}
+                style={{
+                  color: showFloorPropertiesPanel ? '#1890ff' : '#666',
+                  backgroundColor: showFloorPropertiesPanel ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+                  border: 'none',
+                  borderRadius: '4px'
+                }}
+              >
+                地面属性
+              </Button>
+              <Button
+                icon={<BuildOutlined />}
+                size="small"
+                type="text"
+                onClick={() => {
+                  setShowWallPropertiesPanel(!showWallPropertiesPanel);
+                  if (!showWallPropertiesPanel) {
+                    setShowFloorPropertiesPanel(false);
+                  }
+                }}
+                style={{
+                  color: showWallPropertiesPanel ? '#1890ff' : '#666',
+                  backgroundColor: showWallPropertiesPanel ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+                  border: 'none',
+                  borderRadius: '4px'
+                }}
+              >
+                墙体属性
+              </Button>
+            </>
+          )}
         </Space>
       </div>
 

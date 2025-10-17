@@ -364,10 +364,31 @@ const DigitalTwin: React.FC = () => {
 
   // 返回全场景视图（重置视图）
   const handleBackToOverview = () => {
+    console.log('handleBackToOverview 被调用');
+    console.log('threeSceneRef.current:', threeSceneRef.current);
+    
     // 重置视图时设置为全部楼层
     setSelectedFloor('all');
-    if (threeSceneRef.current && threeSceneRef.current.setAllFloorsView) {
-      threeSceneRef.current.setAllFloorsView();
+    if (threeSceneRef.current) {
+      console.log('ThreeScene 引用存在，开始调用方法');
+      
+      // 先显示所有楼层
+      if (threeSceneRef.current.setAllFloorsView) {
+        console.log('调用 setAllFloorsView');
+        threeSceneRef.current.setAllFloorsView();
+      } else {
+        console.error('setAllFloorsView 方法不存在');
+      }
+      
+      // 然后重置相机到初始位置
+      if (threeSceneRef.current.resetView) {
+        console.log('调用 resetView');
+        threeSceneRef.current.resetView();
+      } else {
+        console.error('resetView 方法不存在');
+      }
+    } else {
+      console.error('threeSceneRef.current 为空');
     }
     message.success('已重置到初始3D视图视角');
   };
