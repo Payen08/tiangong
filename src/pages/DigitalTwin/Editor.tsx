@@ -1320,15 +1320,32 @@ const DigitalTwinEditor: React.FC = () => {
   // 选中墙体状态
   const [selectedWallId, setSelectedWallId] = useState<string | null>(null);
 
+  // 计算初始屏幕中心坐标的函数
+  const getInitialCenterOffset = () => {
+    // 获取视口尺寸
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    // 画布现在覆盖整个视口，不需要考虑面板的影响
+    // 返回视口中心坐标
+    return {
+      centerX: viewportWidth / 2,
+      centerY: viewportHeight / 2
+    };
+  };
+
   // 画布相关状态
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const threeDEditorRef = useRef<ThreeDEditorRef>(null);
   const [scale, setScale] = useState(1);
-  const [offsetX, setOffsetX] = useState(0);
-  const [offsetY, setOffsetY] = useState(0);// 画布拖拽状态
+  const [offsetX, setOffsetX] = useState(() => getInitialCenterOffset().centerX);
+  const [offsetY, setOffsetY] = useState(() => getInitialCenterOffset().centerY);// 画布拖拽状态
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isSpacePressed, setIsSpacePressed] = useState(false); // 空格键状态
+  
+  // 框选开始坐标的ref，用于全局事件监听器访问
+  const selectionStartRef = useRef<WallPoint | null>(null);
 
 
   // 地面绘制相关状态
@@ -1466,68 +1483,7 @@ const DigitalTwinEditor: React.FC = () => {
 
 
 
-  // 初始化画布偏移量，让原点显示在屏幕中心
-  useEffect(() => {
-    const initializeCanvasOffset = () => {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        
-        // 确保画布已经有有效的尺寸
-        if (rect.width > 0 && rect.height > 0) {
-          const centerX = rect.width / 2;
-          const centerY = rect.height / 2;
-          
-          // 设置偏移量，使世界坐标原点(0,0)显示在屏幕中心
-          setOffsetX(centerX);
-          setOffsetY(centerY);
-          
-          console.log('🎯 初始化画布偏移量:', { centerX, centerY, canvasWidth: rect.width, canvasHeight: rect.height });
-        } else {
-          // 如果画布尺寸为0，延迟重试
-          console.log('⏳ 画布尺寸为0，延迟重试...');
-          setTimeout(initializeCanvasOffset, 100);
-        }
-      }
-    };
 
-    // 使用 requestAnimationFrame 确保DOM已经渲染完成
-    requestAnimationFrame(() => {
-      // 再添加一个小延迟确保画布完全渲染
-      setTimeout(initializeCanvasOffset, 50);
-    });
-  }, [viewMode]); // 当视图模式改变时重新计算
-
-  // 组件挂载时的初始化，确保页面刷新后原点在屏幕中心
-  useEffect(() => {
-    const initializeOnMount = () => {
-      const canvas = canvasRef.current;
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect();
-        
-        // 确保画布已经有有效的尺寸
-        if (rect.width > 0 && rect.height > 0) {
-          const centerX = rect.width / 2;
-          const centerY = rect.height / 2;
-          
-          // 设置偏移量，使世界坐标原点(0,0)显示在屏幕中心
-          setOffsetX(centerX);
-          setOffsetY(centerY);
-          
-          console.log('🚀 组件挂载时初始化画布偏移量:', { centerX, centerY, canvasWidth: rect.width, canvasHeight: rect.height });
-        } else {
-          // 如果画布尺寸为0，延迟重试
-          console.log('⏳ 组件挂载时画布尺寸为0，延迟重试...');
-          setTimeout(initializeOnMount, 100);
-        }
-      }
-    };
-
-    // 延迟执行，确保DOM完全渲染
-    const timer = setTimeout(initializeOnMount, 100);
-    
-    return () => clearTimeout(timer);
-  }, []); // 只在组件挂载时执行一次
 
   // 监听面板状态变化，重新计算偏移量以保持原点在屏幕中心
   useEffect(() => {
@@ -1552,7 +1508,8 @@ const DigitalTwinEditor: React.FC = () => {
               canvasWidth: rect.width, 
               canvasHeight: rect.height,
               leftPanelVisible,
-              rightPanelVisible
+              rightPanelVisible,
+              isFullscreen
             });
           }
         }, 50); // 50ms延迟确保CSS动画和布局更新完成
@@ -1560,7 +1517,7 @@ const DigitalTwinEditor: React.FC = () => {
     };
 
     recalculateOffset();
-  }, [leftPanelVisible, rightPanelVisible, viewMode]); // 监听面板状态和视图模式变化
+  }, [leftPanelVisible, rightPanelVisible, viewMode, isFullscreen]); // 监听面板状态、视图模式和全屏状态变化
 
   // 连线状态管理（参考地图编辑器）
   const [isConnecting, setIsConnecting] = useState(false); // 是否正在连线
@@ -1608,9 +1565,13 @@ const DigitalTwinEditor: React.FC = () => {
   const [selectedSegments, setSelectedSegments] = useState<{wallId: string, segmentIndex: number}[]>([]);
   // 地面选择状态
   const [selectedFloorAreas, setSelectedFloorAreas] = useState<string[]>([]);
+  // 地面端点选择状态
+  const [selectedFloorEndpoint, setSelectedFloorEndpoint] = useState<{floorId: string, pointIndex: number} | null>(null);
+  const [isDraggingFloorEndpoint, setIsDraggingFloorEndpoint] = useState(false);
 
   // 端点相关状态
   const [hoveredEndpoint, setHoveredEndpoint] = useState<{wallId: string, pointIndex: number} | null>(null);
+  const [hoveredFloorEndpoint, setHoveredFloorEndpoint] = useState<{floorId: string, pointIndex: number} | null>(null);
 
   const [nearbyEndpoints, setNearbyEndpoints] = useState<{wallId: string, pointIndex: number, point: WallPoint}[]>([]); // 绘制模式下附近的端点
 
@@ -1750,8 +1711,56 @@ const DigitalTwinEditor: React.FC = () => {
       setLeftPanelVisible(true);
       setRightPanelVisible(true);
       setAllPanelsVisible(true);
+      
+      // 重新计算偏移量，确保画布内容居中显示
+      setTimeout(() => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            
+            // 将偏移量设置为画布中心，使世界坐标原点(0,0)显示在屏幕中心
+            setOffsetX(centerX);
+            setOffsetY(centerY);
+            
+            console.log('✅ 顶视图切换：重新计算偏移量', { 
+              centerX, 
+              centerY, 
+              canvasWidth: rect.width, 
+              canvasHeight: rect.height 
+            });
+          }
+        }
+      }, 100); // 延迟100ms确保面板状态更新完成
     }
   }, [viewMode]);
+
+  // 监听浏览器全屏状态变化，确保状态同步
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!document.fullscreenElement;
+      console.log('🔍 [全屏监听] 浏览器全屏状态变化:', isCurrentlyFullscreen);
+      
+      // 如果浏览器全屏状态与组件状态不一致，则同步状态
+      if (isCurrentlyFullscreen !== isFullscreen) {
+        console.log('🔄 [全屏监听] 状态不一致，同步状态:', {
+          browser: isCurrentlyFullscreen,
+          component: isFullscreen
+        });
+        setIsFullscreen(isCurrentlyFullscreen);
+      }
+    };
+
+    // 添加全屏状态变化监听器
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    
+    // 清理函数
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, [isFullscreen]);
 
   // 面板切换函数
   const toggleLeftPanel = () => {
@@ -1797,30 +1806,7 @@ const DigitalTwinEditor: React.FC = () => {
     }
   };
 
-  // 应用3D设置到选中墙体
-  const applyWall3DSettings = () => {
-    if (!selectedWallId) {
-      message.warning('请先选择一个墙体');
-      return;
-    }
-
-    setWalls(prevWalls => 
-      prevWalls.map(wall => {
-        if (wall.id === selectedWallId) {
-          return {
-            ...wall,
-            width: selectedWall3DProps.width,
-            thickness: selectedWall3DProps.thickness * 100, // 转换为像素
-            height: selectedWall3DProps.height * 100, // 转换为像素
-            color: selectedWall3DProps.color
-          };
-        }
-        return wall;
-      })
-    );
-
-    message.success('墙体属性已更新');
-  };
+  // 应用3D设置到选中墙体的函数已被移除（未使用）
 
   // 重置3D设置
   const resetWall3DSettings = () => {
@@ -2231,8 +2217,11 @@ const DigitalTwinEditor: React.FC = () => {
         setSelectedWalls([]);
         setSelectedSegments([]);
         setSelectedEndpoint(null);
+        setSelectedFloorEndpoint(null);  // 取消地面端点选择
+        setSelectedFloorAreas([]);  // 取消地面区域选择
         setIsSelecting(false);
         setIsDraggingEndpoint(false);
+        setIsDraggingFloorEndpoint(false);  // 取消地面端点拖拽
         setBezierEditMode({
            isEditing: false,
            wallId: null,
@@ -2456,6 +2445,53 @@ const DigitalTwinEditor: React.FC = () => {
               });
             }
           }
+        } else if (selectedFloorEndpoint) {
+          // 处理地面端点移动
+          e.preventDefault();
+          const moveDistance = e.shiftKey ? 10 : 1; // Shift键加速移动
+          let deltaX = 0;
+          let deltaY = 0;
+          
+          switch (e.key) {
+            case 'ArrowUp':
+              deltaY = -moveDistance;
+              break;
+            case 'ArrowDown':
+              deltaY = moveDistance;
+              break;
+            case 'ArrowLeft':
+              deltaX = -moveDistance;
+              break;
+            case 'ArrowRight':
+              deltaX = moveDistance;
+              break;
+          }
+          
+          console.log('🎯 键盘移动地面端点 - 计算移动量:', {
+            deltaX,
+            deltaY,
+            moveDistance,
+            selectedFloorEndpoint
+          });
+          
+          // 更新地面端点位置
+          setFloorAreas(prev => 
+            prev.map(floor => {
+              if (floor.id === selectedFloorEndpoint.floorId) {
+                const newPoints = [...floor.points];
+                const pointIndex = selectedFloorEndpoint.pointIndex;
+                newPoints[pointIndex] = {
+                  x: newPoints[pointIndex].x + deltaX,
+                  y: newPoints[pointIndex].y + deltaY
+                };
+                return { ...floor, points: newPoints };
+              }
+              return floor;
+            })
+          );
+          
+          // 注意：selectedFloorEndpoint 只包含 floorId 和 pointIndex，不需要更新坐标
+          // 坐标已经在上面的 setFloorAreas 中更新了
         } else {
           console.log('⚠️ 键盘移动 - 没有选中的端点或CNC机台');
         }
@@ -2490,7 +2526,8 @@ const DigitalTwinEditor: React.FC = () => {
     isDrawingFloor,
     currentFloorPoints,
     completeFloorDrawing,
-    cancelFloorDrawing
+    cancelFloorDrawing,
+    selectedFloorEndpoint
   ]); // 添加地面绘制相关依赖项
 
 
@@ -2643,21 +2680,7 @@ const DigitalTwinEditor: React.FC = () => {
     }));
   }, []);
 
-  const handleCNCMachineRotate = useCallback((machineId: string, direction: 'clockwise' | 'counterclockwise') => {
-    // 这里可以添加旋转逻辑，目前先显示消息
-    const rotationText = direction === 'clockwise' ? '顺时针' : '逆时针';
-    message.info(`CNC机台 ${machineId} ${rotationText}旋转`);
-    
-    // 如果CNC机台有旋转角度属性，可以在这里更新
-    // setCncMachines(prev => prev.map(machine => {
-    //   if (machine.id === machineId) {
-    //     const rotationStep = 15; // 每次旋转15度
-    //     const newRotation = (machine.rotation || 0) + (direction === 'clockwise' ? rotationStep : -rotationStep);
-    //     return { ...machine, rotation: newRotation % 360 };
-    //   }
-    //   return machine;
-    // }));
-  }, []);
+
 
   // CNC机台对齐功能
   const handleCNCMachineAlign = useCallback((alignType: 'left' | 'right' | 'top' | 'bottom' | 'horizontal' | 'vertical') => {
@@ -2756,76 +2779,51 @@ const DigitalTwinEditor: React.FC = () => {
         const isSelected = selectedCNCMachines.includes(machine.id);
         if (!isSelected) continue;
         
-        const buttonSize = 16;
-        const buttonDistance = 30;
-        const rotateButtonSize = 12;
-        const rotateDistance = 35;
+        // 圆形按钮参数（与绘制时保持一致）
+        const buttonRadius = 12;
+        const buttonDistance = 45;
         
-        // 检查移动控制按钮
-        const upButtonX = machine.x;
-        const upButtonY = machine.y - buttonDistance;
-        if (point.x >= upButtonX - buttonSize / 2 && 
-            point.x <= upButtonX + buttonSize / 2 &&
-            point.y >= upButtonY - buttonSize / 2 && 
-            point.y <= upButtonY + buttonSize / 2) {
-          handleCNCMachineMove(machine.id, 'up');
-          return;
-        }
+        // 圆形按钮点击检测函数
+        const isPointInCircle = (px: number, py: number, cx: number, cy: number, radius: number): boolean => {
+          const dx = px - cx;
+          const dy = py - cy;
+          return Math.sqrt(dx * dx + dy * dy) <= radius;
+        };
         
         // 计算机台在画布上的位置（与绘制时保持一致）
         const canvasX = machine.x;
         const canvasY = machine.y;
         
+        // 检查移动控制按钮（圆形检测）
+        const upButtonX = canvasX;
+        const upButtonY = canvasY - buttonDistance;
+        if (isPointInCircle(point.x, point.y, upButtonX, upButtonY, buttonRadius)) {
+          handleCNCMachineMove(machine.id, 'up');
+          return;
+        }
+        
         const downButtonX = canvasX;
         const downButtonY = canvasY + buttonDistance;
-        if (point.x >= downButtonX - buttonSize / 2 && 
-            point.x <= downButtonX + buttonSize / 2 &&
-            point.y >= downButtonY - buttonSize / 2 && 
-            point.y <= downButtonY + buttonSize / 2) {
+        if (isPointInCircle(point.x, point.y, downButtonX, downButtonY, buttonRadius)) {
           handleCNCMachineMove(machine.id, 'down');
           return;
         }
         
         const leftButtonX = canvasX - buttonDistance;
         const leftButtonY = canvasY;
-        if (point.x >= leftButtonX - buttonSize / 2 && 
-            point.x <= leftButtonX + buttonSize / 2 &&
-            point.y >= leftButtonY - buttonSize / 2 && 
-            point.y <= leftButtonY + buttonSize / 2) {
+        if (isPointInCircle(point.x, point.y, leftButtonX, leftButtonY, buttonRadius)) {
           handleCNCMachineMove(machine.id, 'left');
           return;
         }
         
         const rightButtonX = canvasX + buttonDistance;
         const rightButtonY = canvasY;
-        if (point.x >= rightButtonX - buttonSize / 2 && 
-            point.x <= rightButtonX + buttonSize / 2 &&
-            point.y >= rightButtonY - buttonSize / 2 && 
-            point.y <= rightButtonY + buttonSize / 2) {
+        if (isPointInCircle(point.x, point.y, rightButtonX, rightButtonY, buttonRadius)) {
           handleCNCMachineMove(machine.id, 'right');
           return;
         }
         
-        // 检查旋转控制按钮
-        const clockwiseButtonX = canvasX + rotateDistance;
-        const clockwiseButtonY = canvasY + rotateDistance;
-        if (point.x >= clockwiseButtonX - rotateButtonSize / 2 && 
-            point.x <= clockwiseButtonX + rotateButtonSize / 2 &&
-            point.y >= clockwiseButtonY - rotateButtonSize / 2 && 
-            point.y <= clockwiseButtonY + rotateButtonSize / 2) {
-          handleCNCMachineRotate(machine.id, 'clockwise');
-          return;
-        }
-        
-        const counterClockwiseButtonX = canvasX - rotateDistance;
-        const counterClockwiseButtonY = canvasY + rotateDistance;
-        if (point.x >= counterClockwiseButtonX - rotateButtonSize / 2 && 
-            point.x <= counterClockwiseButtonX + rotateButtonSize / 2 &&
-            point.y >= counterClockwiseButtonY - rotateButtonSize / 2 && 
-            point.y <= counterClockwiseButtonY + rotateButtonSize / 2) {
-          handleCNCMachineRotate(machine.id, 'counterclockwise');
-          return;
-        }
+
       }
       
       // 然后检查是否点击了CNC机台本身
@@ -2855,9 +2853,29 @@ const DigitalTwinEditor: React.FC = () => {
               return [...prev, clickedCNCMachine.id];
             }
           });
+          
+          // 清除地面端点选择状态
+          setSelectedFloorEndpoint(null);
+          setIsDraggingFloorEndpoint(false);
+          setSelectedFloorAreas([]);
+          
+          // 清除墙体端点选择状态
+          setSelectedEndpoint(null);
+          setIsDraggingEndpoint(false);
+          setHoveredEndpoint(null);
         } else {
           // 普通点击：单选模式
           setSelectedCNCMachines([clickedCNCMachine.id]);
+          
+          // 清除地面端点选择状态
+          setSelectedFloorEndpoint(null);
+          setIsDraggingFloorEndpoint(false);
+          setSelectedFloorAreas([]);
+          
+          // 清除墙体端点选择状态
+          setSelectedEndpoint(null);
+          setIsDraggingEndpoint(false);
+          setHoveredEndpoint(null);
           
           // 开始拖拽移动
           setIsDraggingCNCMachine(true);
@@ -3121,6 +3139,20 @@ const DigitalTwinEditor: React.FC = () => {
     return { x: initialX, y: initialY };
   };
 
+  // 生成下一个可用的CNC机台名称
+  const generateNextCNCName = (): string => {
+    const existingNames = cncMachines.map(machine => machine.name);
+    let counter = 1;
+    
+    while (true) {
+      const newName = `CNC机台${counter.toString().padStart(3, '0')}`;
+      if (!existingNames.includes(newName)) {
+        return newName;
+      }
+      counter++;
+    }
+  };
+
   const handleDrop = (e: React.DragEvent<HTMLCanvasElement>) => {
     e.preventDefault();
     
@@ -3136,6 +3168,9 @@ const DigitalTwinEditor: React.FC = () => {
         // 寻找合适的放置位置
         const validPosition = findValidPosition(point.x, point.y, machineWidth, machineHeight);
         
+        // 生成唯一的CNC机台名称
+        const cncName = generateNextCNCName();
+        
         // 创建新的CNC机台
         const newCNCMachine: CNCMachine = {
           id: `cnc_${Date.now()}`,
@@ -3143,7 +3178,7 @@ const DigitalTwinEditor: React.FC = () => {
           y: validPosition.y,
           width: machineWidth,
           height: machineHeight,
-          name: modelData.name,
+          name: cncName,
           type: 'cnc',
           color: '#1890ff',
           selected: false,
@@ -3160,9 +3195,9 @@ const DigitalTwinEditor: React.FC = () => {
         
         // 如果位置被调整，提示用户
         if (validPosition.x !== point.x || validPosition.y !== point.y) {
-          message.success(`已添加CNC机台: ${modelData.name}（位置已自动调整以避免重叠）`);
+          message.success(`已添加CNC机台: ${cncName}（位置已自动调整以避免重叠）`);
         } else {
-          message.success(`已添加CNC机台: ${modelData.name}`);
+          message.success(`已添加CNC机台: ${cncName}`);
         }
       }
     } catch (error) {
@@ -3300,10 +3335,18 @@ const DigitalTwinEditor: React.FC = () => {
           return wall;
         }));
       }
-    } else if (isSelecting && selectionStart) {
-      // 框选拖拽
-      setSelectionEnd(point);
+    } else if (isDraggingFloorEndpoint && selectedFloorEndpoint) {
+      // 拖拽地面端点
+      setFloorAreas(prev => prev.map(floor => {
+        if (floor.id === selectedFloorEndpoint.floorId) {
+          const newPoints = [...floor.points];
+          newPoints[selectedFloorEndpoint.pointIndex] = point;
+          return { ...floor, points: newPoints };
+        }
+        return floor;
+      }));
     } else {
+      // 框选更新逻辑已移至全局事件监听器中处理
       // 检测端点悬停
       let foundHoveredEndpoint = null;
       for (const wall of walls) {
@@ -3314,6 +3357,17 @@ const DigitalTwinEditor: React.FC = () => {
         }
       }
       setHoveredEndpoint(foundHoveredEndpoint);
+      
+      // 检测地面端点悬停
+      let foundHoveredFloorEndpoint = null;
+      for (const floor of floorAreas) {
+        const hoveredFloorEndpoint = checkFloorEndpointHover(point, floor);
+        if (hoveredFloorEndpoint) {
+          foundHoveredFloorEndpoint = hoveredFloorEndpoint;
+          break;
+        }
+      }
+      setHoveredFloorEndpoint(foundHoveredFloorEndpoint);
       
       // 只在实际绘制状态下查找附近端点
       // 使用ref值获取最新状态，避免状态更新时序问题
@@ -3391,6 +3445,13 @@ const DigitalTwinEditor: React.FC = () => {
       console.log('🔚 结束端点拖拽，保持选中状态');
     }
     
+    // 结束地面端点拖拽
+    if (isDraggingFloorEndpoint) {
+      setIsDraggingFloorEndpoint(false);
+      // 保持地面端点选中状态，以支持键盘移动功能
+      console.log('🔚 结束地面端点拖拽，保持选中状态');
+    }
+    
     // 结束CNC机台拖拽
     if (isDraggingCNCMachine) {
       setIsDraggingCNCMachine(false);
@@ -3416,24 +3477,7 @@ const DigitalTwinEditor: React.FC = () => {
       }
     }
 
-    // 结束框选
-    if (isSelecting && selectionStart && selectionEnd) {
-      // 框选墙体（在所有视图模式下都可以框选墙体）
-      const selectedWallIds = getWallsInSelection(selectionStart, selectionEnd);
-      setSelectedWalls(selectedWallIds);
-      console.log('🎯 框选墙体:', selectedWallIds);
-      
-      // 在顶视图模式下，同时框选CNC机台
-      if (viewMode === 'top') {
-        const selectedCNCMachineIds = getCNCMachinesInSelection(selectionStart, selectionEnd);
-        setSelectedCNCMachines(selectedCNCMachineIds);
-        console.log('🎯 框选CNC机台:', selectedCNCMachineIds);
-      }
-      
-      setIsSelecting(false);
-      setSelectionStart(null);
-      setSelectionEnd(null);
-    }
+    // 框选结束逻辑已移至全局事件监听器中处理
   };
 
   // 获取框选区域内的墙体
@@ -3884,6 +3928,29 @@ const DigitalTwinEditor: React.FC = () => {
       // 清除其他选择状态
       setSelectedWalls([]);
       setSelectedSegments([]);
+      setSelectedFloorAreas([]);
+      setSelectedFloorEndpoint(null);
+      setBezierEditMode({
+        isEditing: false,
+        wallId: null,
+        isDraggingControl: false,
+        activeControlPoint: null
+      });
+      return;
+    }
+
+    // 检查是否点击了地面端点 - 地面端点选择优先级次高
+    const floorEndpointHit = checkFloorEndpointClick(point, floorAreas);
+    console.log('地面端点检测:', { floorEndpointHit });
+    if (floorEndpointHit && isSelectTool) {
+      console.log('地面端点命中:', floorEndpointHit);
+      setSelectedFloorEndpoint(floorEndpointHit);
+      setIsDraggingFloorEndpoint(true);
+      // 清除其他选择状态
+      setSelectedWalls([]);
+      setSelectedSegments([]);
+      setSelectedFloorAreas([]);
+      setSelectedEndpoint(null);
       setBezierEditMode({
         isEditing: false,
         wallId: null,
@@ -4067,7 +4134,11 @@ const DigitalTwinEditor: React.FC = () => {
     setSelectedWalls([]);
     setSelectedSegments([]);
     setSelectedEndpoint(null);
+    setIsDraggingEndpoint(false); // 清除墙体端点拖拽状态
+    setHoveredEndpoint(null); // 清除墙体端点悬停状态
     setSelectedFloorAreas([]);
+    setSelectedFloorEndpoint(null); // 清除地面端点选择
+    setIsDraggingFloorEndpoint(false); // 清除地面端点拖拽状态
     setBezierEditMode({
       isEditing: false,
       wallId: null,
@@ -4077,8 +4148,55 @@ const DigitalTwinEditor: React.FC = () => {
     
     // 开始框选
     setIsSelecting(true);
-    setSelectionStart({ x, y });
-    setSelectionEnd({ x, y });
+    setSelectionStart({ x: point.x, y: point.y });
+    setSelectionEnd({ x: point.x, y: point.y });
+    selectionStartRef.current = { x: point.x, y: point.y }; // 保存到ref中
+    
+    // 添加全局鼠标事件监听器，确保鼠标移出画布时框选仍能正常工作
+    const handleGlobalMouseMove = (event: MouseEvent) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const screenX = event.clientX;
+      const screenY = event.clientY;
+      
+      // 将屏幕坐标转换为画布坐标
+      const canvasPoint = screenToCanvas(screenX, screenY);
+      setSelectionEnd({ x: canvasPoint.x, y: canvasPoint.y });
+    };
+    
+    const handleGlobalMouseUp = (event: MouseEvent) => {
+      // 移除全局事件监听器
+      document.removeEventListener('mousemove', handleGlobalMouseMove);
+      document.removeEventListener('mouseup', handleGlobalMouseUp);
+      
+      // 使用ref获取框选开始坐标，使用当前鼠标位置作为结束坐标
+      const currentSelectionStart = selectionStartRef.current;
+      const currentSelectionEnd = screenToCanvas(event.clientX, event.clientY);
+      
+      if (currentSelectionStart && currentSelectionEnd) {
+        // 框选墙体（在所有视图模式下都可以框选墙体）
+        const selectedWallIds = getWallsInSelection(currentSelectionStart, currentSelectionEnd);
+        setSelectedWalls(selectedWallIds);
+        console.log('🎯 框选墙体:', selectedWallIds);
+        
+        // 在顶视图模式下，同时框选CNC机台
+        if (viewMode === 'top') {
+          const selectedCNCMachineIds = getCNCMachinesInSelection(currentSelectionStart, currentSelectionEnd);
+          setSelectedCNCMachines(selectedCNCMachineIds);
+          console.log('🎯 框选CNC机台:', selectedCNCMachineIds);
+        }
+      }
+      
+      setIsSelecting(false);
+      setSelectionStart(null);
+      setSelectionEnd(null);
+      selectionStartRef.current = null;
+    };
+    
+    // 添加全局事件监听器
+    document.addEventListener('mousemove', handleGlobalMouseMove);
+    document.addEventListener('mouseup', handleGlobalMouseUp);
   };
 
 
@@ -4938,6 +5056,40 @@ const DigitalTwinEditor: React.FC = () => {
     });
   }, [scale]);
 
+  // 检测点击是否在地面端点上
+  const checkFloorEndpointClick = useCallback((mousePoint: WallPoint, floorAreaList: FloorArea[]): { floorId: string; pointIndex: number } | null => {
+    const endpointRadius = 8 / scale; // 端点点击半径，考虑缩放
+    
+    for (const floor of floorAreaList) {
+      if (!floor.completed) continue; // 只检测已完成的地面
+      
+      for (let i = 0; i < floor.points.length; i++) {
+        const point = floor.points[i];
+        const distance = Math.sqrt((mousePoint.x - point.x) ** 2 + (mousePoint.y - point.y) ** 2);
+        if (distance <= endpointRadius) {
+          return { floorId: floor.id, pointIndex: i };
+        }
+      }
+    }
+    return null;
+  }, [scale]);
+
+  // 检测鼠标是否悬停在地面端点上
+  const checkFloorEndpointHover = useCallback((mousePoint: WallPoint, floor: FloorArea): { floorId: string; pointIndex: number } | null => {
+    const hoverRadius = 12 / scale; // 悬停检测半径，比点击半径稍大
+    
+    if (!floor.completed) return null; // 只检测已完成的地面
+    
+    for (let i = 0; i < floor.points.length; i++) {
+      const point = floor.points[i];
+      const distance = Math.sqrt((mousePoint.x - point.x) ** 2 + (mousePoint.y - point.y) ** 2);
+      if (distance <= hoverRadius) {
+        return { floorId: floor.id, pointIndex: i };
+      }
+    }
+    return null;
+  }, [scale]);
+
   // 画布绘制
   // 画布绘制函数
   const drawCanvas = useCallback(() => {
@@ -5077,13 +5229,46 @@ const DigitalTwinEditor: React.FC = () => {
           ctx.stroke();
 
           // 绘制地面顶点
-          floor.points.forEach((point: WallPoint) => {
-            ctx.fillStyle = isSelected 
-              ? '#1890ff' // 选中时蓝色顶点
-              : '#666666'; // 默认深灰色顶点
+          floor.points.forEach((point: WallPoint, pointIndex: number) => {
+            // 检查是否是选中的端点
+            const isSelectedEndpoint = selectedFloorEndpoint && 
+              selectedFloorEndpoint.floorId === floor.id && 
+              selectedFloorEndpoint.pointIndex === pointIndex;
+            
+            // 检查是否是悬停的端点
+            const isHoveredEndpoint = hoveredFloorEndpoint && 
+              hoveredFloorEndpoint.floorId === floor.id && 
+              hoveredFloorEndpoint.pointIndex === pointIndex;
+            
+            // 设置端点样式
+            if (isSelectedEndpoint) {
+              ctx.fillStyle = '#ff4d4f'; // 选中端点红色
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 2 / scale;
+            } else if (isHoveredEndpoint) {
+              ctx.fillStyle = '#52c41a'; // 悬停端点绿色
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 1 / scale;
+            } else if (isSelected) {
+              ctx.fillStyle = '#1890ff'; // 选中地面时蓝色顶点
+              ctx.strokeStyle = 'transparent';
+            } else {
+              ctx.fillStyle = '#666666'; // 默认深灰色顶点
+              ctx.strokeStyle = 'transparent';
+            }
+            
+            // 绘制端点
             ctx.beginPath();
-            ctx.arc(point.x, point.y, isSelected ? 4 / scale : 3 / scale, 0, Math.PI * 2);
+            const radius = isSelectedEndpoint ? 6 / scale : 
+                          isHoveredEndpoint ? 5 / scale :
+                          isSelected ? 4 / scale : 3 / scale;
+            ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
             ctx.fill();
+            
+            // 绘制端点边框（仅在选中或悬停时）
+            if (isSelectedEndpoint || isHoveredEndpoint) {
+              ctx.stroke();
+            }
           });
         }
       });
@@ -5740,19 +5925,26 @@ const DigitalTwinEditor: React.FC = () => {
     if (isSelecting && selectionStart && selectionEnd) {
       ctx.save();
       
-      // 使用当前的变换矩阵，保持与画布内容的一致性
+      // 应用画布变换矩阵，确保框选矩形与其他元素在同一坐标系中
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+      
       ctx.strokeStyle = '#1890ff';
       ctx.fillStyle = 'rgba(24, 144, 255, 0.1)';
       ctx.lineWidth = 1 / scale; // 根据缩放调整线宽，保持视觉一致性
       ctx.setLineDash([5 / scale, 5 / scale]); // 根据缩放调整虚线间距
       
-      const x = Math.min(selectionStart.x, selectionEnd.x);
-      const y = Math.min(selectionStart.y, selectionEnd.y);
-      const width = Math.abs(selectionEnd.x - selectionStart.x);
-      const height = Math.abs(selectionEnd.y - selectionStart.y);
+      // 计算矩形的左上角坐标和宽高，支持任意方向拖动
+      const minX = Math.min(selectionStart.x, selectionEnd.x);
+      const minY = Math.min(selectionStart.y, selectionEnd.y);
+      const maxX = Math.max(selectionStart.x, selectionEnd.x);
+      const maxY = Math.max(selectionStart.y, selectionEnd.y);
+      const width = maxX - minX;
+      const height = maxY - minY;
       
-      ctx.fillRect(x, y, width, height);
-      ctx.strokeRect(x, y, width, height);
+      // 绘制框选矩形
+      ctx.fillRect(minX, minY, width, height);
+      ctx.strokeRect(minX, minY, width, height);
       
       ctx.restore();
     }
@@ -5999,192 +6191,91 @@ const DigitalTwinEditor: React.FC = () => {
           
           ctx.setLineDash([]); // 重置虚线
           
-          // 绘制控制按钮
-          const buttonSize = 16; // 控制按钮尺寸
-          const buttonDistance = 50; // 控制按钮距离机台中心的距离
+          // 绘制控制按钮 - 参考地图编辑器的圆形按钮设计
+          const buttonRadius = 12; // 控制按钮半径
+          const buttonDistance = 45; // 控制按钮距离机台中心的距离
           
-          // 按钮样式设置
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-          ctx.strokeStyle = '#d9d9d9';
-          ctx.lineWidth = 1 / scale;
+          // 绘制圆形移动按钮的通用函数
+          const drawCircleButton = (x: number, y: number, direction: 'up' | 'down' | 'left' | 'right') => {
+            // 绘制按钮背景圆形
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#d9d9d9';
+            ctx.lineWidth = 1 / scale;
+            ctx.beginPath();
+            ctx.arc(x, y, buttonRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+            
+            // 添加阴影效果
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+            ctx.shadowBlur = 4 / scale;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 2 / scale;
+            ctx.beginPath();
+            ctx.arc(x, y, buttonRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // 重置阴影
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            
+            // 绘制箭头图标
+            ctx.fillStyle = '#1890ff';
+            ctx.strokeStyle = '#1890ff';
+            ctx.lineWidth = 2 / scale;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            const arrowSize = 4;
+            ctx.beginPath();
+            
+            switch (direction) {
+              case 'up':
+                // 上箭头
+                ctx.moveTo(x, y - arrowSize);
+                ctx.lineTo(x - arrowSize, y + arrowSize);
+                ctx.moveTo(x, y - arrowSize);
+                ctx.lineTo(x + arrowSize, y + arrowSize);
+                break;
+              case 'down':
+                // 下箭头
+                ctx.moveTo(x, y + arrowSize);
+                ctx.lineTo(x - arrowSize, y - arrowSize);
+                ctx.moveTo(x, y + arrowSize);
+                ctx.lineTo(x + arrowSize, y - arrowSize);
+                break;
+              case 'left':
+                // 左箭头
+                ctx.moveTo(x - arrowSize, y);
+                ctx.lineTo(x + arrowSize, y - arrowSize);
+                ctx.moveTo(x - arrowSize, y);
+                ctx.lineTo(x + arrowSize, y + arrowSize);
+                break;
+              case 'right':
+                // 右箭头
+                ctx.moveTo(x + arrowSize, y);
+                ctx.lineTo(x - arrowSize, y - arrowSize);
+                ctx.moveTo(x + arrowSize, y);
+                ctx.lineTo(x - arrowSize, y + arrowSize);
+                break;
+            }
+            ctx.stroke();
+          };
           
-          // 上移按钮
-          const upButtonX = canvasX;
-          const upButtonY = canvasY - buttonDistance;
-          ctx.fillRect(
-            upButtonX - buttonSize / 2,
-            upButtonY - buttonSize / 2,
-            buttonSize,
-            buttonSize
-          );
-          ctx.strokeRect(
-            upButtonX - buttonSize / 2,
-            upButtonY - buttonSize / 2,
-            buttonSize,
-            buttonSize
-          );
+          // 绘制四个方向的移动按钮
+          drawCircleButton(canvasX, canvasY - buttonDistance, 'up');     // 上移按钮
+          drawCircleButton(canvasX, canvasY + buttonDistance, 'down');   // 下移按钮
+          drawCircleButton(canvasX - buttonDistance, canvasY, 'left');   // 左移按钮
+          drawCircleButton(canvasX + buttonDistance, canvasY, 'right');  // 右移按钮
           
-          // 绘制上箭头
-          ctx.fillStyle = '#666';
-          ctx.beginPath();
-          ctx.moveTo(upButtonX, upButtonY - 4);
-          ctx.lineTo(upButtonX - 4, upButtonY + 2);
-          ctx.lineTo(upButtonX + 4, upButtonY + 2);
-          ctx.closePath();
-          ctx.fill();
-          
-          // 下移按钮
-          const downButtonX = canvasX;
-          const downButtonY = canvasY + buttonDistance;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-          ctx.fillRect(
-            downButtonX - buttonSize / 2,
-            downButtonY - buttonSize / 2,
-            buttonSize,
-            buttonSize
-          );
-          ctx.strokeRect(
-            downButtonX - buttonSize / 2,
-            downButtonY - buttonSize / 2,
-            buttonSize,
-            buttonSize
-          );
-          
-          // 绘制下箭头
-          ctx.fillStyle = '#666';
-          ctx.beginPath();
-          ctx.moveTo(downButtonX, downButtonY + 4);
-          ctx.lineTo(downButtonX - 4, downButtonY - 2);
-          ctx.lineTo(downButtonX + 4, downButtonY - 2);
-          ctx.closePath();
-          ctx.fill();
-          
-          // 左移按钮
-          const leftButtonX = canvasX - buttonDistance;
-          const leftButtonY = canvasY;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-          ctx.fillRect(
-            leftButtonX - buttonSize / 2,
-            leftButtonY - buttonSize / 2,
-            buttonSize,
-            buttonSize
-          );
-          ctx.strokeRect(
-            leftButtonX - buttonSize / 2,
-            leftButtonY - buttonSize / 2,
-            buttonSize,
-            buttonSize
-          );
-          
-          // 绘制左箭头
-          ctx.fillStyle = '#666';
-          ctx.beginPath();
-          ctx.moveTo(leftButtonX - 4, leftButtonY);
-          ctx.lineTo(leftButtonX + 2, leftButtonY - 4);
-          ctx.lineTo(leftButtonX + 2, leftButtonY + 4);
-          ctx.closePath();
-          ctx.fill();
-          
-          // 右移按钮
-          const rightButtonX = canvasX + buttonDistance;
-          const rightButtonY = canvasY;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-          ctx.fillRect(
-            rightButtonX - buttonSize / 2,
-            rightButtonY - buttonSize / 2,
-            buttonSize,
-            buttonSize
-          );
-          ctx.strokeRect(
-            rightButtonX - buttonSize / 2,
-            rightButtonY - buttonSize / 2,
-            buttonSize,
-            buttonSize
-          );
-          
-          // 绘制右箭头
-          ctx.fillStyle = '#666';
-          ctx.beginPath();
-          ctx.moveTo(rightButtonX + 4, rightButtonY);
-          ctx.lineTo(rightButtonX - 2, rightButtonY - 4);
-          ctx.lineTo(rightButtonX - 2, rightButtonY + 4);
-          ctx.closePath();
-          ctx.fill();
-          
-          // 旋转控制按钮
-          const rotateButtonSize = 12; // 旋转按钮稍小一些
-          const rotateDistance = 35; // 旋转按钮距离机台中心的距离（对角线位置）
-          
-          // 顺时针旋转按钮（右下角）
-          const clockwiseButtonX = canvasX + rotateDistance;
-          const clockwiseButtonY = canvasY + rotateDistance;
-          ctx.fillStyle = 'rgba(255, 193, 7, 0.9)'; // 黄色背景
-          ctx.strokeStyle = '#ffc107';
-          ctx.fillRect(
-            clockwiseButtonX - rotateButtonSize / 2,
-            clockwiseButtonY - rotateButtonSize / 2,
-            rotateButtonSize,
-            rotateButtonSize
-          );
-          ctx.strokeRect(
-            clockwiseButtonX - rotateButtonSize / 2,
-            clockwiseButtonY - rotateButtonSize / 2,
-            rotateButtonSize,
-            rotateButtonSize
-          );
-          
-          // 绘制顺时针旋转图标
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1.5 / scale;
-          ctx.beginPath();
-          ctx.arc(clockwiseButtonX, clockwiseButtonY, 3, 0, Math.PI * 1.5);
-          ctx.stroke();
-          // 箭头
-          ctx.fillStyle = '#fff';
-          ctx.beginPath();
-          ctx.moveTo(clockwiseButtonX + 3, clockwiseButtonY);
-          ctx.lineTo(clockwiseButtonX + 1, clockwiseButtonY - 2);
-          ctx.lineTo(clockwiseButtonX + 1, clockwiseButtonY + 2);
-          ctx.closePath();
-          ctx.fill();
-          
-          // 逆时针旋转按钮（左下角）
-          const counterClockwiseButtonX = canvasX - rotateDistance;
-          const counterClockwiseButtonY = canvasY + rotateDistance;
-          ctx.fillStyle = 'rgba(255, 193, 7, 0.9)'; // 黄色背景
-          ctx.strokeStyle = '#ffc107';
-          ctx.fillRect(
-            counterClockwiseButtonX - rotateButtonSize / 2,
-            counterClockwiseButtonY - rotateButtonSize / 2,
-            rotateButtonSize,
-            rotateButtonSize
-          );
-          ctx.strokeRect(
-            counterClockwiseButtonX - rotateButtonSize / 2,
-            counterClockwiseButtonY - rotateButtonSize / 2,
-            rotateButtonSize,
-            rotateButtonSize
-          );
-          
-          // 绘制逆时针旋转图标
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1.5 / scale;
-          ctx.beginPath();
-          ctx.arc(counterClockwiseButtonX, counterClockwiseButtonY, 3, Math.PI * 0.5, 0);
-          ctx.stroke();
-          // 箭头
-          ctx.fillStyle = '#fff';
-          ctx.beginPath();
-          ctx.moveTo(counterClockwiseButtonX - 3, counterClockwiseButtonY);
-          ctx.lineTo(counterClockwiseButtonX - 1, counterClockwiseButtonY - 2);
-          ctx.lineTo(counterClockwiseButtonX - 1, counterClockwiseButtonY + 2);
-          ctx.closePath();
-          ctx.fill();
+
         }
         
         // 绘制机台名称
         ctx.fillStyle = '#000000';
-        ctx.font = `${12 / scale}px Arial`;
+        ctx.font = `${10 / scale}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(
@@ -6239,10 +6330,8 @@ const DigitalTwinEditor: React.FC = () => {
           style={{
             position: 'absolute',
             top: 0,
-            left: leftPanelVisible ? '240px' : '0',
-            right: rightPanelVisible ? '240px' : '0',
-            width: leftPanelVisible && rightPanelVisible ? 'calc(100% - 480px)' : 
-                   leftPanelVisible || rightPanelVisible ? 'calc(100% - 240px)' : '100%',
+            left: 0,
+            width: '100%',
             height: '100%',
             cursor: isDragging ? 'grabbing' : 'grab',
             backgroundColor: '#f5f5f5',
