@@ -204,6 +204,7 @@ interface FloorScene {
 interface ThreeDEditorRef {
   resetView: () => void;
   updateCNCMachines: (machines: CNCMachine[]) => void;
+  getScene: () => THREE.Scene | undefined;
 }
 
 // 3D编辑器组件接口
@@ -279,6 +280,9 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
       });
       
       console.log('✅ [3D-EDITOR] CNC机台更新完成');
+    },
+    getScene: () => {
+      return sceneRef.current;
     }
   }), []);
   
@@ -331,9 +335,6 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
     
     createDepthBackground();
     
-    // 添加轻微雾化效果增强远景
-    scene.fog = new THREE.Fog(0xf5f5f5, 15, 60);
-    
     sceneRef.current = scene;
 
     // 创建相机
@@ -354,12 +355,12 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     rendererRef.current = renderer;
 
-    // 优化光照系统 - 营造空间感
-    const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+    // 优化光照系统 - 营造空间感，增强亮度
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
     scene.add(ambientLight);
 
-    // 主方向光 - 模拟自然光照
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+    // 主方向光 - 模拟自然光照，增强强度
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
     directionalLight.position.set(15, 15, 8);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 1024;
@@ -368,41 +369,32 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
     directionalLight.shadow.camera.far = 50;
     scene.add(directionalLight);
     
-    // 添加微妙的填充光
-    const fillLight = new THREE.DirectionalLight(0xe8f4f8, 0.3);
+    // 添加增强的填充光
+    const fillLight = new THREE.DirectionalLight(0xe8f4f8, 0.6);
     fillLight.position.set(-10, 5, -5);
     scene.add(fillLight);
 
+    // 添加额外的点光源来照亮CNC机台区域
+    const pointLight1 = new THREE.PointLight(0xffffff, 0.8, 50);
+    pointLight1.position.set(0, 10, 0);
+    pointLight1.castShadow = true;
+    scene.add(pointLight1);
+
+    const pointLight2 = new THREE.PointLight(0xffffff, 0.6, 40);
+    pointLight2.position.set(-20, 8, -20);
+    scene.add(pointLight2);
+
+    const pointLight3 = new THREE.PointLight(0xffffff, 0.6, 40);
+    pointLight3.position.set(20, 8, 20);
+    scene.add(pointLight3);
 
 
-    // 添加无限网格辅助线 - 创建视觉上的无限延伸效果
-    const createInfiniteGrid = () => {
-      // 创建多层网格，从密集到稀疏，模拟无限延伸
-      const grids: THREE.GridHelper[] = [];
-      
-      // 主网格 - 密集网格，用于近距离参考
-      const mainGrid = new THREE.GridHelper(200, 200, 0x999999, 0xdddddd);
-      mainGrid.material.transparent = true;
-      mainGrid.material.opacity = 0.6;
-      grids.push(mainGrid);
-      
-      // 中距离网格 - 稍微稀疏
-      const midGrid = new THREE.GridHelper(1000, 100, 0xaaaaaa, 0xe8e8e8);
-      midGrid.material.transparent = true;
-      midGrid.material.opacity = 0.3;
-      grids.push(midGrid);
-      
-      // 远距离网格 - 非常稀疏，用于远景参考
-      const farGrid = new THREE.GridHelper(2000, 40, 0xbbbbbb, 0xf0f0f0);
-      farGrid.material.transparent = true;
-      farGrid.material.opacity = 0.15;
-      grids.push(farGrid);
-      
-      return grids;
-    };
-    
-    const infiniteGrids = createInfiniteGrid();
-    infiniteGrids.forEach(grid => scene.add(grid));
+
+    // 添加单一网格辅助线
+    const gridHelper = new THREE.GridHelper(1000, 100, 0x999999, 0xdddddd);
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.5;
+    scene.add(gridHelper);
 
     // 添加坐标轴辅助线
     const axesHelper = new THREE.AxesHelper(5);
@@ -889,16 +881,40 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
         position: { x: x3D, y: y3D, z: z3D }
       });
       
+      // 严格的文件大小验证（主场景）
+      if (cnc.modelFile) {
+        const fileSizeMB = cnc.modelFile.size / (1024 * 1024);
+        console.log('📊 [模型] 主场景GLB文件大小:', fileSizeMB.toFixed(2) + 'MB');
+        
+        // 大幅降低文件大小限制到10MB，避免WebAssembly内存溢出
+        if (fileSizeMB > 10) {
+          console.error('❌ [模型] 主场景GLB文件过大:', fileSizeMB.toFixed(2) + 'MB');
+          createDefaultCNCModel(cncGroup, width3D, height3D, depth3D, x3D, y3D, z3D, cnc);
+          return;
+        }
+      }
+      
       const loader = new GLTFLoader();
       
-      // 配置DRACOLoader以支持DRACO压缩
+      // 🔧 启用保守的DRACO压缩配置（主场景）
       const dracoLoader = new DRACOLoader();
       dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+      dracoLoader.setWorkerLimit(1); // 限制工作线程为1以减少内存使用
       loader.setDRACOLoader(dracoLoader);
+      
+      console.log('🔧 [模型] 主场景使用GLB加载器（启用保守的DRACO压缩配置）');
+      
+      // 添加超时处理（主场景）
+      const loadingTimeout = setTimeout(() => {
+        console.error('❌ [模型] 主场景GLB加载超时');
+        createDefaultCNCModel(cncGroup, width3D, height3D, depth3D, x3D, y3D, z3D, cnc);
+      }, 30000); // 30秒超时
       
       loader.load(
         cnc.modelUrl,
         (gltf) => {
+          clearTimeout(loadingTimeout);
+          
           const model = gltf.scene;
           
           // 设置模型位置
@@ -953,20 +969,32 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
             modelRotation: model.rotation,
             groupChildren: cncGroup.children.length
           });
+          
+          // 清理DRACOLoader资源（保守的内存管理）
+          dracoLoader.dispose();
         },
         (progress) => {
-          console.log('🎯 [模型] GLB模型加载进度:', {
+          const percentage = (progress.loaded / progress.total * 100).toFixed(1);
+          console.log('📈 [模型] 主场景GLB模型加载进度:', {
             cncId: cnc.id,
-            progress: (progress.loaded / progress.total * 100).toFixed(1) + '%'
+            progress: percentage + '%'
           });
         },
-        (error) => {
-          console.error('❌ [模型] GLB模型加载失败，使用默认立方体:', {
+        (error: unknown) => {
+          clearTimeout(loadingTimeout);
+          
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          
+          console.error('❌ [模型] 主场景GLB模型加载失败，使用默认立方体:', {
             cncId: cnc.id,
             error: error,
+            errorMessage: errorMessage,
             modelUrl: cnc.modelUrl,
             modelFileName: cnc.modelFileName
           });
+          
+          // 清理DRACOLoader资源（保守的内存管理）
+          dracoLoader.dispose();
           
           // 加载失败时创建默认立方体
           createDefaultCNCModel(cncGroup, width3D, height3D, depth3D, x3D, y3D, z3D, cnc);
@@ -1458,7 +1486,44 @@ const DigitalTwinEditor: React.FC = () => {
   // 属性面板显示状态
   const [showWallPropertiesPanel, setShowWallPropertiesPanel] = useState(false);
   const [showFloorPropertiesPanel, setShowFloorPropertiesPanel] = useState(false);
-  
+  const [showDevicePropertiesPanel, setShowDevicePropertiesPanel] = useState(false);
+
+  // 光源设置状态
+  const [lightingSettings, setLightingSettings] = useState({
+    ambientLight: {
+      intensity: 0.8,
+      color: '#404040'
+    },
+    directionalLight: {
+      intensity: 1.2,
+      color: '#ffffff',
+      position: { x: 15, y: 15, z: 8 }
+    },
+    fillLight: {
+      intensity: 0.6,
+      color: '#e8f4f8',
+      position: { x: -10, y: 5, z: -5 }
+    },
+    pointLight1: {
+      intensity: 0.8,
+      color: '#ffffff',
+      position: { x: 0, y: 10, z: 0 },
+      distance: 50
+    },
+    pointLight2: {
+      intensity: 0.6,
+      color: '#ffffff',
+      position: { x: -20, y: 8, z: -20 },
+      distance: 40
+    },
+    pointLight3: {
+      intensity: 0.7,
+      color: '#ffffff',
+      position: { x: 20, y: 8, z: 20 },
+      distance: 40
+    }
+  });
+
   // 选中墙体的3D属性状态
   const [selectedWall3DProps, setSelectedWall3DProps] = useState({
     width: 3, // X轴长度，单位：米
@@ -2035,6 +2100,45 @@ const DigitalTwinEditor: React.FC = () => {
       opacity: 1.0
     });
     message.info('设置已重置');
+  };
+
+  // 重置设备属性设置
+  const resetDeviceSettings = () => {
+    setLightingSettings({
+      ambientLight: {
+        intensity: 0.8,
+        color: '#404040'
+      },
+      directionalLight: {
+        intensity: 1.2,
+        color: '#ffffff',
+        position: { x: 15, y: 15, z: 8 }
+      },
+      fillLight: {
+        intensity: 0.6,
+        color: '#e8f4f8',
+        position: { x: -10, y: 5, z: -5 }
+      },
+      pointLight1: {
+        intensity: 0.8,
+        color: '#ffffff',
+        position: { x: 0, y: 10, z: 0 },
+        distance: 50
+      },
+      pointLight2: {
+        intensity: 0.6,
+        color: '#ffffff',
+        position: { x: -20, y: 8, z: -20 },
+        distance: 40
+      },
+      pointLight3: {
+        intensity: 0.7,
+        color: '#ffffff',
+        position: { x: 20, y: 8, z: 20 },
+        distance: 40
+      }
+    });
+    message.info('设备属性已重置');
   };
 
   // 重置视图
@@ -4953,15 +5057,47 @@ const DigitalTwinEditor: React.FC = () => {
         modelFileExists: !!formData.modelFile
       });
       
+      // 严格的文件大小验证
+      if (formData.modelFile) {
+        const fileSizeMB = formData.modelFile.size / (1024 * 1024);
+        console.log('📊 [模型] GLB文件大小:', fileSizeMB.toFixed(2) + 'MB');
+        
+        // 大幅降低文件大小限制到10MB，避免WebAssembly内存溢出
+        if (fileSizeMB > 10) {
+          console.error('❌ [模型] GLB文件过大:', fileSizeMB.toFixed(2) + 'MB');
+          message.error(`GLB文件过大 (${fileSizeMB.toFixed(1)}MB)，为避免内存溢出，请使用小于10MB的文件`);
+          createDefaultPreviewMesh(formData);
+          return;
+        }
+        
+        // 中等文件警告
+        if (fileSizeMB > 5) {
+          message.warning(`GLB文件较大 (${fileSizeMB.toFixed(1)}MB)，加载可能需要较长时间`);
+        }
+      }
+      
       const loader = new GLTFLoader();
       
-      // 配置DRACOLoader以支持DRACO压缩
+      // 🔧 启用DRACOLoader但采用保守的内存管理策略
       const dracoLoader = new DRACOLoader();
       dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+      dracoLoader.setWorkerLimit(1); // 限制为1个工作线程以减少内存占用
       loader.setDRACOLoader(dracoLoader);
+      
+      console.log('⚠️ [模型] 使用DRACOLoader（保守内存管理：1个工作线程）');
+      
+      // 添加超时处理
+      const loadingTimeout = setTimeout(() => {
+        console.error('❌ [模型] GLB加载超时');
+        message.error('GLB模型加载超时，请尝试使用更小的文件');
+        createDefaultPreviewMesh(formData);
+      }, 30000); // 30秒超时
+      
       loader.load(
         formData.modelUrl,
         (gltf) => {
+          clearTimeout(loadingTimeout);
+          
           const model = gltf.scene;
           
           // 设置模型属性
@@ -5015,18 +5151,38 @@ const DigitalTwinEditor: React.FC = () => {
               modelScale: model.scale,
               modelRotation: model.rotation
             });
+            
+            // 清理DRACOLoader资源
+            dracoLoader.dispose();
           }
         },
         (progress) => {
-          console.log('GLB模型加载进度:', (progress.loaded / progress.total * 100) + '%');
+          const percentage = (progress.loaded / progress.total * 100).toFixed(1);
+          console.log('📈 [模型] GLB模型加载进度:', percentage + '%');
         },
-        (error) => {
+        (error: unknown) => {
+          clearTimeout(loadingTimeout);
+          
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          
           console.error('❌ [GLB_LOAD] GLB模型加载失败:', {
             error: error,
+            errorMessage: errorMessage,
             modelUrl: formData.modelUrl,
             modelFileName: formData.modelFileName
           });
-          message.error('GLB模型加载失败，请检查文件格式');
+          
+          // 检查是否是内存相关错误
+          if (errorMessage && errorMessage.includes('memory')) {
+            message.error('GLB模型文件过大导致内存不足，请使用更小的文件或简化模型');
+          } else if (errorMessage && errorMessage.includes('WebAssembly')) {
+            message.error('GLB模型解码失败，可能是文件损坏或格式不支持');
+          } else {
+            message.error('GLB模型加载失败，请检查文件格式和网络连接');
+          }
+          
+          // 清理DRACOLoader资源
+          dracoLoader.dispose();
           
           // 加载失败时使用默认几何体
           createDefaultPreviewMesh(formData);
@@ -7415,6 +7571,482 @@ const DigitalTwinEditor: React.FC = () => {
         </div>
       )}
 
+      {/* 透视图模式下的悬浮设备属性设置面板 */}
+      {viewMode === 'perspective' && showDevicePropertiesPanel && (
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          right: '20px',
+          width: '280px',
+          background: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: '12px',
+          padding: '20px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.2)',
+          zIndex: 15,
+          maxHeight: 'calc(100vh - 40px)',
+          overflowY: 'auto'
+        }}>
+          <div style={{
+            fontSize: '16px',
+            fontWeight: 600,
+            marginBottom: '20px',
+            color: '#1f2937',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <SettingOutlined style={{ color: '#1890ff' }} />
+            设备属性设置
+            <span style={{
+              fontSize: '12px',
+              background: '#1890ff',
+              color: 'white',
+              padding: '2px 6px',
+              borderRadius: '10px',
+              fontWeight: 500
+            }}>
+              光源
+            </span>
+          </div>
+
+          {/* 环境光设置 */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginBottom: '12px'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px'
+              }}>
+                <span style={{ 
+                  fontSize: '14px', 
+                  fontWeight: 500, 
+                  color: '#374151'
+                }}>
+                  环境光设置
+                </span>
+                <ColorPicker
+                  value={lightingSettings.ambientLight.color}
+                  onChange={(color) => {
+                    const newColor = color.toHexString();
+                    setLightingSettings(prev => ({
+                      ...prev,
+                      ambientLight: { ...prev.ambientLight, color: newColor }
+                    }));
+                    // 更新Three.js中的环境光颜色
+                    const scene = threeDEditorRef.current?.getScene();
+                    if (scene) {
+                      const ambientLight = scene.children.find((child: any) => child.type === 'AmbientLight');
+                      if (ambientLight) {
+                        (ambientLight as THREE.AmbientLight).color.setHex(parseInt(newColor.replace('#', ''), 16));
+                      }
+                    }
+                  }}
+                  size="small"
+                  trigger="hover"
+                />
+              </div>
+
+            </div>
+            
+            {/* 环境光强度 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>强度</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {lightingSettings.ambientLight.intensity.toFixed(2)}
+                </span>
+              </div>
+              <Slider
+                min={0.1}
+                max={2.0}
+                step={0.1}
+                value={lightingSettings.ambientLight.intensity}
+                onChange={(value) => {
+                  const newIntensity = value || 0.1;
+                  setLightingSettings(prev => ({
+                    ...prev,
+                    ambientLight: { ...prev.ambientLight, intensity: newIntensity }
+                  }));
+                  // 更新Three.js中的环境光
+                  const scene = threeDEditorRef.current?.getScene();
+                  if (scene) {
+                    const ambientLight = scene.children.find((child: any) => child.type === 'AmbientLight');
+                    if (ambientLight) {
+                      (ambientLight as THREE.AmbientLight).intensity = newIntensity;
+                    }
+                  }
+                }}
+                tooltip={{ formatter: (value) => `${value}` }}
+              />
+            </div>
+          </div>
+
+          {/* 主方向光设置 */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginBottom: '12px'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px'
+              }}>
+                <span style={{ 
+                  fontSize: '14px', 
+                  fontWeight: 500, 
+                  color: '#374151'
+                }}>
+                  主方向光设置
+                </span>
+                <ColorPicker
+                  value={lightingSettings.directionalLight.color}
+                  onChange={(color) => {
+                    const newColor = color.toHexString();
+                    setLightingSettings(prev => ({
+                      ...prev,
+                      directionalLight: { ...prev.directionalLight, color: newColor }
+                    }));
+                    // 更新Three.js中的主方向光颜色
+                    const scene = threeDEditorRef.current?.getScene();
+                    if (scene) {
+                      const mainLight = scene.children.find((child: any) => 
+                        child.type === 'DirectionalLight' && child.name === 'mainDirectionalLight'
+                      );
+                      if (mainLight) {
+                        (mainLight as THREE.DirectionalLight).color.setHex(parseInt(newColor.replace('#', ''), 16));
+                      }
+                    }
+                  }}
+                  size="small"
+                  trigger="hover"
+                />
+              </div>
+
+            </div>
+            
+            {/* 主方向光强度 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>强度</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {lightingSettings.directionalLight.intensity.toFixed(2)}
+                </span>
+              </div>
+              <Slider
+                min={0.1}
+                max={3.0}
+                step={0.1}
+                value={lightingSettings.directionalLight.intensity}
+                 onChange={(value) => {
+                   const newIntensity = value || 0.1;
+                   setLightingSettings(prev => ({
+                     ...prev,
+                     directionalLight: { ...prev.directionalLight, intensity: newIntensity }
+                   }));
+                   // 更新Three.js中的主方向光
+                   const scene = threeDEditorRef.current?.getScene();
+                   if (scene) {
+                     const mainLight = scene.children.find((child: any) => 
+                       child.type === 'DirectionalLight' && child.name === 'mainDirectionalLight'
+                     );
+                     if (mainLight) {
+                       (mainLight as THREE.DirectionalLight).intensity = newIntensity;
+                     }
+                   }
+                }}
+                tooltip={{ formatter: (value) => `${value}` }}
+              />
+            </div>
+          </div>
+
+          {/* 填充光设置 */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginBottom: '12px'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '8px'
+              }}>
+                <span style={{ 
+                  fontSize: '14px', 
+                  fontWeight: 500, 
+                  color: '#374151'
+                }}>
+                  填充光设置
+                </span>
+                <ColorPicker
+                  value={lightingSettings.fillLight.color}
+                  onChange={(color) => {
+                    const newColor = color.toHexString();
+                    setLightingSettings(prev => ({
+                      ...prev,
+                      fillLight: { ...prev.fillLight, color: newColor }
+                    }));
+                    // 更新Three.js中的填充光颜色
+                    const scene = threeDEditorRef.current?.getScene();
+                    if (scene) {
+                      const fillLight = scene.children.find((child: any) => 
+                        child.type === 'DirectionalLight' && child.name === 'fillDirectionalLight'
+                      );
+                      if (fillLight) {
+                        (fillLight as THREE.DirectionalLight).color.setHex(parseInt(newColor.replace('#', ''), 16));
+                      }
+                    }
+                  }}
+                  size="small"
+                  trigger="hover"
+                />
+              </div>
+
+            </div>
+            
+            {/* 填充光强度 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>强度</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {lightingSettings.fillLight.intensity.toFixed(2)}
+                </span>
+              </div>
+              <Slider
+                min={0.1}
+                max={2.0}
+                step={0.1}
+                value={lightingSettings.fillLight.intensity}
+                onChange={(value) => {
+                  const newIntensity = value || 0.1;
+                  setLightingSettings(prev => ({
+                    ...prev,
+                    fillLight: { ...prev.fillLight, intensity: newIntensity }
+                  }));
+                  // 更新Three.js中的填充光
+                  const scene = threeDEditorRef.current?.getScene();
+                  if (scene) {
+                    const fillLight = scene.children.find((child: any) => 
+                      child.type === 'DirectionalLight' && child.name === 'fillDirectionalLight'
+                    );
+                    if (fillLight) {
+                      (fillLight as THREE.DirectionalLight).intensity = newIntensity;
+                    }
+                  }
+                }}
+                tooltip={{ formatter: (value) => `${value}` }}
+              />
+            </div>
+          </div>
+
+          {/* 点光源设置 */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ 
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '12px'
+            }}>
+              <div style={{ 
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{ 
+                  fontSize: '14px', 
+                  fontWeight: 500, 
+                  color: '#374151'
+                }}>
+                  点光源设置
+                </span>
+                <ColorPicker
+                  value={lightingSettings.pointLight1.color}
+                  onChange={(color) => {
+                    const newColor = color.toHexString();
+                    setLightingSettings(prev => ({
+                      ...prev,
+                      pointLight1: { ...prev.pointLight1, color: newColor },
+                      pointLight2: { ...prev.pointLight2, color: newColor },
+                      pointLight3: { ...prev.pointLight3, color: newColor }
+                    }));
+                    // 更新Three.js中的所有点光源颜色
+                    const scene = threeDEditorRef.current?.getScene();
+                    if (scene) {
+                      scene.children.forEach(child => {
+                        if (child.type === 'PointLight') {
+                          (child as THREE.PointLight).color.setHex(parseInt(newColor.replace('#', ''), 16));
+                        }
+                      });
+                    }
+                  }}
+                  size="small"
+                />
+              </div>
+
+            </div>
+            
+            {/* 点光源强度 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>强度</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {lightingSettings.pointLight1.intensity.toFixed(2)}
+                </span>
+              </div>
+              <Slider
+                min={0.1}
+                max={3.0}
+                step={0.1}
+                value={lightingSettings.pointLight1.intensity}
+                onChange={(value) => {
+                  const newIntensity = value || 0.1;
+                  setLightingSettings(prev => ({
+                    ...prev,
+                    pointLight1: { ...prev.pointLight1, intensity: newIntensity },
+                    pointLight2: { ...prev.pointLight2, intensity: newIntensity },
+                    pointLight3: { ...prev.pointLight3, intensity: newIntensity }
+                  }));
+                  // 更新Three.js中的所有点光源
+                  const scene = threeDEditorRef.current?.getScene();
+                  if (scene) {
+                    scene.children.forEach((child: any) => {
+                      if (child.type === 'PointLight') {
+                        (child as THREE.PointLight).intensity = newIntensity;
+                      }
+                    });
+                  }
+                }}
+                tooltip={{ formatter: (value) => `${value}` }}
+              />
+            </div>
+
+            {/* 点光源距离 */}
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '8px'
+              }}>
+                <span style={{ fontSize: '13px', color: '#6b7280' }}>照射距离</span>
+                <span style={{ 
+                  fontSize: '13px', 
+                  fontWeight: 500,
+                  color: '#1890ff',
+                  background: '#f0f9ff',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {lightingSettings.pointLight1.distance.toFixed(0)}m
+                </span>
+              </div>
+              <Slider
+                min={10}
+                max={100}
+                step={5}
+                value={lightingSettings.pointLight1.distance}
+                onChange={(value) => {
+                  const newDistance = value || 10;
+                  setLightingSettings(prev => ({
+                    ...prev,
+                    pointLight1: { ...prev.pointLight1, distance: newDistance },
+                    pointLight2: { ...prev.pointLight2, distance: newDistance },
+                    pointLight3: { ...prev.pointLight3, distance: newDistance }
+                  }));
+                  // 更新Three.js中的所有点光源距离
+                  const scene = threeDEditorRef.current?.getScene();
+                  if (scene) {
+                    scene.children.forEach((child: any) => {
+                      if (child.type === 'PointLight') {
+                        (child as THREE.PointLight).distance = newDistance;
+                      }
+                    });
+                  }
+                }}
+                tooltip={{ formatter: (value) => `${value}m` }}
+              />
+            </div>
+
+            {/* 重置按钮 */}
+            <div style={{ 
+              marginTop: '24px', 
+              paddingTop: '16px', 
+              borderTop: '1px solid #f0f0f0',
+              textAlign: 'center'
+            }}>
+              <Button 
+                size="small"
+                onClick={resetDeviceSettings}
+                style={{ width: '100%' }}
+              >
+                重置属性
+              </Button>
+            </div>
+          </div>
+
+
+        </div>
+      )}
+
       {/* 中间悬浮控制栏 */}
       <div style={{
         position: 'absolute',
@@ -7544,6 +8176,7 @@ const DigitalTwinEditor: React.FC = () => {
                   setShowFloorPropertiesPanel(!showFloorPropertiesPanel);
                   if (!showFloorPropertiesPanel) {
                     setShowWallPropertiesPanel(false);
+                    setShowDevicePropertiesPanel(false);
                   }
                 }}
                 style={{
@@ -7563,6 +8196,7 @@ const DigitalTwinEditor: React.FC = () => {
                   setShowWallPropertiesPanel(!showWallPropertiesPanel);
                   if (!showWallPropertiesPanel) {
                     setShowFloorPropertiesPanel(false);
+                    setShowDevicePropertiesPanel(false);
                   }
                 }}
                 style={{
@@ -7573,6 +8207,26 @@ const DigitalTwinEditor: React.FC = () => {
                 }}
               >
                 墙体属性
+              </Button>
+              <Button
+                icon={<ToolOutlined />}
+                size="small"
+                type="text"
+                onClick={() => {
+                  setShowDevicePropertiesPanel(!showDevicePropertiesPanel);
+                  if (!showDevicePropertiesPanel) {
+                    setShowFloorPropertiesPanel(false);
+                    setShowWallPropertiesPanel(false);
+                  }
+                }}
+                style={{
+                  color: showDevicePropertiesPanel ? '#1890ff' : '#666',
+                  backgroundColor: showDevicePropertiesPanel ? 'rgba(24, 144, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)',
+                  border: 'none',
+                  borderRadius: '4px'
+                }}
+              >
+                设备属性
               </Button>
             </>
           )}
@@ -8942,8 +9596,8 @@ const DigitalTwinEditor: React.FC = () => {
                     >
                       <InputNumber 
                         placeholder="单位：米" 
-                        min={0.1}
-                        step={0.1}
+                        min={0.01}
+                        step={0.01}
                         addonAfter="m"
                         style={{ width: '100%' }}
                       />
@@ -8957,8 +9611,8 @@ const DigitalTwinEditor: React.FC = () => {
                     >
                       <InputNumber 
                         placeholder="单位：米" 
-                        min={0.1}
-                        step={0.1}
+                        min={0.01}
+                        step={0.01}
                         addonAfter="m"
                         style={{ width: '100%' }}
                       />
@@ -8972,8 +9626,8 @@ const DigitalTwinEditor: React.FC = () => {
                     >
                       <InputNumber 
                         placeholder="单位：米" 
-                        min={0.1}
-                        step={0.1}
+                        min={0.01}
+                        step={0.01}
                         addonAfter="m"
                         style={{ width: '100%' }}
                       />

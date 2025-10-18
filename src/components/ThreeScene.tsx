@@ -1637,6 +1637,21 @@ const ThreeScene = forwardRef<ThreeSceneRef, ThreeSceneProps>(({ cncMachines = [
         depth: machine.depth3D || 5
       };
 
+      // 调试日志：查看尺寸数据
+      console.log(`🔍 [ThreeScene] CNC机台 ${machine.id} 尺寸数据:`, {
+        原始数据: {
+          width3D: machine.width3D,
+          height3D: machine.height3D,
+          depth3D: machine.depth3D
+        },
+        计算后尺寸: dimensions,
+        类型检查: {
+          width3D_type: typeof machine.width3D,
+          height3D_type: typeof machine.height3D,
+          depth3D_type: typeof machine.depth3D
+        }
+      });
+
       // 解析颜色
       const color = parseInt(machine.color.replace('#', '0x'));
 
