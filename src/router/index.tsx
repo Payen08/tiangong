@@ -1,32 +1,61 @@
 import { createBrowserRouter } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
+import { Spin } from 'antd';
 import Layout from '@/components/Layout';
-import Login from '@/pages/Login';
-import Home from '@/pages/Home';
-import UserManagement from '@/pages/SystemManagement/UserManagement';
-import RoleManagement from '@/pages/SystemManagement/RoleManagement';
-import PermissionManagement from '@/pages/SystemManagement/PermissionManagement';
-import SystemLogs from '@/pages/SystemManagement/SystemLogs';
-import SystemUpgrade from '@/pages/SystemManagement/SystemUpgrade';
-import ProductManagement from '@/pages/ProductManagement/index';
-import AddProduct from '@/pages/ProductManagement/AddProduct';
-import DeviceManagement from '@/pages/DeviceManagement/index';
-import MapManagement from '@/pages/SceneManagement/MapManagement';
-import CrossMapConnectionManagement from '@/pages/SystemManagement/CrossMapConnection';
-import CrossMapPathGroupManagement from '@/pages/SceneManagement/CrossMapPathGroup/index';
-import BusinessProcess from '@/pages/ScheduleManagement/BusinessProcess';
-import BusinessOrders from '@/pages/ScheduleManagement/BusinessOrders';
-import BehaviorTree from '@/pages/ScheduleManagement/BehaviorTree';
-import ActionSequence from '@/pages/ScheduleManagement/ActionSequence';
 
-import TaskManagement from '@/pages/DispatchManagement/TaskManagement';
-import IdleDockingManagement from '@/pages/DispatchManagement/IdleDockingManagement';
-import AutoChargingManagement from '@/pages/DispatchManagement/AutoChargingManagement';
-import BusinessPerformance from '@/pages/DataStatistics/BusinessPerformance';
-import RobotStatus from '@/pages/DataStatistics/RobotStatus';
-import SchedulingSystem from '@/pages/DataStatistics/SchedulingSystem';
-import ExceptionFault from '@/pages/DataStatistics/ExceptionFault';
-import SpatialHeatmap from '@/pages/DataStatistics/SpatialHeatmap';
-import DigitalTwin from '@/pages/DigitalTwin';
+// 创建加载组件的包装器
+const createLazyComponent = (importFunc: () => Promise<any>) => {
+  const LazyComponent = lazy(importFunc);
+  return () => (
+    <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}><Spin size="large" /></div>}>
+      <LazyComponent />
+    </Suspense>
+  );
+};
+
+// 动态导入所有页面组件
+const Login = createLazyComponent(() => import('@/pages/Login'));
+const Home = createLazyComponent(() => import('@/pages/Home'));
+
+// 系统管理模块
+const UserManagement = createLazyComponent(() => import('@/pages/SystemManagement/UserManagement'));
+const RoleManagement = createLazyComponent(() => import('@/pages/SystemManagement/RoleManagement'));
+const PermissionManagement = createLazyComponent(() => import('@/pages/SystemManagement/PermissionManagement'));
+const SystemLogs = createLazyComponent(() => import('@/pages/SystemManagement/SystemLogs'));
+const SystemUpgrade = createLazyComponent(() => import('@/pages/SystemManagement/SystemUpgrade'));
+const CrossMapConnectionManagement = createLazyComponent(() => import('@/pages/SystemManagement/CrossMapConnection'));
+
+// 产品管理模块
+const ProductManagement = createLazyComponent(() => import('@/pages/ProductManagement/index'));
+const AddProduct = createLazyComponent(() => import('@/pages/ProductManagement/AddProduct'));
+
+// 设备管理模块
+const DeviceManagement = createLazyComponent(() => import('@/pages/DeviceManagement/index'));
+
+// 场景管理模块
+const MapManagement = createLazyComponent(() => import('@/pages/SceneManagement/MapManagement'));
+const CrossMapPathGroupManagement = createLazyComponent(() => import('@/pages/SceneManagement/CrossMapPathGroup/index'));
+
+// 调度管理模块
+const BusinessProcess = createLazyComponent(() => import('@/pages/ScheduleManagement/BusinessProcess'));
+const BusinessOrders = createLazyComponent(() => import('@/pages/ScheduleManagement/BusinessOrders'));
+const BehaviorTree = createLazyComponent(() => import('@/pages/ScheduleManagement/BehaviorTree'));
+const ActionSequence = createLazyComponent(() => import('@/pages/ScheduleManagement/ActionSequence'));
+
+// 派遣管理模块
+const TaskManagement = createLazyComponent(() => import('@/pages/DispatchManagement/TaskManagement'));
+const IdleDockingManagement = createLazyComponent(() => import('@/pages/DispatchManagement/IdleDockingManagement'));
+const AutoChargingManagement = createLazyComponent(() => import('@/pages/DispatchManagement/AutoChargingManagement'));
+
+// 数据统计模块
+const BusinessPerformance = createLazyComponent(() => import('@/pages/DataStatistics/BusinessPerformance'));
+const RobotStatus = createLazyComponent(() => import('@/pages/DataStatistics/RobotStatus'));
+const SchedulingSystem = createLazyComponent(() => import('@/pages/DataStatistics/SchedulingSystem'));
+const ExceptionFault = createLazyComponent(() => import('@/pages/DataStatistics/ExceptionFault'));
+const SpatialHeatmap = createLazyComponent(() => import('@/pages/DataStatistics/SpatialHeatmap'));
+
+// 数字孪生模块
+const DigitalTwin = createLazyComponent(() => import('@/pages/DigitalTwin'));
 
 
 

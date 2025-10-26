@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Button, Select, Space, Typography, Input, InputNumber, List, Card, Divider, Modal, Form, message, Row, Col, Slider, ColorPicker, Progress } from 'antd';
+import { Button, Select, Space, Typography, Input, InputNumber, List, Card, Divider, Modal, Form, message, Row, Col, Slider, ColorPicker, Progress, Upload } from 'antd';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
@@ -198,6 +198,13 @@ interface FloorScene {
   baseMap?: string; // 选择的底图ID
   initializeDevices?: boolean; // 是否初始化地图关联设备
   increaseUpdate?: boolean; // 是否增量更新
+  sceneModel?: {
+    file: File;
+    name: string;
+    size: number;
+    type: string;
+    url?: string; // 预览URL
+  }; // 3D场景模型文件
 }
 
 // 3D编辑器组件ref接口
@@ -205,6 +212,7 @@ interface ThreeDEditorRef {
   resetView: () => void;
   updateCNCMachines: (machines: CNCMachine[]) => void;
   getScene: () => THREE.Scene | undefined;
+  extractTopView: () => Array<{x: number, y: number}> | null;
 }
 
 // 3D编辑器组件接口
@@ -224,13 +232,21 @@ interface ThreeDEditorProps {
     color: string;
     opacity: number;
   };
+  sceneModel?: {
+    file: File;
+    name: string;
+    size: number;
+    type: string;
+    previewUrl?: string;
+  } | null; // 3D场景模型文件信息
   onWallSelect: (wallId: string) => void;
   onCNCMachineSelect?: (cncId: string) => void;
+  onModelLoaded?: (topViewData: {x: number, y: number}[] | null) => void; // 3D模型加载成功回调
   style?: React.CSSProperties;
 }
 
 // 3D编辑器组件
-const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ walls, cncMachines, floorAreas, selectedWall3DProps, selectedFloor3DProps, onWallSelect: _onWallSelect, onCNCMachineSelect: _onCNCMachineSelect, style }, ref) => {
+const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ walls, cncMachines, floorAreas, selectedWall3DProps, selectedFloor3DProps, sceneModel, onWallSelect: _onWallSelect, onCNCMachineSelect: _onCNCMachineSelect, onModelLoaded, style }, ref) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene>();
   const rendererRef = useRef<THREE.WebGLRenderer>();
@@ -240,6 +256,7 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
   const cncMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const textureCache = useRef<Map<string, THREE.CanvasTexture>>(new Map());
   const floorMeshesRef = useRef<THREE.Mesh[]>([]);
+  const sceneModelRef = useRef<THREE.Group | null>(null); // 3D场景模型引用
 
   // 暴露重置视图方法和更新CNC机台方法
   React.useImperativeHandle(ref, () => ({
@@ -283,8 +300,68 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
     },
     getScene: () => {
       return sceneRef.current;
+    },
+    extractTopView: () => {
+      console.log('🔄 [3D-EDITOR] extractTopView 被调用');
+      
+      if (!sceneModelRef.current) {
+        console.warn('⚠️ [3D-EDITOR] 没有加载的3D场景模型');
+        return null;
+      }
+
+      const topViewData: Array<{x: number, y: number}> = [];
+      
+      // 遍历场景模型的所有子对象
+      sceneModelRef.current.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.geometry) {
+          const geometry = child.geometry;
+          
+          // 获取几何体的位置属性
+          const positionAttribute = geometry.getAttribute('position');
+          if (positionAttribute) {
+            const positions = positionAttribute.array;
+            
+            // 提取顶点的X和Z坐标（忽略Y轴高度）
+            for (let i = 0; i < positions.length; i += 3) {
+              const x = positions[i];     // X坐标
+              const z = positions[i + 2]; // Z坐标（在2D顶视图中对应Y坐标）
+              
+              topViewData.push({ x, y: z });
+            }
+          }
+        }
+      });
+
+      // 简化点集，移除重复和过于密集的点
+      const simplifiedPoints = simplifyTopViewPoints(topViewData);
+      
+      console.log('✅ [3D-EDITOR] 顶视图提取完成，点数量:', simplifiedPoints.length);
+      return simplifiedPoints;
     }
   }), []);
+  
+  // 简化顶视图点集的辅助函数
+  const simplifyTopViewPoints = (points: Array<{x: number, y: number}>): Array<{x: number, y: number}> => {
+    if (points.length === 0) return [];
+    
+    const tolerance = 0.1; // 简化容差，可根据需要调整
+    const simplified: Array<{x: number, y: number}> = [];
+    const visited = new Set<string>();
+    
+    for (const point of points) {
+      const key = `${Math.round(point.x / tolerance)}_${Math.round(point.y / tolerance)}`;
+      
+      if (!visited.has(key)) {
+        visited.add(key);
+        simplified.push({
+          x: Math.round(point.x * 100) / 100, // 保留两位小数
+          y: Math.round(point.y * 100) / 100
+        });
+      }
+    }
+    
+    return simplified;
+  };
   
   // 键盘控制状态（预留用于未来功能扩展）
 
@@ -514,6 +591,63 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
       renderer.dispose();
     };
   }, []);
+
+  // 3D模型加载useEffect
+  useEffect(() => {
+    if (!sceneModel || !sceneRef.current) return;
+
+    const loader = new GLTFLoader();
+    
+    // 移除之前的模型
+    if (sceneModelRef.current) {
+      sceneRef.current.remove(sceneModelRef.current);
+      sceneModelRef.current = null;
+    }
+
+    // 创建文件URL
+    const fileUrl = URL.createObjectURL(sceneModel.file);
+    
+    // 加载3D模型
+    loader.load(
+      fileUrl,
+      (gltf) => {
+        console.log('3D模型加载成功:', sceneModel.name);
+        
+        // 创建模型组
+        const modelGroup = new THREE.Group();
+        modelGroup.add(gltf.scene);
+        
+        // 设置模型位置和缩放
+        modelGroup.position.set(0, 0, 0);
+        modelGroup.scale.set(1, 1, 1);
+        
+        // 添加到场景
+        sceneRef.current!.add(modelGroup);
+        sceneModelRef.current = modelGroup;
+        
+        // 清理文件URL
+        URL.revokeObjectURL(fileUrl);
+        
+        console.log('3D模型已添加到场景');
+      },
+      (progress) => {
+        console.log('3D模型加载进度:', (progress.loaded / progress.total * 100) + '%');
+      },
+      (error) => {
+        console.error('3D模型加载失败:', error);
+        // 清理文件URL
+        URL.revokeObjectURL(fileUrl);
+      }
+    );
+
+    // 清理函数
+    return () => {
+      if (sceneModelRef.current && sceneRef.current) {
+        sceneRef.current.remove(sceneModelRef.current);
+        sceneModelRef.current = null;
+      }
+    };
+  }, [sceneModel]);
 
   // 相机位置更新将由OrbitControls自动处理
 
@@ -898,11 +1032,11 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
       
       // 🔧 启用保守的DRACO压缩配置（主场景）
       const dracoLoader = new DRACOLoader();
-      dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+      dracoLoader.setDecoderPath('/draco/'); // 使用本地Draco解码器文件
       dracoLoader.setWorkerLimit(1); // 限制工作线程为1以减少内存使用
       loader.setDRACOLoader(dracoLoader);
       
-      console.log('🔧 [模型] 主场景使用GLB加载器（启用保守的DRACO压缩配置）');
+      console.log('🔧 [模型] 主场景使用本地GLB加载器（启用保守的DRACO压缩配置）');
       
       // 添加超时处理（主场景）
       const loadingTimeout = setTimeout(() => {
@@ -1269,6 +1403,112 @@ const ThreeDEditor = React.forwardRef<ThreeDEditorRef, ThreeDEditorProps>(({ wal
     });
   }, [selectedFloor3DProps, floorAreas]);
 
+  // 处理3D场景模型加载
+  useEffect(() => {
+    if (!sceneRef.current || !sceneModel || !sceneModel.previewUrl) {
+      // 如果没有场景模型，清除之前的模型
+      if (sceneModelRef.current && sceneRef.current) {
+        sceneRef.current.remove(sceneModelRef.current);
+        sceneModelRef.current = null;
+      }
+      return;
+    }
+
+    console.log('🎯 [3D-EDITOR] 开始加载场景模型:', {
+      modelUrl: sceneModel.previewUrl,
+      modelFileName: sceneModel.name
+    });
+
+    // 清除之前的场景模型
+    if (sceneModelRef.current) {
+      sceneRef.current.remove(sceneModelRef.current);
+      sceneModelRef.current = null;
+    }
+
+    // 使用GLTFLoader加载场景模型
+    const loader = new GLTFLoader();
+    
+    // 启用DRACO压缩支持
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('/draco/');
+    dracoLoader.setWorkerLimit(1);
+    loader.setDRACOLoader(dracoLoader);
+
+    loader.load(
+      sceneModel.previewUrl,
+      (gltf) => {
+        const model = gltf.scene;
+        
+        // 设置模型属性 - 使用默认值，因为sceneModel只是文件信息
+        model.position.set(0, 0, 0);
+        model.scale.setScalar(1); // 默认缩放
+        model.rotation.set(0, 0, 0); // 默认旋转
+
+        // 遍历模型设置材质属性
+        model.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+            
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((mat) => {
+                  if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshLambertMaterial) {
+                    mat.transparent = false; // 默认不透明
+                    mat.opacity = 1; // 默认完全不透明
+                  }
+                });
+              } else if (child.material instanceof THREE.MeshStandardMaterial || child.material instanceof THREE.MeshLambertMaterial) {
+                child.material.transparent = false; // 默认不透明
+                child.material.opacity = 1; // 默认完全不透明
+              }
+            }
+          }
+        });
+
+        // 添加到场景
+        sceneRef.current!.add(model);
+        sceneModelRef.current = model;
+        
+        console.log('✅ [3D-EDITOR] 场景模型加载成功');
+        
+        // 提取顶视图数据并通知父组件
+        if (onModelLoaded) {
+          const topViewData: Array<{x: number, y: number}> = [];
+          
+          model.traverse((child) => {
+            if (child instanceof THREE.Mesh && child.geometry) {
+              const geometry = child.geometry;
+              const positionAttribute = geometry.getAttribute('position');
+              if (positionAttribute) {
+                const positions = positionAttribute.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                  const x = positions[i];
+                  const z = positions[i + 2];
+                  topViewData.push({ x, y: z });
+                }
+              }
+            }
+          });
+
+          const simplifiedPoints = simplifyTopViewPoints(topViewData);
+          onModelLoaded(simplifiedPoints);
+        }
+        
+        // 清理资源
+        dracoLoader.dispose();
+      },
+      (progress) => {
+        const percentage = (progress.loaded / progress.total * 100).toFixed(1);
+        console.log('📈 [3D-EDITOR] 场景模型加载进度:', percentage + '%');
+      },
+      (error) => {
+        console.error('❌ [3D-EDITOR] 场景模型加载失败:', error);
+        dracoLoader.dispose();
+      }
+    );
+  }, [sceneModel, onModelLoaded]);
+
   return (
     <div
       ref={mountRef}
@@ -1543,6 +1783,18 @@ const DigitalTwinEditor: React.FC = () => {
   // 选中墙体状态
   const [selectedWallId, setSelectedWallId] = useState<string | null>(null);
 
+  // 3D模型顶视图数据状态
+  const [modelTopViewData, setModelTopViewData] = useState<{x: number, y: number}[] | null>(null);
+
+  // 监听modelTopViewData状态变化
+  useEffect(() => {
+    console.log('🔄 [STATE] modelTopViewData状态变化:', {
+      hasData: !!modelTopViewData,
+      dataLength: modelTopViewData?.length || 0,
+      data: modelTopViewData
+    });
+  }, [modelTopViewData]);
+
   // 计算初始屏幕中心坐标的函数
   const getInitialCenterOffset = () => {
     // 获取视口尺寸
@@ -1632,6 +1884,17 @@ const DigitalTwinEditor: React.FC = () => {
   const [selectedMapId, setSelectedMapId] = useState<string | null>(null); // 选中的地图ID
   const [availableBaseMaps, setAvailableBaseMaps] = useState<BaseMapData[]>([]); // 可用底图列表
   const [initializeDevicesValue, setInitializeDevicesValue] = useState<boolean>(true); // 是否初始化地图关联设备的值
+  const [uploadedSceneModel, setUploadedSceneModel] = useState<File | null>(null); // 上传的3D场景模型文件
+
+  // 监听uploadedSceneModel状态变化
+  useEffect(() => {
+    console.log('📁 [FILE] uploadedSceneModel状态变化:', {
+      hasFile: !!uploadedSceneModel,
+      fileName: uploadedSceneModel?.name || 'null',
+      fileSize: uploadedSceneModel?.size || 0,
+      fileType: uploadedSceneModel?.type || 'null'
+    });
+  }, [uploadedSceneModel]);
 
   // 绘图工具状态
   const [drawingTools, setDrawingTools] = useState<DrawingTool[]>([
@@ -5080,11 +5343,11 @@ const DigitalTwinEditor: React.FC = () => {
       
       // 🔧 启用DRACOLoader但采用保守的内存管理策略
       const dracoLoader = new DRACOLoader();
-      dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+      dracoLoader.setDecoderPath('/draco/'); // 使用本地Draco解码器文件
       dracoLoader.setWorkerLimit(1); // 限制为1个工作线程以减少内存占用
       loader.setDRACOLoader(dracoLoader);
       
-      console.log('⚠️ [模型] 使用DRACOLoader（保守内存管理：1个工作线程）');
+      console.log('⚠️ [模型] 使用本地DRACOLoader（保守内存管理：1个工作线程）');
       
       // 添加超时处理
       const loadingTimeout = setTimeout(() => {
@@ -5172,17 +5435,88 @@ const DigitalTwinEditor: React.FC = () => {
             modelFileName: formData.modelFileName
           });
           
-          // 检查是否是内存相关错误
+          // 清理DRACOLoader资源
+          dracoLoader.dispose();
+          
+          // 检查是否是Draco解码器相关错误，尝试降级处理
+          if (errorMessage && (errorMessage.includes('draco') || errorMessage.includes('WebAssembly') || errorMessage.includes('decoder'))) {
+            console.warn('⚠️ [GLB_LOAD] Draco解码器错误，尝试不使用Draco重新加载...');
+            message.warning('Draco解码器加载失败，正在尝试标准GLB加载...');
+            
+            // 降级：不使用DRACOLoader重新尝试加载
+            const fallbackLoader = new GLTFLoader();
+            const fallbackTimeout = setTimeout(() => {
+              console.error('❌ [模型] GLB降级加载也超时');
+              message.error('GLB模型加载失败，请检查文件格式');
+              createDefaultPreviewMesh(formData);
+            }, 20000); // 20秒超时
+            
+            fallbackLoader.load(
+               formData.modelUrl!,
+              (gltf) => {
+                clearTimeout(fallbackTimeout);
+                console.log('✅ [GLB_LOAD] 降级加载成功（未使用Draco压缩）');
+                message.success('GLB模型加载成功（标准模式）');
+                
+                const model = gltf.scene;
+                model.position.set(0, 0, 0);
+                model.scale.setScalar(formData.scale);
+                model.rotation.set(
+                  (formData.rotationX * Math.PI) / 180,
+                  (formData.rotationY * Math.PI) / 180,
+                  (formData.rotationZ * Math.PI) / 180
+                );
+
+                model.traverse((child) => {
+                  if (child instanceof THREE.Mesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    
+                    if (child.material) {
+                      if (Array.isArray(child.material)) {
+                         child.material.forEach((mat) => {
+                           if (mat instanceof THREE.MeshStandardMaterial || mat instanceof THREE.MeshLambertMaterial) {
+                             mat.transparent = formData.opacity < 1;
+                             mat.opacity = formData.opacity;
+                           }
+                         });
+                       } else if (child.material instanceof THREE.MeshStandardMaterial || child.material instanceof THREE.MeshLambertMaterial) {
+                         child.material.transparent = formData.opacity < 1;
+                         child.material.opacity = formData.opacity;
+                       }
+                    }
+                  }
+                });
+
+                if (cncPreviewSceneRef.current) {
+                  cncPreviewSceneRef.current.add(model);
+                  cncPreviewMeshRef.current = model as any;
+                  
+                  if (cncPreviewControlsRef.current) {
+                    cncPreviewControlsRef.current.update();
+                  }
+                  cncPreviewRendererRef.current?.render(cncPreviewSceneRef.current, cncPreviewCameraRef.current!);
+                }
+              },
+              undefined,
+              (fallbackError) => {
+                clearTimeout(fallbackTimeout);
+                console.error('❌ [GLB_LOAD] 降级加载也失败:', fallbackError);
+                message.error('GLB模型加载失败，请检查文件格式和完整性');
+                createDefaultPreviewMesh(formData);
+              }
+            );
+            return;
+          }
+          
+          // 其他类型的错误处理
           if (errorMessage && errorMessage.includes('memory')) {
             message.error('GLB模型文件过大导致内存不足，请使用更小的文件或简化模型');
-          } else if (errorMessage && errorMessage.includes('WebAssembly')) {
-            message.error('GLB模型解码失败，可能是文件损坏或格式不支持');
+          } else if (errorMessage && errorMessage.includes('network')) {
+            message.error('网络连接问题，请检查网络状态后重试');
           } else {
             message.error('GLB模型加载失败，请检查文件格式和网络连接');
           }
-          
-          // 清理DRACOLoader资源
-          dracoLoader.dispose();
           
           // 加载失败时使用默认几何体
           createDefaultPreviewMesh(formData);
@@ -5617,7 +5951,15 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 打开新增场景对话框
   const openNewSceneModal = () => {
+    console.log('🆕 [OPEN-NEW-SCENE] 打开新增场景对话框:', {
+      currentUploadedModel: uploadedSceneModel ? {
+        name: uploadedSceneModel.name,
+        size: uploadedSceneModel.size
+      } : null,
+      callStack: new Error().stack?.split('\n').slice(1, 5).join('\n')
+    });
     setEditingScene(null);
+    console.log('🔄 [OPEN-NEW-SCENE] 重置表单字段');
     sceneForm.resetFields();
     setNewSceneModalVisible(true);
   };
@@ -5656,6 +5998,16 @@ const DigitalTwinEditor: React.FC = () => {
   // 保存场景
   const saveScene = async () => {
     try {
+      console.log('🚀 [SAVE-SCENE] 开始保存场景，当前状态:', {
+        newSceneModalVisible,
+        editingScene: editingScene ? { id: editingScene.id, name: editingScene.name } : null,
+        uploadedSceneModel: uploadedSceneModel ? {
+          name: uploadedSceneModel.name,
+          size: uploadedSceneModel.size
+        } : null,
+        callStack: new Error().stack?.split('\n').slice(1, 5).join('\n')
+      });
+      
       const values = await sceneForm.validateFields();
       
       if (editingScene) {
@@ -5676,12 +6028,25 @@ const DigitalTwinEditor: React.FC = () => {
         message.success('场景新增成功');
       }
       
-      setNewSceneModalVisible(false);
-      setEditingScene(null);
-      setSelectedMapId(null); // 重置地图选择状态
-      setAvailableBaseMaps([]); // 重置可用底图列表
-      setInitializeDevicesValue(true); // 重置初始化设备状态
-      sceneForm.resetFields();
+      // 只有在新增/编辑场景Modal打开时才清理相关状态
+      // 这样可以避免在CNC模型配置等其他场景中误清理uploadedSceneModel状态
+      if (newSceneModalVisible) {
+        console.log('🧹 [SAVE-SCENE] 新增场景模式，开始清理状态');
+        setNewSceneModalVisible(false);
+        setEditingScene(null);
+        setSelectedMapId(null); // 重置地图选择状态
+        setAvailableBaseMaps([]); // 重置可用底图列表
+        setInitializeDevicesValue(true); // 重置初始化设备状态
+        
+        // 🔧 修复：不要清理uploadedSceneModel状态，因为它可能正在被CNC模型配置使用
+        // 只有在真正需要清理时（比如Modal取消或文件删除）才清理
+        console.log('✅ [SAVE-SCENE] 保持uploadedSceneModel状态，避免影响CNC模型配置');
+        // setUploadedSceneModel(null); // 注释掉这行，避免误清理
+        
+        sceneForm.resetFields();
+      } else {
+        console.log('⚠️ [SAVE-SCENE] 非新增场景模式，保持uploadedSceneModel状态');
+      }
     } catch (error) {
       console.error('保存场景失败:', error);
     }
@@ -7039,7 +7404,62 @@ const DigitalTwinEditor: React.FC = () => {
       ctx.restore();
     }
 
-  }, [scale, offsetX, offsetY, walls, currentWall, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, cncMachines, selectedCNCMachines, viewMode, floorAreas, selectedFloorAreas, currentFloorPoints, isDrawingFloor, showFloorVertices, floorPreviewMousePos]);
+    // 绘制3D模型的顶视图
+    console.log('🔍 [CANVAS] 检查3D模型顶视图渲染条件:', {
+      viewMode,
+      hasModelTopViewData: !!modelTopViewData,
+      dataLength: modelTopViewData?.length || 0,
+      modelTopViewData: modelTopViewData
+    });
+    
+    if (viewMode === 'top' && modelTopViewData && modelTopViewData.length > 0) {
+      console.log('✅ [CANVAS] 开始绘制3D模型顶视图，数据点数量:', modelTopViewData.length);
+      ctx.save();
+      
+      // 设置3D模型顶视图的样式
+      ctx.strokeStyle = '#ff6b35'; // 橙色线条
+      ctx.lineWidth = 2 / scale;
+      ctx.fillStyle = 'rgba(255, 107, 53, 0.1)'; // 半透明橙色填充
+      
+      // 开始绘制路径
+      ctx.beginPath();
+      
+      // 将第一个点移动到起始位置
+      const firstPoint = modelTopViewData[0];
+      const firstX = (firstPoint.x - offsetX) * scale;
+      const firstY = (firstPoint.y - offsetY) * scale;
+      ctx.moveTo(firstX, firstY);
+      
+      // 连接所有点形成轮廓
+      for (let i = 1; i < modelTopViewData.length; i++) {
+        const point = modelTopViewData[i];
+        const x = (point.x - offsetX) * scale;
+        const y = (point.y - offsetY) * scale;
+        ctx.lineTo(x, y);
+      }
+      
+      // 闭合路径
+      ctx.closePath();
+      
+      // 填充和描边
+      ctx.fill();
+      ctx.stroke();
+      
+      // 绘制顶视图的顶点
+      ctx.fillStyle = '#ff6b35';
+      modelTopViewData.forEach(point => {
+        const x = (point.x - offsetX) * scale;
+        const y = (point.y - offsetY) * scale;
+        
+        ctx.beginPath();
+        ctx.arc(x, y, 3 / scale, 0, 2 * Math.PI);
+        ctx.fill();
+      });
+      
+      ctx.restore();
+    }
+
+  }, [scale, offsetX, offsetY, walls, currentWall, selectedWalls, selectedSegments, isSelecting, selectionStart, selectionEnd, bezierDrawingState, cncMachines, selectedCNCMachines, viewMode, floorAreas, selectedFloorAreas, currentFloorPoints, isDrawingFloor, showFloorVertices, floorPreviewMousePos, modelTopViewData]);
 
   // 画布初始化和重绘
   useEffect(() => {
@@ -7109,6 +7529,13 @@ const DigitalTwinEditor: React.FC = () => {
           floorAreas={floorAreas}
           selectedWall3DProps={selectedWall3DProps}
           selectedFloor3DProps={selectedFloor3DProps}
+          sceneModel={uploadedSceneModel ? {
+            file: uploadedSceneModel,
+            name: uploadedSceneModel.name,
+            size: uploadedSceneModel.size,
+            type: uploadedSceneModel.type,
+            previewUrl: URL.createObjectURL(uploadedSceneModel)
+          } : undefined}
           onWallSelect={handleWallSelect}
           onCNCMachineSelect={(cncId) => {
             setCncMachines(prev => prev.map(cnc => ({
@@ -7116,6 +7543,11 @@ const DigitalTwinEditor: React.FC = () => {
               selected: cnc.id === cncId
             })));
             openCNCPropertiesPanel(cncId);
+          }}
+          onModelLoaded={(topViewData) => {
+            console.log('🎯 [EDITOR] 接收到3D模型顶视图数据:', topViewData);
+            setModelTopViewData(topViewData);
+            console.log('📝 [EDITOR] modelTopViewData状态已更新，数据点数量:', topViewData?.length || 0);
           }}
           style={{
             position: 'absolute',
@@ -9132,11 +9564,21 @@ const DigitalTwinEditor: React.FC = () => {
         open={newSceneModalVisible}
         onOk={saveScene}
         onCancel={() => {
+          console.log('❌ [MODAL-CANCEL] 取消新增/编辑场景，开始清理状态:', {
+            newSceneModalVisible,
+            uploadedSceneModel: uploadedSceneModel ? {
+              name: uploadedSceneModel.name,
+              size: uploadedSceneModel.size
+            } : null,
+            callStack: new Error().stack?.split('\n').slice(1, 5).join('\n')
+          });
           setNewSceneModalVisible(false);
           setEditingScene(null);
           setSelectedMapId(null);
           setAvailableBaseMaps([]);
           setInitializeDevicesValue(true); // 重置初始化设备状态
+          console.log('🗑️ [MODAL-CANCEL] 清理uploadedSceneModel状态');
+          setUploadedSceneModel(null); // 重置上传的3D模型状态
           sceneForm.resetFields();
         }}
         width={500}
@@ -9227,6 +9669,88 @@ const DigitalTwinEditor: React.FC = () => {
               </Select>
             </Form.Item>
           )}
+          
+          <Form.Item
+            label="导入3D场景模型"
+            name="sceneModel"
+            tooltip="支持GLB、GLTF格式的3D模型文件，用于增强场景的三维展示效果"
+          >
+            <div>
+              <Upload
+                accept=".glb,.gltf"
+                fileList={uploadedSceneModel ? [{
+                  uid: uploadedSceneModel.name,
+                  name: uploadedSceneModel.name,
+                  status: 'done',
+                  size: uploadedSceneModel.size,
+                  type: uploadedSceneModel.type
+                }] : []}
+                beforeUpload={(file) => {
+                  const isValidFormat = file.name.toLowerCase().endsWith('.glb') || file.name.toLowerCase().endsWith('.gltf');
+                  if (!isValidFormat) {
+                    message.error('只支持GLB或GLTF格式的3D模型文件！');
+                    return false;
+                  }
+                  const isLt50M = file.size / 1024 / 1024 < 50;
+                  if (!isLt50M) {
+                    message.error('文件大小不能超过50MB！');
+                    return false;
+                  }
+                  
+                  // 保存文件到状态
+                  setUploadedSceneModel(file);
+                  
+                  // 创建预览URL并更新表单
+                  const url = URL.createObjectURL(file);
+                  sceneForm.setFieldsValue({
+                    sceneModel: {
+                      file: file,
+                      name: file.name,
+                      size: file.size,
+                      type: file.type,
+                      url: url
+                    }
+                  });
+                  
+                  message.success('3D模型文件上传成功！');
+                  return false; // 阻止自动上传
+                }}
+                onRemove={(file) => {
+                  console.log('🗑️ [UPLOAD] onRemove回调被触发:', {
+                    fileName: file?.name || 'unknown',
+                    fileSize: file?.size || 0,
+                    currentUploadedModel: uploadedSceneModel?.name || 'null',
+                    newSceneModalVisible,
+                    stackTrace: new Error().stack
+                  });
+                  
+                  // 只有在Modal打开且用户主动点击删除按钮时才清理状态
+                  // 避免在表单重置或Modal关闭时被意外触发
+                  if (newSceneModalVisible && uploadedSceneModel && file && file.name === uploadedSceneModel.name) {
+                    console.log('✅ [UPLOAD] 确认删除文件:', file.name);
+                    setUploadedSceneModel(null);
+                    sceneForm.setFieldsValue({ sceneModel: null });
+                    message.info('已移除3D模型文件');
+                  } else {
+                    console.log('⚠️ [UPLOAD] 跳过删除操作 - Modal未打开或文件不匹配或状态异常');
+                  }
+                }}
+                showUploadList={{
+                  showPreviewIcon: true,
+                  showRemoveIcon: true,
+                  showDownloadIcon: false,
+                }}
+                maxCount={1}
+              >
+                <Button icon={<PlusOutlined />} style={{ width: '100%' }}>
+                  选择3D模型文件
+                </Button>
+              </Upload>
+              <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
+                支持格式：GLB、GLTF | 文件大小：≤50MB
+              </div>
+            </div>
+          </Form.Item>
         </Form>
       </Modal>
 
