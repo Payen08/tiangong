@@ -75,7 +75,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'field-control',
-        element: <div />, // 占位符，实际由Layout组件处理
+        element: <div>场控视图</div>, // Layout组件会处理这个路径
       },
       {
         path: 'digital-twin',
@@ -83,7 +83,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'digital-twin/editor',
-        element: <div />, // 占位符，实际由Layout组件处理
+        element: <div>数字孪生编辑器</div>, // Layout组件会处理这个路径
       },
       {
         path: 'scene',

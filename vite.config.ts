@@ -8,6 +8,11 @@ export default defineConfig({
     tsconfigPaths()
   ],
   build: {
+    // 优化构建性能
+    target: 'esnext',
+    minify: 'esbuild',
+    sourcemap: false,
+    // 分包策略，减少单个包大小
     rollupOptions: {
       output: {
         manualChunks: {
@@ -26,5 +31,28 @@ export default defineConfig({
     },
     // 调整 chunk 大小警告限制
     chunkSizeWarningLimit: 1000
+  },
+  // 依赖预构建优化
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'antd',
+      '@ant-design/icons',
+      'react-router-dom',
+      'three',
+      'echarts',
+      'clsx',
+      'tailwind-merge',
+      'dayjs',
+      'zustand',
+      'sonner',
+      'lucide-react'
+    ]
+  },
+  // 开发服务器配置
+  server: {
+    host: true,
+    port: 5173
   }
 })
