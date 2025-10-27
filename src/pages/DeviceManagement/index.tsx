@@ -185,35 +185,7 @@ const DeviceForm = React.forwardRef<{ validateAndSubmit: () => void }, DeviceFor
           </Col>
         </Row>
 
-        <Row gutter={16}>
-          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-            <Form.Item
-              label="当前状态"
-              name="currentStatus"
-              rules={[{ required: true, message: '请选择当前状态' }]}
-            >
-              <Select placeholder="请选择当前状态">
-                {statusOptions.map((status) => (
-                  <Option key={status} value={status}>
-                    {status}
-                  </Option>
-                ))}
-              </Select>
-            </Form.Item>
-          </Col>
-          <Col xs={24} sm={24} md={12} lg={12} xl={12}>
-            <Form.Item
-              label="是否在线"
-              name="isOnline"
-              rules={[{ required: true, message: '请选择是否在线' }]}
-            >
-              <Select placeholder="请选择是否在线">
-                <Option value={true}>在线</Option>
-                <Option value={false}>离线</Option>
-              </Select>
-            </Form.Item>
-          </Col>
-        </Row>
+
         <Row gutter={16}>
           <Col xs={24} sm={24} md={12} lg={12} xl={12}>
             <Form.Item

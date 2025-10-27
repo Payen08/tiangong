@@ -423,6 +423,9 @@ const MapManagement: React.FC = () => {
   const [selectionStart, setSelectionStart] = useState<{x: number, y: number} | null>(null); // 框选起始点
   const [selectionEnd, setSelectionEnd] = useState<{x: number, y: number} | null>(null); // 框选结束点
   
+  // 名称显示控制状态
+  const [showElementNames, setShowElementNames] = useState(true); // 是否显示元素名称
+  
   // 批量设置面板状态
   const [batchSettingsPanelVisible, setBatchSettingsPanelVisible] = useState(false); // 批量设置面板显示状态
   
@@ -472,6 +475,20 @@ const MapManagement: React.FC = () => {
   const [hideAllPoints, setHideAllPoints] = useState(false); // 隐藏所有点
   const [hideAllPaths, setHideAllPaths] = useState(false); // 隐藏所有路径
   const [hideVehicleModels, setHideVehicleModels] = useState(true); // 隐藏车体模型，默认开启
+  
+  // 名称隐藏相关状态
+  const [hideNodeNames, setHideNodeNames] = useState(false); // 隐藏节点名称
+  const [hideAllPointNames, setHideAllPointNames] = useState(false); // 隐藏所有点名称
+  const [hideAllPathNames, setHideAllPathNames] = useState(false); // 隐藏所有路径名称
+  
+  // 阅览模式独立的元素隐藏状态
+  const [viewModeHideMapNodes, setViewModeHideMapNodes] = useState(false); // 阅览模式：隐藏地图节点
+  const [viewModeHideAllPoints, setViewModeHideAllPoints] = useState(false); // 阅览模式：隐藏所有点
+  const [viewModeHideAllPaths, setViewModeHideAllPaths] = useState(false); // 阅览模式：隐藏所有路径
+  const [viewModeHideVehicleModels, setViewModeHideVehicleModels] = useState(true); // 阅览模式：隐藏车体模型，默认开启
+  const [viewModeHideNodeNames, setViewModeHideNodeNames] = useState(false); // 阅览模式：隐藏节点名称
+  const [viewModeHideAllPointNames, setViewModeHideAllPointNames] = useState(false); // 阅览模式：隐藏所有点名称
+  const [viewModeHideAllPathNames, setViewModeHideAllPathNames] = useState(false); // 阅览模式：隐藏所有路径名称
   
   // 点拖拽相关状态
   const [isDraggingPoint, setIsDraggingPoint] = useState(false); // 是否正在拖拽点
@@ -1418,6 +1435,7 @@ const MapManagement: React.FC = () => {
   
   // 右侧信息面板标签页状态
   const [activeTabKey, setActiveTabKey] = useState('tools'); // 默认选中绘图工具Tab
+  const [viewModeActiveTabKey, setViewModeActiveTabKey] = useState('elements'); // 阅览模式默认选中地图元素Tab
 
   // 地图原点坐标编辑相关状态
   const [originEditVisible, setOriginEditVisible] = useState(false); // 原点编辑气泡显示状态
@@ -1438,6 +1456,10 @@ const MapManagement: React.FC = () => {
   
   // 地图元素展开状态管理
   const [mapElementActiveKey, setMapElementActiveKey] = useState<string | string[]>([]);
+  // 阅览模式地图元素展开状态管理
+  const [viewModeMapElementActiveKey, setViewModeMapElementActiveKey] = useState<string | string[]>('');
+  
+
   
   // 路网组管理状态
   const [isNetworkGroupModalVisible, setIsNetworkGroupModalVisible] = useState(false);
@@ -7356,7 +7378,7 @@ const MapManagement: React.FC = () => {
 
   // 渲染车体模型组件
   const renderVehicleModel = (point: any, canvasCoords: { x: number, y: number }) => {
-    if (hideVehicleModels || !shouldShowVehicleModel(point.type)) {
+    if ((currentMode === 'view' ? viewModeHideVehicleModels : hideVehicleModels) || !shouldShowVehicleModel(point.type)) {
       return null;
     }
 
@@ -7548,7 +7570,7 @@ const MapManagement: React.FC = () => {
 
   const renderLine = (line: MapLine) => {
     // 检查隐藏状态，如果隐藏所有路径则不渲染
-    if (hideAllPaths) {
+    if (currentMode === 'view' ? viewModeHideAllPaths : hideAllPaths) {
       return null;
     }
     
@@ -7610,6 +7632,27 @@ const MapManagement: React.FC = () => {
             {/* 双向箭头：起点和终点都有箭头 */}
             {renderArrow(endCoords.x, endCoords.y, angle, selectedStroke, `${line.id}-end-arrow`)}
             {renderArrow(startCoords.x, startCoords.y, angle + Math.PI, selectedStroke, `${line.id}-start-arrow`)}
+            
+            {/* 线条名称文本显示 */}
+            {showElementNames && !(currentMode === 'view' ? viewModeHideAllPathNames : hideAllPathNames) && (
+              <text
+                x={(startCoords.x + endCoords.x) / 2}
+                y={(startCoords.y + endCoords.y) / 2}
+                fill="#333"
+                fontSize={Math.max(10, 12 / canvasScale)}
+                fontWeight="500"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                style={{
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  filter: 'drop-shadow(1px 1px 2px rgba(255, 255, 255, 0.8))'
+                }}
+                transform={`rotate(${angle * 180 / Math.PI}, ${(startCoords.x + endCoords.x) / 2}, ${(startCoords.y + endCoords.y) / 2})`}
+              >
+                {line.name}
+              </text>
+            )}
           </g>
         );
       }
@@ -7639,6 +7682,27 @@ const MapManagement: React.FC = () => {
             />
             {/* 单向箭头指向终点 */}
             {renderArrow(endCoords.x, endCoords.y, angle, selectedStrokeSingle, `${line.id}-arrow`)}
+            
+            {/* 线条名称文本显示 */}
+            {showElementNames && (
+              <text
+                x={(startCoords.x + endCoords.x) / 2}
+                y={(startCoords.y + endCoords.y) / 2}
+                fill="#333"
+                fontSize={Math.max(10, 12 / canvasScale)}
+                fontWeight="500"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                style={{
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                  filter: 'drop-shadow(1px 1px 2px rgba(255, 255, 255, 0.8))'
+                }}
+                transform={`rotate(${angle * 180 / Math.PI}, ${(startCoords.x + endCoords.x) / 2}, ${(startCoords.y + endCoords.y) / 2})`}
+              >
+                {line.name}
+              </text>
+            )}
           </g>
         );
       }
@@ -7682,6 +7746,39 @@ const MapManagement: React.FC = () => {
             {/* 双向箭头 - 使用曲线切线角度 */}
             {renderArrow(startCoords.x, startCoords.y, startTangentAngleDouble + Math.PI, selectedStrokeDoubleBezier, `${line.id}-start-arrow`)}
             {renderArrow(endCoords.x, endCoords.y, endTangentAngleDouble, selectedStrokeDoubleBezier, `${line.id}-end-arrow`)}
+            
+            {/* 贝塞尔曲线名称文本显示 - 在曲线真正的中点位置 */}
+            {showElementNames && !(currentMode === 'view' ? viewModeHideAllPathNames : hideAllPathNames) && (() => {
+              // 计算贝塞尔曲线在t=0.5处的实际位置
+              const t = 0.5;
+              const bezierX = Math.pow(1-t, 3) * startCoords.x + 
+                             3 * Math.pow(1-t, 2) * t * controlPoint1.x + 
+                             3 * (1-t) * Math.pow(t, 2) * controlPoint2.x + 
+                             Math.pow(t, 3) * endCoords.x;
+              const bezierY = Math.pow(1-t, 3) * startCoords.y + 
+                             3 * Math.pow(1-t, 2) * t * controlPoint1.y + 
+                             3 * (1-t) * Math.pow(t, 2) * controlPoint2.y + 
+                             Math.pow(t, 3) * endCoords.y;
+              
+              return (
+                <text
+                  x={bezierX}
+                  y={bezierY}
+                  fill="#333"
+                  fontSize={Math.max(10, 12 / canvasScale)}
+                  fontWeight="500"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  style={{
+                    pointerEvents: 'none',
+                    userSelect: 'none',
+                    filter: 'drop-shadow(1px 1px 2px rgba(255, 255, 255, 0.8))'
+                  }}
+                >
+                  {line.name}
+                </text>
+              );
+            })()}
           </g>
         );
       }
@@ -7722,6 +7819,39 @@ const MapManagement: React.FC = () => {
             {isSelectedSingleBezier && renderControlHandles(line, controlPoint1_single, controlPoint2_single)}
             {/* 单向箭头指向终点 - 使用曲线切线角度 */}
             {renderArrow(endCoords.x, endCoords.y, endTangentAngleSingle, selectedStrokeSingleBezier, `${line.id}-arrow`)}
+            
+            {/* 贝塞尔曲线名称文本显示 - 在曲线真正的中点位置 */}
+            {showElementNames && !(currentMode === 'view' ? viewModeHideAllPathNames : hideAllPathNames) && (() => {
+              // 计算贝塞尔曲线在t=0.5处的实际位置
+              const t = 0.5;
+              const bezierX = Math.pow(1-t, 3) * startCoords.x + 
+                             3 * Math.pow(1-t, 2) * t * controlPoint1_single.x + 
+                             3 * (1-t) * Math.pow(t, 2) * controlPoint2_single.x + 
+                             Math.pow(t, 3) * endCoords.x;
+              const bezierY = Math.pow(1-t, 3) * startCoords.y + 
+                             3 * Math.pow(1-t, 2) * t * controlPoint1_single.y + 
+                             3 * (1-t) * Math.pow(t, 2) * controlPoint2_single.y + 
+                             Math.pow(t, 3) * endCoords.y;
+              
+              return (
+                <text
+                  x={bezierX}
+                  y={bezierY}
+                  fill="#333"
+                  fontSize={Math.max(10, 12 / canvasScale)}
+                  fontWeight="500"
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  style={{
+                    pointerEvents: 'none',
+                    userSelect: 'none',
+                    filter: 'drop-shadow(1px 1px 2px rgba(255, 255, 255, 0.8))'
+                  }}
+                >
+                  {line.name}
+                </text>
+              );
+            })()}
           </g>
         );
       }
@@ -11679,7 +11809,9 @@ const MapManagement: React.FC = () => {
                     </div>
                   </div>
                   
-
+                  <Divider style={{ margin: '16px 0' }} />
+                  
+                  {/* 显示设置 */}
                 </div>
                 
                 {/* 中间画布区域 - 最大化绘图区域 */}
@@ -12461,6 +12593,33 @@ const MapManagement: React.FC = () => {
                               }}
                             />
                             
+                            {/* 区域名称文本显示 */}
+                            {showElementNames && (() => {
+                              // 计算区域中心点
+                              const centerX = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
+                              const centerY = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
+                              const areaColors = getAreaColors(area);
+                              
+                              return (
+                                <text
+                                  x={centerX}
+                                  y={centerY}
+                                  textAnchor="middle"
+                                  dominantBaseline="middle"
+                                  fontSize={Math.max(10, 14 / canvasScale)}
+                                  fill="#333"
+                                  fontWeight="600"
+                                  style={{
+                                    pointerEvents: 'none',
+                                    userSelect: 'none',
+                                    filter: 'drop-shadow(1px 1px 2px rgba(255, 255, 255, 0.8))'
+                                  }}
+                                >
+                                  {area.name}
+                                </text>
+                              );
+                            })()}
+                            
                             {/* 区域中心点标识（选中时显示） */}
                             {isSelected && (() => {
                               // 计算区域中心点
@@ -12469,29 +12628,15 @@ const MapManagement: React.FC = () => {
                               const areaColors = getAreaColors(area);
                               
                               return (
-                                <g>
-                                  <circle
-                                    cx={centerX}
-                                    cy={centerY}
-                                    r="6"
-                                    fill={areaColors.strokeColor}
-                                    stroke="#ffffff"
-                                    strokeWidth="2"
-                                    opacity="0.9"
-                                  />
-                                  {/* 区域名称标签 */}
-                                  <text
-                                    x={centerX}
-                                    y={centerY - 15}
-                                    textAnchor="middle"
-                                    fontSize="12"
-                                    fill={areaColors.strokeColor}
-                                    fontWeight="bold"
-                                    style={{ pointerEvents: 'none' }}
-                                  >
-                                    {area.name}
-                                  </text>
-                                </g>
+                                <circle
+                                  cx={centerX}
+                                  cy={centerY}
+                                  r="6"
+                                  fill={areaColors.strokeColor}
+                                  stroke="#ffffff"
+                                  strokeWidth="2"
+                                  opacity="0.9"
+                                />
                               );
                             })()}
                             
@@ -12585,7 +12730,7 @@ const MapManagement: React.FC = () => {
                         })}
                         
                         {/* 渲染线条 - 仅在拓扑地图模式下显示，且未隐藏所有路径时显示 */}
-                        {mapType === 'topology' && !hideAllPaths && (() => {
+                        {mapType === 'topology' && !(currentMode === 'view' ? viewModeHideAllPaths : hideAllPaths) && (() => {
                           // 根据路网组的visible状态过滤显示的路径
                           const visibleLines = mapLines.filter(line => {
                             // 查找包含此路径的路网组
@@ -12777,7 +12922,8 @@ const MapManagement: React.FC = () => {
                       // 根据路网组可见性过滤显示的点
                       const visiblePoints = mapPoints.filter(point => {
                         // 检查是否应该隐藏该点（原有逻辑）
-                        const shouldHidePoint = hideAllPoints || (hideMapNodes && point.type === '节点');
+                        const shouldHidePoint = (currentMode === 'view' ? viewModeHideAllPoints : hideAllPoints) || 
+                                              ((currentMode === 'view' ? viewModeHideMapNodes : hideMapNodes) && point.type === '节点');
                         if (shouldHidePoint) {
                           return false;
                         }
@@ -12825,7 +12971,8 @@ const MapManagement: React.FC = () => {
                       // 根据路网组可见性过滤显示的点
                       const visiblePoints = mapPoints.filter(point => {
                         // 检查是否应该隐藏该点（原有逻辑）
-                        const shouldHidePoint = hideAllPoints || (hideMapNodes && point.type === '节点');
+                        const shouldHidePoint = (currentMode === 'view' ? viewModeHideAllPoints : hideAllPoints) || 
+                                              ((currentMode === 'view' ? viewModeHideMapNodes : hideMapNodes) && point.type === '节点');
                         if (shouldHidePoint) {
                           return false;
                         }
@@ -12946,6 +13093,30 @@ const MapManagement: React.FC = () => {
                                   strokeLinejoin="round"
                                 />
                               </svg>
+                            </div>
+                          )}
+                          
+                          {/* 点名称文本显示 */}
+                          {showElementNames && 
+                           !(currentMode === 'view' ? viewModeHideAllPointNames : hideAllPointNames) && 
+                           !((currentMode === 'view' ? viewModeHideNodeNames : hideNodeNames) && point.type === '节点') && (
+                            <div
+                              style={{
+                                position: 'absolute',
+                                left: '50%',
+                                top: '-25px',
+                                transform: 'translateX(-50%)',
+                                color: '#333',
+                                fontSize: `${Math.max(10, 12 / canvasScale)}px`,
+                                fontWeight: '600',
+                                whiteSpace: 'nowrap',
+                                pointerEvents: 'none',
+                                zIndex: 1002,
+                                userSelect: 'none',
+                                textShadow: '1px 1px 2px rgba(255, 255, 255, 0.8), -1px -1px 2px rgba(255, 255, 255, 0.8), 1px -1px 2px rgba(255, 255, 255, 0.8), -1px 1px 2px rgba(255, 255, 255, 0.8)'
+                              }}
+                            >
+                              {point.name}
                             </div>
                           )}
                         </div>
@@ -13331,8 +13502,8 @@ const MapManagement: React.FC = () => {
                   boxShadow: '-2px 0 8px rgba(0,0,0,0.1)'
                 }}>
                   <Tabs
-                    activeKey={currentMode === 'view' ? 'elements' : activeTabKey}
-                    onChange={setActiveTabKey}
+                    activeKey={currentMode === 'view' ? viewModeActiveTabKey : activeTabKey}
+                    onChange={currentMode === 'view' ? setViewModeActiveTabKey : setActiveTabKey}
                     size="small"
                     style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
                     tabBarStyle={{ 
@@ -13976,8 +14147,8 @@ const MapManagement: React.FC = () => {
                         children: (
                           <div style={{ padding: '12px 12px 12px 12px', flex: 1, overflow: 'auto' }}>
                             <Collapse
-                              activeKey={mapElementActiveKey}
-                              onChange={setMapElementActiveKey}
+                              activeKey={viewModeMapElementActiveKey}
+                              onChange={setViewModeMapElementActiveKey}
                               size="small"
                               ghost
                               accordion
@@ -14633,35 +14804,57 @@ const MapManagement: React.FC = () => {
                               </h4>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 <Checkbox
-                                  checked={hideMapNodes}
-                                  onChange={(e) => setHideMapNodes(e.target.checked)}
+                                  checked={currentMode === 'view' ? viewModeHideMapNodes : hideMapNodes}
+                                  onChange={(e) => currentMode === 'view' ? setViewModeHideMapNodes(e.target.checked) : setHideMapNodes(e.target.checked)}
                                   style={{ fontSize: '13px' }}
                                 >
                                   隐藏地图节点
                                 </Checkbox>
                                 <Checkbox
-                                  checked={hideAllPoints}
-                                  onChange={(e) => setHideAllPoints(e.target.checked)}
+                                  checked={currentMode === 'view' ? viewModeHideAllPoints : hideAllPoints}
+                                  onChange={(e) => currentMode === 'view' ? setViewModeHideAllPoints(e.target.checked) : setHideAllPoints(e.target.checked)}
                                   style={{ fontSize: '13px' }}
                                 >
                                   隐藏所有点
                                 </Checkbox>
                                 <Checkbox
-                                  checked={hideAllPaths}
-                                  onChange={(e) => setHideAllPaths(e.target.checked)}
+                                  checked={currentMode === 'view' ? viewModeHideAllPaths : hideAllPaths}
+                                  onChange={(e) => currentMode === 'view' ? setViewModeHideAllPaths(e.target.checked) : setHideAllPaths(e.target.checked)}
                                   style={{ fontSize: '13px' }}
                                 >
                                   隐藏所有路径
                                 </Checkbox>
                                 <Checkbox
-                                  checked={hideVehicleModels}
-                                  onChange={(e) => setHideVehicleModels(e.target.checked)}
+                                  checked={currentMode === 'view' ? viewModeHideVehicleModels : hideVehicleModels}
+                                  onChange={(e) => currentMode === 'view' ? setViewModeHideVehicleModels(e.target.checked) : setHideVehicleModels(e.target.checked)}
                                   style={{ fontSize: '13px' }}
                                 >
                                   隐藏车体模型
                                 </Checkbox>
+                                <Checkbox
+                                  checked={currentMode === 'view' ? viewModeHideNodeNames : hideNodeNames}
+                                  onChange={(e) => currentMode === 'view' ? setViewModeHideNodeNames(e.target.checked) : setHideNodeNames(e.target.checked)}
+                                  style={{ fontSize: '13px' }}
+                                >
+                                  隐藏节点名称
+                                </Checkbox>
+                                <Checkbox
+                                  checked={currentMode === 'view' ? viewModeHideAllPointNames : hideAllPointNames}
+                                  onChange={(e) => currentMode === 'view' ? setViewModeHideAllPointNames(e.target.checked) : setHideAllPointNames(e.target.checked)}
+                                  style={{ fontSize: '13px' }}
+                                >
+                                  隐藏所有点名称
+                                </Checkbox>
+                                <Checkbox
+                                  checked={currentMode === 'view' ? viewModeHideAllPathNames : hideAllPathNames}
+                                  onChange={(e) => currentMode === 'view' ? setViewModeHideAllPathNames(e.target.checked) : setHideAllPathNames(e.target.checked)}
+                                  style={{ fontSize: '13px' }}
+                                >
+                                  隐藏所有路径名称
+                                </Checkbox>
                               </div>
                             </div>
+
                             <div style={{ 
                               padding: '12px', 
                               backgroundColor: '#f5f5f5', 

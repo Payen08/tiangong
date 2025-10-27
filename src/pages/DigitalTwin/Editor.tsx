@@ -193,7 +193,7 @@ interface BaseMapData {
 interface FloorScene {
   id: string;
   name: string;
-  floor: number;
+  floor?: number; // 楼层编号设为可选
   dataSource?: string; // 场景基础数据源
   baseMap?: string; // 选择的底图ID
   initializeDevices?: boolean; // 是否初始化地图关联设备
@@ -2319,6 +2319,7 @@ const DigitalTwinEditor: React.FC = () => {
   const toggleAllPanels = () => {
     const newVisible = !allPanelsVisible;
     setAllPanelsVisible(newVisible);
+    // 只隐藏左右面板，楼层选择器和对齐工具不受影响
     setLeftPanelVisible(newVisible);
     setRightPanelVisible(newVisible);
   };
@@ -5986,7 +5987,6 @@ const DigitalTwinEditor: React.FC = () => {
     
     sceneForm.setFieldsValue({
       name: scene.name,
-      floor: scene.floor,
       dataSource: scene.dataSource,
       baseMap: scene.baseMap,
       initializeDevices: initDevices,
@@ -8773,12 +8773,12 @@ const DigitalTwinEditor: React.FC = () => {
         </div>
       )}
 
-      {/* 楼层切换和设置按钮组 */}
-      {leftPanelVisible && viewMode === 'top' && (
+      {/* 楼层切换和设置按钮组 - 始终显示，不受面板隐藏状态影响 */}
+      {viewMode === 'top' && (
         <div style={{
           position: 'absolute',
           top: '50%',
-          left: '260px',
+          left: leftPanelVisible ? '260px' : '20px', // 根据左侧面板状态调整位置
           transform: 'translateY(-50%)',
           zIndex: 10,
           display: 'flex',
@@ -8890,12 +8890,12 @@ const DigitalTwinEditor: React.FC = () => {
         </div>
       )}
 
-      {/* CNC机台对齐工具栏 - 仅在多选时显示 */}
-      {rightPanelVisible && viewMode === 'top' && selectedCNCMachines.length >= 2 && (
+      {/* CNC机台对齐工具栏 - 仅在多选时显示，位置根据右侧面板状态调整 */}
+      {viewMode === 'top' && selectedCNCMachines.length >= 2 && (
         <div style={{
           position: 'absolute',
           top: '50%',
-          right: '320px',
+          right: rightPanelVisible ? '320px' : '80px',
           transform: 'translateY(-50%)',
           zIndex: 10,
           display: 'flex',
@@ -9118,7 +9118,7 @@ const DigitalTwinEditor: React.FC = () => {
         <div style={{
           position: 'absolute',
           top: '50%',
-          right: rightPanelVisible ? '260px' : '20px', // 根据右侧面板状态调整位置
+          right: rightPanelVisible ? '260px' : '20px', // 放大缩小工具栏放在右边
           transform: 'translateY(-50%)',
           zIndex: 10,
           display: 'flex',
@@ -9586,9 +9586,6 @@ const DigitalTwinEditor: React.FC = () => {
         <Form
           form={sceneForm}
           layout="vertical"
-          initialValues={{
-            floor: floorScenes.length + 1
-          }}
         >
           <Form.Item
             label="场景名称"
@@ -9596,14 +9593,6 @@ const DigitalTwinEditor: React.FC = () => {
             rules={[{ required: true, message: '请输入场景名称' }]}
           >
             <Input placeholder="例如：1楼、2楼、3楼" />
-          </Form.Item>
-          
-          <Form.Item
-            label="楼层编号"
-            name="floor"
-            rules={[{ required: true, message: '请输入楼层编号' }]}
-          >
-            <Input type="number" placeholder="请输入楼层编号" />
           </Form.Item>
           
           <Form.Item

@@ -674,13 +674,11 @@ const DigitalTwin: React.FC = () => {
           <ThreeScene ref={threeSceneRef} />
         </div>
 
-        {/* 中间悬浮控制栏 */}
+        {/* 中间悬浮控制栏 - 楼层选择器始终居中显示 */}
         <div className="digital-twin-page" style={{
           position: 'absolute',
           top: '20px',
-          left: leftPanelVisible && rightPanelVisible ? 'calc(240px + (100vw - 480px) / 2)' :
-                leftPanelVisible ? 'calc(240px + (100vw - 240px) / 2)' :
-                rightPanelVisible ? 'calc((100vw - 240px) / 2)' : '50%',
+          left: '50%',
           transform: 'translateX(-50%)',
           background: 'rgba(4, 3, 28, 0.2)',
           borderRadius: '12px',
