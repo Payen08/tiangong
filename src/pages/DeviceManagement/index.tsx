@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Card,
   Table,
@@ -330,6 +331,7 @@ const DeviceForm = React.forwardRef<{ validateAndSubmit: () => void }, DeviceFor
 );
 
 const DeviceManagement: React.FC = () => {
+  const navigate = useNavigate();
   const [searchText, setSearchText] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<string | undefined>(undefined);
   const [selectedDeviceType, setSelectedDeviceType] = useState<string | undefined>(undefined);
@@ -1115,7 +1117,13 @@ const DeviceManagement: React.FC = () => {
                   fontWeight: 500,
                   fontSize: '14px'
                 }}
-                onClick={() => handleView(record)}
+                onClick={() => {
+                   if (record.deviceType === '机器人设备') {
+                     navigate(`/resources/devices/robot/${record.id}`);
+                   } else {
+                     handleView(record);
+                   }
+                 }}
               >
                 {record.deviceName}
               </span>
@@ -1284,7 +1292,13 @@ const DeviceManagement: React.FC = () => {
         <Tooltip title={text}>
           <span 
             style={{ color: '#1890ff', cursor: 'pointer' }}
-            onClick={() => handleEdit(record)}
+            onClick={() => {
+              if (record.deviceType === '机器人设备') {
+                navigate(`/resources/devices/robot/${record.id}`);
+              } else {
+                handleEdit(record);
+              }
+            }}
           >
             {text}
           </span>

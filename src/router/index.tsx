@@ -31,6 +31,7 @@ const AddProduct = createLazyComponent(() => import('@/pages/ProductManagement/A
 
 // 设备管理模块
 const DeviceManagement = createLazyComponent(() => import('@/pages/DeviceManagement/index'));
+const RobotDeviceDetail = createLazyComponent(() => import('@/pages/DeviceManagement/RobotDeviceDetail'));
 
 // 场景管理模块
 const MapManagement = createLazyComponent(() => import('@/pages/SceneManagement/MapManagement'));
@@ -116,6 +117,10 @@ export const router = createBrowserRouter([
           {
             path: 'devices',
             element: <DeviceManagement />,
+          },
+          {
+            path: 'devices/robot/:id',
+            element: <RobotDeviceDetail />,
           },
         ],
       },
