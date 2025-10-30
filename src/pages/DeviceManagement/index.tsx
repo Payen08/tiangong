@@ -66,7 +66,7 @@ interface DeviceFormProps {
   loading: boolean,
   productNames: string[],
   deviceTypeOptions: string[],
-  statusOptions: string[],
+
   devices: Device[],
   selectedDeviceType?: string,
   getDeviceTypeByProduct: (product: string) => string
@@ -74,7 +74,7 @@ interface DeviceFormProps {
 
 // 内部DeviceForm组件
 const DeviceForm = React.forwardRef<{ validateAndSubmit: () => void }, DeviceFormProps>(
-  ({ form, editingDevice, onFinish, productNames, deviceTypeOptions, statusOptions, devices, selectedDeviceType, getDeviceTypeByProduct }, ref) => {
+  ({ form, editingDevice, onFinish, productNames, deviceTypeOptions, devices, selectedDeviceType, getDeviceTypeByProduct }, ref) => {
     const [formValues, setFormValues] = React.useState<any>({});
     
     // 使用状态来跟踪表单值，避免useWatch的连接问题
@@ -816,7 +816,7 @@ const DeviceManagement: React.FC = () => {
 
   const productNames = ['AGV自动导引车', 'AMR自主移动机器人', 'MCR协作机器人', 'CNC加工中心', 'CNC数控车床', 'CNC铣床', '自动化生产线', '货运电梯A', '客运电梯B', '载货升降机', '感应玻璃门', '旋转门系统', '防火卷帘门', '环境监测系统', '安防监控系统', '消防报警系统', '虚拟控制器', '虚拟监控系统'];
   const deviceTypeOptions = ['机器人设备', '生产设备', '电梯设备', '自动门设备', '虚拟设备', '其他设备'];
-  const statusOptions = ['空闲', '执行中', '充电中', '异常', '交管中', '避障', '解包闸', '急停'];
+
   const onlineStatusOptions = ['在线', '离线'];
 
   // 筛选数据并按更新时间倒序排序
@@ -1901,7 +1901,7 @@ const DeviceManagement: React.FC = () => {
           loading={loading}
           productNames={productNames}
           deviceTypeOptions={deviceTypeOptions}
-          statusOptions={statusOptions}
+
           devices={devices}
           selectedDeviceType={selectedDeviceType}
           getDeviceTypeByProduct={getDeviceTypeByProduct}

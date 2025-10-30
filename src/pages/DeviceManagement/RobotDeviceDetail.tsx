@@ -10,7 +10,7 @@ import {
   Space,
   Tabs,
   Table,
-  Statistic,
+
   Timeline,
   Badge,
   Tooltip,
@@ -21,7 +21,7 @@ import {
 import {
   WifiOutlined,
   DisconnectOutlined,
-  SettingOutlined,
+
   PlayCircleOutlined,
   PauseCircleOutlined,
   StopOutlined,
@@ -886,7 +886,7 @@ const RobotDeviceDetail: React.FC = () => {
                   {/* 地图编辑器 */}
                   <Card 
                     style={{ 
-                      height: '600px',
+                      height: '840px',
                       display: 'flex',
                       flexDirection: 'column'
                     }}
@@ -919,10 +919,11 @@ const RobotDeviceDetail: React.FC = () => {
                           } catch (e) {
                             console.warn('无法解析设备位置:', device.mapPosition);
                           }
-                          // 默认位置
-                          return { x: 400, y: 300 };
+                          // 为测试提供一个有效的默认位置（画布中心区域）
+                          return { x: 500, y: 400 };
                         })() : 
-                        undefined
+                        // 如果没有mapPosition，也提供一个默认位置用于雷达测试
+                        { x: 500, y: 400 }
                       }
                       mapName={device.relatedMap}
                     />

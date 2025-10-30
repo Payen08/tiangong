@@ -424,7 +424,7 @@ const MapManagement: React.FC = () => {
   const [selectionEnd, setSelectionEnd] = useState<{x: number, y: number} | null>(null); // 框选结束点
   
   // 名称显示控制状态
-  const [showElementNames, setShowElementNames] = useState(true); // 是否显示元素名称
+  const [showElementNames] = useState(true); // 是否显示元素名称
   
   // 批量设置面板状态
   const [batchSettingsPanelVisible, setBatchSettingsPanelVisible] = useState(false); // 批量设置面板显示状态
@@ -1455,7 +1455,7 @@ const MapManagement: React.FC = () => {
   const [searchType, setSearchType] = useState<'line' | 'point'>('line');
   
   // 地图元素展开状态管理
-  const [mapElementActiveKey, setMapElementActiveKey] = useState<string | string[]>([]);
+
   // 阅览模式地图元素展开状态管理
   const [viewModeMapElementActiveKey, setViewModeMapElementActiveKey] = useState<string | string[]>('');
   
@@ -12598,7 +12598,7 @@ const MapManagement: React.FC = () => {
                               // 计算区域中心点
                               const centerX = area.points.reduce((sum, p) => sum + p.x, 0) / area.points.length;
                               const centerY = area.points.reduce((sum, p) => sum + p.y, 0) / area.points.length;
-                              const areaColors = getAreaColors(area);
+
                               
                               return (
                                 <text
