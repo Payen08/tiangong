@@ -10,27 +10,43 @@ import {
   Space,
   Tabs,
   Table,
-
   Timeline,
   Badge,
   Tooltip,
   message,
   AutoComplete,
   Input,
+  Modal,
+  Form,
+  InputNumber,
+  Select,
+  Switch,
+  Checkbox,
+  Upload,
 } from 'antd';
 import {
   WifiOutlined,
   DisconnectOutlined,
-
   PlayCircleOutlined,
   PauseCircleOutlined,
   StopOutlined,
   ReloadOutlined,
   CloseOutlined,
   SearchOutlined,
+  PlusOutlined,
+  EditOutlined,
+  DeleteOutlined,
+  ImportOutlined,
+  ExportOutlined,
+  EyeOutlined,
+  DownloadOutlined,
+  UploadOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import DeviceMapEditor from '../../components/DeviceMapEditor';
+import DeviceBehaviorTreeEditor from '../../components/DeviceBehaviorTreeEditor';
 import type { ColumnsType } from 'antd/es/table';
+import { usePoseCoordinateStore, type PoseManagementItem, type CoordinateSystemItem } from '../../store/poseCoordinateStore';
 
 // 机器人设备接口
 interface RobotDevice {
@@ -80,6 +96,30 @@ interface StatusHistory {
   description: string;
 }
 
+// 设备任务接口定义
+interface DeviceTask {
+  id: string;                    // 任务ID
+  name: string;                  // 任务名称
+  type: 'move' | 'behavior_tree'; // 任务类型：移动任务或行为树任务
+  status: 'running' | 'completed' | 'failed' | 'cancelled' | 'paused'; // 执行结果
+  errorCode?: string;            // 错误码
+  startTime: string;             // 开始时间
+  endTime?: string;              // 结束时间
+  // 移动任务特有字段
+  targetMapId?: string;          // 目标地图ID
+  targetMapName?: string;        // 目标地图名称
+  targetPointId?: string;        // 目标点位ID
+  targetPointName?: string;      // 目标点位名称
+  // 行为树任务特有字段
+  behaviorTreeName?: string;     // 行为树名称
+  behaviorTreeId?: string;       // 行为树ID
+  // 通用字段
+  description?: string;          // 任务描述
+  progress?: number;             // 执行进度
+}
+
+// 位姿管理数据接口和坐标系管理数据接口现在从共享store导入
+
 const RobotDeviceDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -91,6 +131,34 @@ const RobotDeviceDetail: React.FC = () => {
   const [searchValue, setSearchValue] = useState('');
   const [searchOptions, setSearchOptions] = useState<{ value: string; label: string; robot: RobotDevice }[]>([]);
   const [taskSearchText, setTaskSearchText] = useState(''); // 任务搜索文本
+  const [deviceTasks, setDeviceTasks] = useState<DeviceTask[]>([]); // 设备任务列表
+
+  // 使用共享的位姿和坐标系数据store
+  const {
+    poseData,
+    coordinateData,
+    addPose,
+    updatePose,
+    deletePose,
+    addCoordinate,
+    updateCoordinate,
+    deleteCoordinate,
+    initializeData
+  } = usePoseCoordinateStore();
+
+  // 位姿管理相关状态
+  const [poseModalVisible, setPoseModalVisible] = useState(false);
+  const [poseEditingItem, setPoseEditingItem] = useState<PoseManagementItem | null>(null);
+  const [poseSelectedRowKeys, setPoseSelectedRowKeys] = useState<React.Key[]>([]);
+  const [poseContinuousMode, setPoseContinuousMode] = useState(false); // 位姿连续操作开关
+  const [poseForm] = Form.useForm();
+
+  // 坐标系管理相关状态
+  const [coordinateModalVisible, setCoordinateModalVisible] = useState(false);
+  const [coordinateEditingItem, setCoordinateEditingItem] = useState<CoordinateSystemItem | null>(null);
+  const [coordinateSelectedRowKeys, setCoordinateSelectedRowKeys] = useState<React.Key[]>([]);
+  const [coordinateContinuousMode, setCoordinateContinuousMode] = useState(false); // 坐标系连续操作开关
+  const [coordinateForm] = Form.useForm();
 
   // 模拟机器人数据列表
   const mockRobotList: RobotDevice[] = [
@@ -196,6 +264,227 @@ const RobotDeviceDetail: React.FC = () => {
           setCurrentRobotId(defaultDevice.id);
           setRobotTabs([defaultDevice]);
         }
+        
+        // 初始化模拟设备任务数据
+        const mockDeviceTasks: DeviceTask[] = [
+          {
+            id: 'task_001',
+            name: '移动到地图A的充电点1',
+            type: 'move',
+            status: 'running',
+            startTime: '2024-01-20 14:30:00',
+            targetMapId: 'map_a',
+            targetMapName: '地图A',
+            targetPointId: 'charge_001',
+            targetPointName: '充电点1',
+            description: '设备正在移动到地图A的充电点1',
+            progress: 65
+          },
+          {
+            id: 'task_002',
+            name: '清洁行为树',
+            type: 'behavior_tree',
+            status: 'completed',
+            startTime: '2024-01-20 10:00:00',
+            endTime: '2024-01-20 12:30:00',
+            behaviorTreeId: 'bt_clean_001',
+            behaviorTreeName: '清洁行为树',
+            description: '执行清洁行为树任务',
+            progress: 100
+          },
+          {
+            id: 'task_003',
+            name: '移动到地图B的站点3',
+            type: 'move',
+            status: 'failed',
+            errorCode: 'E001',
+            startTime: '2024-01-20 09:00:00',
+            endTime: '2024-01-20 09:15:00',
+            targetMapId: 'map_b',
+            targetMapName: '地图B',
+            targetPointId: 'station_003',
+            targetPointName: '站点3',
+            description: '移动任务执行失败：路径被阻塞',
+            progress: 25
+          },
+          {
+            id: 'task_004',
+            name: '巡检行为树',
+            type: 'behavior_tree',
+            status: 'running',
+            startTime: '2024-01-19 17:45:00',
+            behaviorTreeId: 'bt_patrol_001',
+            behaviorTreeName: '巡检行为树',
+            description: '正在执行巡检任务',
+            progress: 60
+          },
+          {
+            id: 'task_005',
+            name: '移动到地图C的临停点2',
+            type: 'move',
+            status: 'completed',
+            startTime: '2024-01-19 16:00:00',
+            endTime: '2024-01-19 16:25:00',
+            targetMapId: 'map_c',
+            targetMapName: '地图C',
+            targetPointId: 'temp_002',
+            targetPointName: '临停点2',
+            description: '移动任务已完成',
+            progress: 100
+          },
+          {
+            id: 'task_006',
+            name: '配送行为树',
+            type: 'behavior_tree',
+            status: 'failed',
+            errorCode: 'E002',
+            startTime: '2024-01-19 15:30:00',
+            endTime: '2024-01-19 15:45:00',
+            behaviorTreeId: 'bt_delivery_001',
+            behaviorTreeName: '配送行为树',
+            description: '配送任务执行失败：目标不可达',
+            progress: 40
+          }
+        ];
+        
+        setDeviceTasks(mockDeviceTasks);
+
+        // 初始化位姿管理模拟数据
+        const mockPoseData: PoseManagementItem[] = [
+          {
+            id: 'pose_001',
+            name: '充电桩位姿',
+            description: '机器人充电桩的标准位姿',
+            positionX: 10.5,
+            positionY: 5.2,
+            positionZ: 0.0,
+            orientationX: 0.0,
+            orientationY: 0.0,
+            orientationZ: 0.707,
+            orientationW: 0.707,
+            frameId: 'map',
+            timestamp: '2024-01-20 14:30:25',
+            status: 'active',
+            createdBy: '系统管理员',
+            lastModified: '2024-01-20 14:30:25'
+          },
+          {
+            id: 'pose_002',
+            name: '工作站位姿',
+            description: '机器人工作站的标准位姿',
+            positionX: 15.8,
+            positionY: 8.6,
+            positionZ: 0.0,
+            orientationX: 0.0,
+            orientationY: 0.0,
+            orientationZ: 0.0,
+            orientationW: 1.0,
+            frameId: 'map',
+            timestamp: '2024-01-20 10:15:30',
+            status: 'active',
+            createdBy: '操作员',
+            lastModified: '2024-01-20 12:45:10'
+          },
+          {
+            id: 'pose_003',
+            name: '待机位姿',
+            description: '机器人待机时的标准位姿',
+            positionX: 0.0,
+            positionY: 0.0,
+            positionZ: 0.0,
+            orientationX: 0.0,
+            orientationY: 0.0,
+            orientationZ: 0.0,
+            orientationW: 1.0,
+            frameId: 'base_link',
+            timestamp: '2024-01-19 16:20:15',
+            status: 'inactive',
+            createdBy: '系统管理员',
+            lastModified: '2024-01-19 16:20:15'
+          }
+        ];
+
+        // 初始化坐标系管理模拟数据
+        const mockCoordinateData: CoordinateSystemItem[] = [
+          {
+            id: 'coord_001',
+            name: '地图坐标系',
+            description: '全局地图坐标系',
+            frameId: 'map',
+            parentFrame: 'world',
+            translationX: 0.0,
+            translationY: 0.0,
+            translationZ: 0.0,
+            rotationX: 0.0,
+            rotationY: 0.0,
+            rotationZ: 0.0,
+            rotationW: 1.0,
+            isStatic: true,
+            publishRate: 10,
+            status: 'active',
+            createdBy: '系统管理员',
+            lastModified: '2024-01-20 14:30:25'
+          },
+          {
+            id: 'coord_002',
+            name: '机器人基座坐标系',
+            description: '机器人基座的本地坐标系',
+            frameId: 'base_link',
+            parentFrame: 'map',
+            translationX: 10.5,
+            translationY: 5.2,
+            translationZ: 0.0,
+            rotationX: 0.0,
+            rotationY: 0.0,
+            rotationZ: 0.707,
+            rotationW: 0.707,
+            isStatic: false,
+            publishRate: 50,
+            status: 'active',
+            createdBy: '系统管理员',
+            lastModified: '2024-01-20 14:30:25'
+          },
+          {
+            id: 'coord_003',
+            name: '激光雷达坐标系',
+            description: '激光雷达传感器坐标系',
+            frameId: 'laser_link',
+            parentFrame: 'base_link',
+            translationX: 0.2,
+            translationY: 0.0,
+            translationZ: 0.3,
+            rotationX: 0.0,
+            rotationY: 0.0,
+            rotationZ: 0.0,
+            rotationW: 1.0,
+            isStatic: true,
+            publishRate: 30,
+            status: 'active',
+            createdBy: '技术员',
+            lastModified: '2024-01-19 10:15:30'
+          },
+          {
+            id: 'coord_004',
+            name: '摄像头坐标系',
+            description: '前置摄像头坐标系',
+            frameId: 'camera_link',
+            parentFrame: 'base_link',
+            translationX: 0.3,
+            translationY: 0.0,
+            translationZ: 0.5,
+            rotationX: 0.0,
+            rotationY: 0.0,
+            rotationZ: 0.0,
+            rotationW: 1.0,
+            isStatic: true,
+            publishRate: 20,
+            status: 'inactive',
+            createdBy: '技术员',
+            lastModified: '2024-01-18 15:45:20'
+          }
+        ];
+
+        initializeData();
         setLoading(false);
       }, 500);
     };
@@ -304,6 +593,157 @@ const RobotDeviceDetail: React.FC = () => {
     };
     const config = statusMap[status] || { color: 'default', text: '未知' };
     return <Tag color={config.color}>{config.text}</Tag>;
+  };
+
+  // 位姿管理处理函数
+  const handlePoseAdd = () => {
+    setPoseEditingItem(null);
+    poseForm.resetFields();
+    setPoseModalVisible(true);
+  };
+
+  const handlePoseEdit = (record: PoseManagementItem) => {
+    setPoseEditingItem(record);
+    poseForm.setFieldsValue(record);
+    setPoseModalVisible(true);
+  };
+
+  const handlePoseDelete = (record: PoseManagementItem) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除位姿 "${record.name}" 吗？`,
+      onOk: () => {
+        deletePose(record.id);
+        message.success('位姿删除成功');
+      }
+    });
+  };
+
+  const handlePoseModalOk = async () => {
+    try {
+      const values = await poseForm.validateFields();
+      const timestamp = new Date().toLocaleString('zh-CN');
+      
+      if (poseEditingItem) {
+        // 编辑模式
+        updatePose(poseEditingItem.id, { ...values, lastModified: timestamp });
+        message.success('位姿更新成功');
+      } else {
+        // 新增模式
+        const newItem: PoseManagementItem = {
+          id: `pose_${Date.now()}`,
+          ...values,
+          timestamp,
+          lastModified: timestamp,
+          createdBy: '当前用户'
+        };
+        addPose(newItem);
+        message.success('位姿添加成功');
+      }
+      
+      setPoseModalVisible(false);
+      setPoseEditingItem(null);
+      poseForm.resetFields();
+    } catch (error) {
+      console.error('表单验证失败:', error);
+    }
+  };
+
+  const handlePoseModalCancel = () => {
+    setPoseModalVisible(false);
+    setPoseEditingItem(null);
+    poseForm.resetFields();
+  };
+
+  const handlePoseExport = () => {
+    const selectedData = poseData.filter(item => poseSelectedRowKeys.includes(item.id));
+    const dataToExport = selectedData.length > 0 ? selectedData : poseData;
+    
+    const jsonStr = JSON.stringify(dataToExport, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pose_data_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    message.success(`已导出 ${dataToExport.length} 条位姿数据`);
+  };
+
+  // 坐标系管理处理函数
+  const handleCoordinateAdd = () => {
+    setCoordinateEditingItem(null);
+    coordinateForm.resetFields();
+    setCoordinateModalVisible(true);
+  };
+
+  const handleCoordinateEdit = (record: CoordinateSystemItem) => {
+    setCoordinateEditingItem(record);
+    coordinateForm.setFieldsValue(record);
+    setCoordinateModalVisible(true);
+  };
+
+  const handleCoordinateDelete = (record: CoordinateSystemItem) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除坐标系 "${record.name}" 吗？`,
+      onOk: () => {
+        deleteCoordinate(record.id);
+        message.success('坐标系删除成功');
+      }
+    });
+  };
+
+  const handleCoordinateModalOk = async () => {
+    try {
+      const values = await coordinateForm.validateFields();
+      const timestamp = new Date().toLocaleString('zh-CN');
+      
+      if (coordinateEditingItem) {
+        // 编辑模式
+        updateCoordinate(coordinateEditingItem.id, { ...values, lastModified: timestamp });
+        message.success('坐标系更新成功');
+      } else {
+        // 新增模式
+        const newItem: CoordinateSystemItem = {
+          id: `coord_${Date.now()}`,
+          ...values,
+          lastModified: timestamp,
+          createdBy: '当前用户'
+        };
+        addCoordinate(newItem);
+        message.success('坐标系添加成功');
+      }
+      
+      setCoordinateModalVisible(false);
+      setCoordinateEditingItem(null);
+      coordinateForm.resetFields();
+    } catch (error) {
+      console.error('表单验证失败:', error);
+    }
+  };
+
+  const handleCoordinateModalCancel = () => {
+    setCoordinateModalVisible(false);
+    setCoordinateEditingItem(null);
+    coordinateForm.resetFields();
+  };
+
+  const handleCoordinateExport = () => {
+    const selectedData = coordinateData.filter(item => coordinateSelectedRowKeys.includes(item.id));
+    const dataToExport = selectedData.length > 0 ? selectedData : coordinateData;
+    
+    const jsonStr = JSON.stringify(dataToExport, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `coordinate_data_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    message.success(`已导出 ${dataToExport.length} 条坐标系数据`);
   };
 
 
@@ -493,6 +933,202 @@ const RobotDeviceDetail: React.FC = () => {
     },
   ];
 
+  // 设备任务表格列定义
+  const deviceTaskColumns: ColumnsType<DeviceTask> = [
+    {
+      title: '任务ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 120,
+      align: 'left',
+    },
+    {
+      title: '任务名称',
+      dataIndex: 'name',
+      key: 'name',
+      width: 200,
+      align: 'left',
+      render: (text: string, record: DeviceTask) => {
+        if (record.type === 'move') {
+          return (
+            <div>
+              <div style={{ fontWeight: 500 }}>{record.targetMapName}</div>
+              <div style={{ fontSize: '12px', color: '#666' }}>{record.targetPointName}</div>
+            </div>
+          );
+        } else if (record.type === 'behavior_tree') {
+          return (
+            <div>
+              <div style={{ fontWeight: 500 }}>{record.behaviorTreeName}</div>
+            </div>
+          );
+        }
+        return text;
+      },
+    },
+    {
+      title: '执行类型',
+      dataIndex: 'type',
+      key: 'type',
+      width: 120,
+      align: 'left',
+      render: (type: string) => {
+        const typeMap = {
+          move: { color: 'blue', text: '移动' },
+          behavior_tree: { color: 'green', text: '行为树' },
+        };
+        const config = typeMap[type as keyof typeof typeMap] || { color: 'default', text: '未知' };
+        return <Tag color={config.color}>{config.text}</Tag>;
+      },
+    },
+    {
+      title: '执行结果',
+      dataIndex: 'status',
+      key: 'status',
+      width: 120,
+      align: 'left',
+      render: (status: string) => {
+        const statusMap = {
+          running: { status: 'processing', text: '运行中' },
+          completed: { status: 'success', text: '已完成' },
+          failed: { status: 'error', text: '失败' },
+          cancelled: { status: 'default', text: '已取消' },
+          paused: { status: 'warning', text: '暂停中' },
+        };
+        const config = statusMap[status as keyof typeof statusMap] || { status: 'default', text: '未知' };
+        return <Badge status={config.status as any} text={config.text} />;
+      },
+    },
+    {
+      title: '错误码',
+      dataIndex: 'errorCode',
+      key: 'errorCode',
+      width: 100,
+      align: 'left',
+      render: (errorCode: string) => errorCode || '-',
+    },
+    {
+      title: '开始时间',
+      dataIndex: 'startTime',
+      key: 'startTime',
+      width: 160,
+      align: 'left',
+      sorter: (a: DeviceTask, b: DeviceTask) => 
+        new Date(a.startTime).getTime() - new Date(b.startTime).getTime(),
+    },
+    {
+      title: '结束时间',
+      dataIndex: 'endTime',
+      key: 'endTime',
+      width: 160,
+      align: 'left',
+      render: (endTime: string) => endTime || '-',
+      sorter: (a: DeviceTask, b: DeviceTask) => {
+        if (!a.endTime && !b.endTime) return 0;
+        if (!a.endTime) return 1;
+        if (!b.endTime) return -1;
+        return new Date(a.endTime).getTime() - new Date(b.endTime).getTime();
+      },
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 200,
+      align: 'right',
+      render: (_: any, record: DeviceTask) => {
+        const { status, type } = record;
+        return (
+          <Space size={4}>
+            {status === 'running' && (
+              <>
+                {/* 移动任务显示暂停和取消，行为树任务只显示取消 */}
+                {type === 'move' && (
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<PauseCircleOutlined />}
+                    onClick={() => {
+                      // 更新任务状态为暂停
+                      setDeviceTasks(prevTasks => 
+                        prevTasks.map(task => 
+                          task.id === record.id 
+                            ? { ...task, status: 'paused' as const, description: '任务已暂停' }
+                            : task
+                        )
+                      );
+                      message.info(`暂停任务: ${record.name}`);
+                    }}
+                  >
+                    暂停
+                  </Button>
+                )}
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  icon={<StopOutlined />}
+                  onClick={() => {
+                    message.warning(`取消任务: ${record.name}`);
+                  }}
+                >
+                  取消
+                </Button>
+              </>
+            )}
+            {status === 'paused' && (
+              <>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<PlayCircleOutlined />}
+                  onClick={() => {
+                     // 更新任务状态为运行中
+                     setDeviceTasks(prevTasks => 
+                       prevTasks.map(task => 
+                         task.id === record.id 
+                           ? { ...task, status: 'running' as const, description: task.type === 'move' ? '设备正在移动中' : '行为树正在执行中' }
+                           : task
+                       )
+                     );
+                     message.success(`继续任务: ${record.name}`);
+                   }}
+                >
+                  继续
+                </Button>
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  icon={<StopOutlined />}
+                  onClick={() => {
+                    message.warning(`取消任务: ${record.name}`);
+                  }}
+                >
+                  取消
+                </Button>
+              </>
+            )}
+            {status === 'cancelled' && (
+              <Button
+                type="link"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                onClick={() => {
+                  message.success(`继续任务: ${record.name}`);
+                }}
+              >
+                继续
+              </Button>
+            )}
+            {(status === 'completed' || status === 'failed') && (
+              <span style={{ color: '#999' }}>无操作</span>
+            )}
+          </Space>
+        );
+      },
+    },
+  ];
+
   // 过滤任务记录
   const filteredTaskRecords = taskRecords.filter(task => {
     if (!taskSearchText) return true;
@@ -527,7 +1163,405 @@ const RobotDeviceDetail: React.FC = () => {
   }
 
   return (
-    <div style={{ background: 'transparent' }}>
+    <>
+      {/* 位姿管理模态框 */}
+      <Modal
+        title={poseEditingItem ? '编辑位姿' : '新增位姿'}
+        open={poseModalVisible}
+        onOk={() => {
+           poseForm.validateFields().then((values: any) => {
+            if (poseEditingItem) {
+              // 编辑模式
+              updatePose(poseEditingItem.id, { ...values, lastModified: new Date().toLocaleString() });
+              message.success('位姿更新成功');
+              setPoseModalVisible(false);
+              setPoseEditingItem(null);
+              poseForm.resetFields();
+            } else {
+              // 新增模式
+              const newPose: PoseManagementItem = {
+                id: `pose_${Date.now()}`,
+                ...values,
+                timestamp: new Date().toISOString(),
+                createdBy: '当前用户',
+                lastModified: new Date().toLocaleString(),
+              };
+              addPose(newPose);
+              message.success('位姿创建成功');
+              
+              // 连续操作模式：清空表单但不关闭弹窗
+              if (poseContinuousMode) {
+                poseForm.resetFields();
+                // 重新设置默认值
+                poseForm.setFieldsValue({
+                  status: 'active',
+                  frameId: 'base_link',
+                });
+              } else {
+                // 普通模式：关闭弹窗并清空表单
+                setPoseModalVisible(false);
+                setPoseEditingItem(null);
+                poseForm.resetFields();
+              }
+            }
+          });
+        }}
+        onCancel={() => {
+          setPoseModalVisible(false);
+          setPoseEditingItem(null);
+          poseForm.resetFields();
+          setPoseContinuousMode(false); // 关闭时重置连续操作开关
+        }}
+        width={700}
+      >
+        <Form
+          form={poseForm}
+          layout="vertical"
+          initialValues={{
+            status: 'active',
+            frameId: 'base_link',
+          }}
+        >
+          {/* 连续操作开关 - 仅在新增模式下显示 */}
+          {!poseEditingItem && (
+            <div style={{ 
+              marginBottom: '16px', 
+              padding: '12px', 
+              background: '#f8f9fa', 
+              borderRadius: '6px',
+              border: '1px solid #e9ecef'
+            }}>
+              <Space align="center">
+                <Switch
+                  checked={poseContinuousMode}
+                  onChange={setPoseContinuousMode}
+                  size="small"
+                />
+                <span style={{ fontSize: '14px', color: '#666' }}>
+                  连续操作模式
+                </span>
+                <Tooltip title="开启后，保存成功时将清空表单内容但不关闭弹窗，方便连续添加多个位姿">
+                  <span style={{ color: '#999', cursor: 'help' }}>ⓘ</span>
+                </Tooltip>
+              </Space>
+            </div>
+          )}
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="name"
+                label="名称"
+                rules={[{ required: true, message: '请输入位姿名称' }]}
+              >
+                <Input placeholder="请输入位姿名称" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="workingFrameName"
+                label="作用坐标名称"
+                rules={[{ required: true, message: '请输入作用坐标名称' }]}
+              >
+                <Input placeholder="请输入作用坐标名称" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="referenceFrameName"
+                label="参考坐标名称"
+                rules={[{ required: true, message: '请输入参考坐标名称' }]}
+              >
+                <Input placeholder="请输入参考坐标名称" />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="positionX"
+                label="位置 X"
+                rules={[{ required: true, message: '请输入X坐标' }]}
+              >
+                <InputNumber placeholder="X坐标" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="positionY"
+                label="位置 Y"
+                rules={[{ required: true, message: '请输入Y坐标' }]}
+              >
+                <InputNumber placeholder="Y坐标" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="positionZ"
+                label="位置 Z"
+                rules={[{ required: true, message: '请输入Z坐标' }]}
+              >
+                <InputNumber placeholder="Z坐标" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="rotationX"
+                label="旋转 Rx"
+                rules={[{ required: true, message: '请输入X旋转角度' }]}
+              >
+                <InputNumber placeholder="Rx角度" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="rotationY"
+                label="旋转 Ry"
+                rules={[{ required: true, message: '请输入Y旋转角度' }]}
+              >
+                <InputNumber placeholder="Ry角度" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="rotationZ"
+                label="旋转 Rz"
+                rules={[{ required: true, message: '请输入Z旋转角度' }]}
+              >
+                <InputNumber placeholder="Rz角度" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+          </Row>
+          {/* 第一行：J1, J2, J3 */}
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="joint1"
+                label="关节 J1"
+                rules={[{ required: true, message: '请输入J1角度' }]}
+              >
+                <InputNumber placeholder="J1" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="joint2"
+                label="关节 J2"
+                rules={[{ required: true, message: '请输入J2角度' }]}
+              >
+                <InputNumber placeholder="J2" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="joint3"
+                label="关节 J3"
+                rules={[{ required: true, message: '请输入J3角度' }]}
+              >
+                <InputNumber placeholder="J3" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+          </Row>
+          {/* 第二行：J4, J5, J6 */}
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="joint4"
+                label="关节 J4"
+                rules={[{ required: true, message: '请输入J4角度' }]}
+              >
+                <InputNumber placeholder="J4" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="joint5"
+                label="关节 J5"
+                rules={[{ required: true, message: '请输入J5角度' }]}
+              >
+                <InputNumber placeholder="J5" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="joint6"
+                label="关节 J6"
+                rules={[{ required: true, message: '请输入J6角度' }]}
+              >
+                <InputNumber placeholder="J6" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
+
+      {/* 坐标系管理模态框 */}
+      <Modal
+        title={coordinateEditingItem ? '编辑坐标系' : '新增坐标系'}
+        open={coordinateModalVisible}
+        onOk={() => {
+           coordinateForm.validateFields().then((values: any) => {
+            if (coordinateEditingItem) {
+              // 编辑模式
+              updateCoordinate(coordinateEditingItem.id, { ...values, lastModified: new Date().toLocaleString() });
+              message.success('坐标系更新成功');
+              setCoordinateModalVisible(false);
+              setCoordinateEditingItem(null);
+              coordinateForm.resetFields();
+            } else {
+              // 新增模式
+              const newCoordinate: CoordinateSystemItem = {
+                id: `coord_${Date.now()}`,
+                ...values,
+                createdBy: '当前用户',
+                lastModified: new Date().toLocaleString(),
+              };
+              addCoordinate(newCoordinate);
+              message.success('坐标系创建成功');
+              
+              // 连续操作模式：清空表单但不关闭弹窗
+              if (coordinateContinuousMode) {
+                coordinateForm.resetFields();
+                // 重新设置默认值
+                coordinateForm.setFieldsValue({
+                  parentFrame: 'map',
+                });
+              } else {
+                // 普通模式：关闭弹窗并清空表单
+                setCoordinateModalVisible(false);
+                setCoordinateEditingItem(null);
+                coordinateForm.resetFields();
+              }
+            }
+          });
+        }}
+        onCancel={() => {
+          setCoordinateModalVisible(false);
+          setCoordinateEditingItem(null);
+          coordinateForm.resetFields();
+          setCoordinateContinuousMode(false); // 关闭时重置连续操作开关
+        }}
+        width={700}
+      >
+        <Form
+          form={coordinateForm}
+          layout="vertical"
+          initialValues={{
+            parentFrame: 'map',
+          }}
+        >
+          {/* 连续操作开关 - 仅在新增模式下显示 */}
+          {!coordinateEditingItem && (
+            <div style={{ 
+              marginBottom: '16px', 
+              padding: '12px', 
+              background: '#f8f9fa', 
+              borderRadius: '6px',
+              border: '1px solid #e9ecef'
+            }}>
+              <Space align="center">
+                <Switch
+                  checked={coordinateContinuousMode}
+                  onChange={setCoordinateContinuousMode}
+                  size="small"
+                />
+                <span style={{ fontSize: '14px', color: '#666' }}>
+                  连续操作模式
+                </span>
+                <Tooltip title="开启后，保存成功时将清空表单内容但不关闭弹窗，方便连续添加多个坐标系">
+                  <span style={{ color: '#999', cursor: 'help' }}>ⓘ</span>
+                </Tooltip>
+              </Space>
+            </div>
+          )}
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="name"
+                label="名称"
+                rules={[{ required: true, message: '请输入坐标系名称' }]}
+              >
+                <Input placeholder="请输入坐标系名称" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                name="parentFrame"
+                label="参考坐标名称"
+                rules={[{ required: true, message: '请选择参考坐标名称' }]}
+              >
+                <Select placeholder="请选择参考坐标名称">
+                  <Select.Option value="map">map</Select.Option>
+                  <Select.Option value="odom">odom</Select.Option>
+                  <Select.Option value="base_link">base_link</Select.Option>
+                  <Select.Option value="world">world</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="translationX"
+                label="X"
+                rules={[{ required: true, message: '请输入X坐标' }]}
+              >
+                <InputNumber placeholder="X坐标" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="translationY"
+                label="Y"
+                rules={[{ required: true, message: '请输入Y坐标' }]}
+              >
+                <InputNumber placeholder="Y坐标" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="translationZ"
+                label="Z"
+                rules={[{ required: true, message: '请输入Z坐标' }]}
+              >
+                <InputNumber placeholder="Z坐标" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item
+                name="rotationX"
+                label="Rx"
+                rules={[{ required: true, message: '请输入Rx旋转角度' }]}
+              >
+                <InputNumber placeholder="Rx角度" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="rotationY"
+                label="Ry"
+                rules={[{ required: true, message: '请输入Ry旋转角度' }]}
+              >
+                <InputNumber placeholder="Ry角度" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item
+                name="rotationZ"
+                label="Rz"
+                rules={[{ required: true, message: '请输入Rz旋转角度' }]}
+              >
+                <InputNumber placeholder="Rz角度" style={{ width: '100%' }} step={0.01} />
+              </Form.Item>
+            </Col>
+          </Row>
+        </Form>
+      </Modal>
+
+      <div style={{ background: 'transparent' }}>
       {/* 二级面包屑导航 - 多机器人标签页 */}
       <div style={{ 
         marginBottom: '16px',
@@ -695,7 +1729,12 @@ const RobotDeviceDetail: React.FC = () => {
                 <span style={{ fontSize: '18px', fontWeight: 'bold' }}>{device.deviceName}</span>
                 {getStatusTag(device.currentStatus)}
                 {device.isOnline ? (
-                  <Badge status="success" text="在线" />
+                  <Space size={8}>
+                    <Badge status="success" text="在线" />
+                    <span style={{ fontSize: '12px', color: '#666' }}>
+                      IP: {device.ipAddress} | 端口: {device.port} | MAC: {device.macAddress}
+                    </span>
+                  </Space>
                 ) : (
                   <Badge status="error" text="离线" />
                 )}
@@ -704,14 +1743,7 @@ const RobotDeviceDetail: React.FC = () => {
           </Col>
           <Col>
             <Space>
-              <Button 
-                type="primary" 
-                icon={<PlayCircleOutlined />}
-                onClick={() => handleControl('启动')}
-                disabled={!device.isOnline || device.currentStatus === '执行中'}
-              >
-                启动
-              </Button>
+
               <Button 
                 icon={<PauseCircleOutlined />}
                 onClick={() => handleControl('暂停')}
@@ -757,11 +1789,7 @@ const RobotDeviceDetail: React.FC = () => {
                         <Descriptions.Item label="设备Key">{device.deviceKey}</Descriptions.Item>
                         <Descriptions.Item label="设备类型">{device.deviceType}</Descriptions.Item>
                         <Descriptions.Item label="所属产品">{device.productName}</Descriptions.Item>
-                        <Descriptions.Item label="是否启用">
-                          <Tag color={device.isEnabled ? 'success' : 'error'}>
-                            {device.isEnabled ? '启用' : '禁用'}
-                          </Tag>
-                        </Descriptions.Item>
+
                         <Descriptions.Item label="当前状态">
                           {getStatusTag(device.currentStatus)}
                         </Descriptions.Item>
@@ -795,6 +1823,107 @@ const RobotDeviceDetail: React.FC = () => {
                     </Card>
                   </Col>
                 </Row>
+              ),
+            },
+            {
+              key: 'performance',
+              label: '设备地图',
+              children: (
+                <div style={{ background: 'transparent' }}>
+                  {/* 地图编辑器 */}
+                  <Card 
+                    style={{ 
+                      height: '840px',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                    bodyStyle={{ 
+                      flex: 1,
+                      padding: 0,
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
+                    <DeviceMapEditor 
+                      deviceId={device.id}
+                      deviceName={device.deviceName}
+                      currentPosition={
+                        device.mapPosition ? 
+                        (() => {
+                          // 尝试解析位置字符串，格式如 "x:100,y:200" 或 "100,200"
+                          try {
+                            if (device.mapPosition.includes('x:') && device.mapPosition.includes('y:')) {
+                              const matches = device.mapPosition.match(/x:(\d+),y:(\d+)/);
+                              if (matches) {
+                                return { x: parseInt(matches[1]), y: parseInt(matches[2]) };
+                              }
+                            } else if (device.mapPosition.includes(',')) {
+                              const [x, y] = device.mapPosition.split(',').map(s => parseInt(s.trim()));
+                              if (!isNaN(x) && !isNaN(y)) {
+                                return { x, y };
+                              }
+                            }
+                          } catch (e) {
+                            console.warn('无法解析设备位置:', device.mapPosition);
+                          }
+                          // 为测试提供一个有效的默认位置（画布中心区域）
+                          return { x: 500, y: 400 };
+                        })() : 
+                        // 如果没有mapPosition，也提供一个默认位置用于雷达测试
+                        { x: 500, y: 400 }
+                      }
+                      mapName={device.relatedMap}
+                    />
+                  </Card>
+                </div>
+              ),
+            },
+            {
+              key: 'behaviorTree',
+              label: '行为树',
+              children: (
+                <div style={{ background: 'transparent' }}>
+                  <Card 
+                    style={{ 
+                      height: '840px',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                    bodyStyle={{ 
+                      flex: 1,
+                      padding: 0,
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
+                    <DeviceBehaviorTreeEditor 
+                      deviceId={device.id}
+                      deviceName={device.deviceName}
+                    />
+                  </Card>
+                </div>
+              ),
+            },
+            {
+              key: 'deviceTasks',
+              label: '设备任务',
+              children: (
+                <div style={{ background: 'transparent' }}>
+                  <Card style={{ marginBottom: '16px' }}>
+                    <Table
+                      dataSource={deviceTasks}
+                      columns={deviceTaskColumns}
+                      pagination={{
+                        pageSize: 10,
+                        showSizeChanger: true,
+                        showQuickJumper: true,
+                        showTotal: (total: number, range: [number, number]) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+                      }}
+                      scroll={{ x: 1200 }}
+                      size="middle"
+                    />
+                  </Card>
+                </div>
               ),
             },
             {
@@ -879,53 +2008,313 @@ const RobotDeviceDetail: React.FC = () => {
               ),
             },
             {
-              key: 'performance',
-              label: '设备地图',
+              key: 'pose_management',
+              label: '位姿管理',
               children: (
                 <div style={{ background: 'transparent' }}>
-                  {/* 地图编辑器 */}
-                  <Card 
-                    style={{ 
-                      height: '840px',
-                      display: 'flex',
-                      flexDirection: 'column'
-                    }}
-                    bodyStyle={{ 
-                      flex: 1,
-                      padding: 0,
-                      display: 'flex',
-                      flexDirection: 'column'
-                    }}
-                  >
-                    <DeviceMapEditor 
-                      deviceId={device.id}
-                      deviceName={device.deviceName}
-                      currentPosition={
-                        device.mapPosition ? 
-                        (() => {
-                          // 尝试解析位置字符串，格式如 "x:100,y:200" 或 "100,200"
-                          try {
-                            if (device.mapPosition.includes('x:') && device.mapPosition.includes('y:')) {
-                              const matches = device.mapPosition.match(/x:(\d+),y:(\d+)/);
-                              if (matches) {
-                                return { x: parseInt(matches[1]), y: parseInt(matches[2]) };
-                              }
-                            } else if (device.mapPosition.includes(',')) {
-                              const [x, y] = device.mapPosition.split(',').map(s => parseInt(s.trim()));
-                              if (!isNaN(x) && !isNaN(y)) {
-                                return { x, y };
-                              }
-                            }
-                          } catch (e) {
-                            console.warn('无法解析设备位置:', device.mapPosition);
-                          }
-                          // 为测试提供一个有效的默认位置（画布中心区域）
-                          return { x: 500, y: 400 };
-                        })() : 
-                        // 如果没有mapPosition，也提供一个默认位置用于雷达测试
-                        { x: 500, y: 400 }
-                      }
-                      mapName={device.relatedMap}
+                  {/* 操作栏 */}
+                  <Card style={{ marginBottom: '16px' }}>
+                    <Row gutter={16} align="middle">
+                      <Col flex="auto">
+                        <Space>
+                          <Button type="primary" icon={<PlusOutlined />} onClick={handlePoseAdd}>
+                            新增位姿
+                          </Button>
+                          <Button 
+                            icon={<ExportOutlined />} 
+                            onClick={handlePoseExport}
+                            disabled={poseData.length === 0}
+                          >
+                            导出数据
+                          </Button>
+                          <Button icon={<ImportOutlined />}>
+                            导入数据
+                          </Button>
+                        </Space>
+                      </Col>
+                    </Row>
+                  </Card>
+
+                  {/* 位姿管理表格 */}
+                  <Card>
+                    <Table<PoseManagementItem>
+                      columns={[
+                        {
+                          title: '名称',
+                          dataIndex: 'name',
+                          key: 'name',
+                          width: 100,
+                          align: 'left',
+                          fixed: 'left',
+                        },
+                        {
+                          title: '作用坐标名称',
+                          dataIndex: 'workingFrameName',
+                          key: 'workingFrameName',
+                          width: 120,
+                          align: 'left',
+                        },
+                        {
+                          title: '参考坐标名称',
+                          dataIndex: 'referenceFrameName',
+                          key: 'referenceFrameName',
+                          width: 120,
+                          align: 'left',
+                        },
+                        {
+                          title: 'X',
+                          dataIndex: 'positionX',
+                          key: 'positionX',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'Y',
+                          dataIndex: 'positionY',
+                          key: 'positionY',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'Z',
+                          dataIndex: 'positionZ',
+                          key: 'positionZ',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'Rx',
+                          dataIndex: 'rotationX',
+                          key: 'rotationX',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'Ry',
+                          dataIndex: 'rotationY',
+                          key: 'rotationY',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'Rz',
+                          dataIndex: 'rotationZ',
+                          key: 'rotationZ',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'J1',
+                          dataIndex: 'joint1',
+                          key: 'joint1',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'J2',
+                          dataIndex: 'joint2',
+                          key: 'joint2',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'J3',
+                          dataIndex: 'joint3',
+                          key: 'joint3',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'J4',
+                          dataIndex: 'joint4',
+                          key: 'joint4',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'J5',
+                          dataIndex: 'joint5',
+                          key: 'joint5',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'J6',
+                          dataIndex: 'joint6',
+                          key: 'joint6',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: '操作',
+                          key: 'action',
+                          width: 150,
+                          align: 'right',
+                          fixed: 'right',
+                          render: (_: any, record: PoseManagementItem) => (
+                            <Space size={8}>
+                              <Button type="link" icon={<EditOutlined />} onClick={() => handlePoseEdit(record)} size="small">
+                                编辑
+                              </Button>
+                              <Button type="link" danger icon={<DeleteOutlined />} onClick={() => handlePoseDelete(record)} size="small">
+                                删除
+                              </Button>
+                            </Space>
+                          ),
+                        },
+                      ]}
+                      dataSource={poseData}
+                      rowKey="id"
+                      size="middle"
+                      scroll={{ x: 'max-content' }}
+                      pagination={{
+                        showSizeChanger: true,
+                        showQuickJumper: true,
+                        showTotal: (total: number, range: [number, number]) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+                        pageSizeOptions: ['10', '20', '50', '100'],
+                        defaultPageSize: 10,
+                      }}
+                    />
+                  </Card>
+                </div>
+              ),
+            },
+            {
+              key: 'coordinate_management',
+              label: '坐标系管理',
+              children: (
+                <div style={{ background: 'transparent' }}>
+                  {/* 操作栏 */}
+                  <Card style={{ marginBottom: '16px' }}>
+                    <Row gutter={16} align="middle">
+                      <Col flex="auto">
+                        <Space>
+                          <Button type="primary" icon={<PlusOutlined />} onClick={handleCoordinateAdd}>
+                            新增坐标系
+                          </Button>
+                          <Button 
+                            icon={<ExportOutlined />} 
+                            onClick={handleCoordinateExport}
+                            disabled={coordinateData.length === 0}
+                          >
+                            导出数据
+                          </Button>
+                          <Button icon={<ImportOutlined />}>
+                            导入数据
+                          </Button>
+                        </Space>
+                      </Col>
+                    </Row>
+                  </Card>
+
+                  {/* 坐标系管理表格 */}
+                  <Card>
+                    <Table<CoordinateSystemItem>
+                      columns={[
+                        {
+                          title: '名称',
+                          dataIndex: 'name',
+                          key: 'name',
+                          width: 100,
+                          align: 'left',
+                          fixed: 'left',
+                        },
+                        {
+                          title: '参考坐标名称',
+                          dataIndex: 'parentFrame',
+                          key: 'parentFrame',
+                          width: 120,
+                          align: 'left',
+                        },
+                        {
+                          title: 'X',
+                          dataIndex: 'translationX',
+                          key: 'translationX',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'Y',
+                          dataIndex: 'translationY',
+                          key: 'translationY',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'Z',
+                          dataIndex: 'translationZ',
+                          key: 'translationZ',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'Rx',
+                          dataIndex: 'rotationX',
+                          key: 'rotationX',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'Ry',
+                          dataIndex: 'rotationY',
+                          key: 'rotationY',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: 'Rz',
+                          dataIndex: 'rotationZ',
+                          key: 'rotationZ',
+                          width: 80,
+                          align: 'left',
+                          render: (value: number) => value != null ? value.toFixed(2) : '-',
+                        },
+                        {
+                          title: '操作',
+                          key: 'action',
+                          width: 150,
+                          align: 'right',
+                          fixed: 'right',
+                          render: (_: any, record: CoordinateSystemItem) => (
+                            <Space size={8}>
+                              <Button type="link" icon={<EditOutlined />} onClick={() => handleCoordinateEdit(record)} size="small">
+                                编辑
+                              </Button>
+                              <Button type="link" danger icon={<DeleteOutlined />} onClick={() => handleCoordinateDelete(record)} size="small">
+                                删除
+                              </Button>
+                            </Space>
+                          ),
+                        },
+                      ]}
+                      dataSource={coordinateData}
+                      rowKey="id"
+                      size="middle"
+                      scroll={{ x: 'max-content' }}
+                      pagination={{
+                        showSizeChanger: true,
+                        showQuickJumper: true,
+                        showTotal: (total: number, range: [number, number]) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+                        pageSizeOptions: ['10', '20', '50', '100'],
+                        defaultPageSize: 10,
+                      }}
                     />
                   </Card>
                 </div>
@@ -935,6 +2324,7 @@ const RobotDeviceDetail: React.FC = () => {
         />
       </Card>
     </div>
+    </>
   );
 };
 

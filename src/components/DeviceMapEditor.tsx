@@ -3,11 +3,11 @@ import {
   Card,
   Button,
   Space,
-
+  Tooltip,
   Radio,
   Input,
   message,
-
+  Popover,
   Switch,
   Tabs,
   Collapse,
@@ -19,6 +19,7 @@ import {
   Col,
   Cascader,
   Slider,
+  Table,
 } from 'antd';
 import type { RadioChangeEvent } from 'antd';
 import type { ChangeEvent } from 'react';
@@ -144,6 +145,9 @@ interface Task {
   errorMessage?: string;
 }
 
+// 设备任务接口定义 - 用于任务标签页
+
+
 // 雷达相关接口定义
 interface RadarObstacle {
   id: string;
@@ -248,6 +252,8 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
   const [taskHistory, setTaskHistory] = useState<Task[]>([]);
   const [taskDiagnosisVisible, setTaskDiagnosisVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+
+
 
   // 撤销重做相关状态
   const [history, setHistory] = useState<{
@@ -3898,39 +3904,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
 
       </div>
 
-      {/* 面板切换工具栏 */}
-      <div style={{
-        position: 'absolute',
-        right: showRightPanel ? '280px' : '20px', // 根据右侧面板状态动态调整位置，与悬浮操作工具栏对齐
-        top: 'calc(50% + 200px)', // 位于悬浮操作工具栏下方
-        background: '#fff',
-        borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-        border: '1px solid #e8e8e8',
-        padding: '8px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '4px',
-        zIndex: 100,
-        transition: 'right 0.3s ease' // 添加平滑过渡动画
-      }}>
-        {/* 隐藏/显示所有面板按钮 */}
-        <Button
-          type="text"
-          icon={showLeftPanel && showRightPanel ? <MenuFoldOutlined /> : <MenuUnfoldOutlined />}
-          size="small"
-          style={{
-            width: '32px',
-            height: '32px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: 'none'
-          }}
-          title={showLeftPanel && showRightPanel ? "隐藏所有面板" : "显示所有面板"}
-          onClick={toggleBothPanels}
-        />
-      </div>
+
 
       {/* 缩放比例显示 */}
       <div style={{

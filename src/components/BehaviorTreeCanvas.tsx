@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { Button, message, Modal } from 'antd';
 import { 
   ZoomInOutlined, 
@@ -11,7 +11,7 @@ import {
 // 统一的节点类型定义（与AddBehaviorTree.tsx保持一致）
 type NodeType = 'start' | 'end' | 'stage' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
 
-// 连接点接口（与AddBehaviorTree.tsx保持一致）
+// 连接点接口
 interface ConnectionPoint {
   id: string;
   type: 'input' | 'output';
@@ -19,12 +19,11 @@ interface ConnectionPoint {
   connected: boolean;
   label?: string;
   nodeId?: string;
-  // 兼容旧版本属性
   x?: number;
   y?: number;
 }
 
-// 统一的流程节点接口（与AddBehaviorTree.tsx保持一致）
+// 流程节点接口
 interface FlowNode {
   id: string;
   type: NodeType;
@@ -53,6 +52,16 @@ interface FlowNode {
     outputs?: ConnectionPoint[];
     description?: string;
     priority?: number;
+    conditionGroups?: Array<{
+      id: string;
+      name: string;
+      conditions: Array<{
+        id: string;
+        field: string;
+        operator: string;
+        value: any;
+      }>;
+    }>;
   };
 }
 
@@ -100,7 +109,15 @@ interface BehaviorTreeCanvasProps {
   height?: number;
 }
 
-const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
+interface BehaviorTreeCanvasRef {
+  handleZoomIn: () => void;
+  handleZoomOut: () => void;
+  handleResetCanvas: () => void;
+  handleUndo: () => void;
+  handleRedo: () => void;
+}
+
+const BehaviorTreeCanvas = forwardRef<BehaviorTreeCanvasRef, BehaviorTreeCanvasProps>(({
   nodes: initialNodes,
   connections: initialConnections = [],
   onNodesChange,
@@ -108,7 +125,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   readonly = false,
   width = 800,
   height = 600
-}) => {
+}, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [nodes, setNodes] = useState<FlowNode[]>(initialNodes.length > 0 ? initialNodes : [
     { id: '1', type: 'start', label: '根节点', x: 200, y: 50, width: 120, height: 60, behaviorTreeData: { status: 'running' } },
@@ -128,17 +145,20 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   });
   
   // 拖拽相关状态
-  // const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [draggedNode, setDraggedNode] = useState<FlowNode | null>(null);
+  const [isDraggingNode, setIsDraggingNode] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   
   // 连线相关状态
   const [isDraggingConnection, setIsDraggingConnection] = useState(false);
-  const [dragConnectionStart, setDragConnectionStart] = useState<ConnectionPoint | null>(null);
+  const [dragConnectionStart, setDragConnectionStart] = useState<{nodeId: string, type: 'input' | 'output', x: number, y: number} | null>(null);
   const [dragConnectionEnd, setDragConnectionEnd] = useState<{ x: number; y: number } | null>(null);
-  const [hoveredConnectionPoint, setHoveredConnectionPoint] = useState<ConnectionPoint | null>(null);
+  const [hoveredConnectionPoint, setHoveredConnectionPoint] = useState<{nodeId: string, type: 'input' | 'output'} | null>(null);
   
   // 选择状态
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
-  const [hoveredConnection, /* setHoveredConnection */] = useState<string | null>(null);
+  const [selectedConnection, setSelectedConnection] = useState<string | null>(null);
+  const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
   
   // 异常详情显示状态
   const [errorDetailVisible, setErrorDetailVisible] = useState(false);
@@ -147,6 +167,19 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
   // 历史记录
   const [history, setHistory] = useState<HistoryState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // 同步props变化
+  useEffect(() => {
+    if (initialNodes && initialNodes.length > 0) {
+      setNodes(initialNodes);
+    }
+  }, [initialNodes]);
+
+  useEffect(() => {
+    if (initialConnections) {
+      setConnections(initialConnections);
+    }
+  }, [initialConnections]);
 
   // 节点状态颜色映射
   const getStatusColor = (status?: string) => {
@@ -159,29 +192,28 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     }
   };
 
-  // 节点类型配置
-  const getNodeConfig = (type: NodeType) => {
+  // 获取节点颜色（移植排程管理的颜色配置）
+  const getNodeColor = (type: string) => {
     switch (type) {
       case 'start':
-        return { color: '#722ed1', icon: '◉', shape: 'rect' };
       case 'end':
-        return { color: '#ff4d4f', icon: '◼', shape: 'rect' };
+        return '#1890ff'; // 蓝色
       case 'stage':
-        return { color: '#52c41a', icon: '🏁', shape: 'rect' };
+        return '#722ed1'; // 紫色
       case 'businessProcess':
-        return { color: '#fa8c16', icon: '⚙', shape: 'rect' };
+        return '#52c41a'; // 绿色
       case 'sequence':
-        return { color: '#1890ff', icon: '⚡', shape: 'rect' };
+        return '#1890ff'; // 蓝色
       case 'parallel':
-        return { color: '#13c2c2', icon: '∥', shape: 'rect' };
+        return '#52c41a'; // 绿色
       case 'condition':
-        return { color: '#eb2f96', icon: '◆', shape: 'rect' };
+        return '#fa8c16'; // 橙色
       case 'inverter':
-        return { color: '#f759ab', icon: '!', shape: 'rect' };
+        return '#722ed1'; // 紫色
       case 'repeat':
-        return { color: '#faad14', icon: '↻', shape: 'rect' };
+        return '#f5222d'; // 红色
       default:
-        return { color: '#d9d9d9', icon: '●', shape: 'rect' };
+        return '#1890ff'; // 默认蓝色
     }
   };
 
@@ -197,11 +229,11 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     return { x, y };
   }, [canvasState.offsetX, canvasState.offsetY, canvasState.scale]);
 
-  // 查找位置上的节点
+  // 查找指定位置的节点
   const findNodeAtPosition = useCallback((x: number, y: number): FlowNode | null => {
     for (let i = nodes.length - 1; i >= 0; i--) {
       const node = nodes[i];
-      if (x >= node.x && x <= node.x + node.width &&
+      if (x >= node.x && x <= node.x + node.width && 
           y >= node.y && y <= node.y + node.height) {
         return node;
       }
@@ -209,65 +241,678 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     return null;
   }, [nodes]);
 
-  // 查找位置上的连接点
-  const findConnectionPointAtPosition = useCallback((x: number, y: number): ConnectionPoint | null => {
+  // 查找指定位置的连接点
+  const findConnectionPointAtPosition = useCallback((x: number, y: number): {nodeId: string, type: 'input' | 'output'} | null => {
     for (const node of nodes) {
-      // 检查输入连接点（节点顶部中心）
-      const inputX = node.x + node.width / 2;
-      const inputY = node.y;
+      // 检查输入连接点（左侧）
+      const inputX = node.x;
+      const inputY = node.y + node.height / 2;
       const inputDistance = Math.sqrt((x - inputX) ** 2 + (y - inputY) ** 2);
       if (inputDistance <= 8) {
-        return {
-          id: `${node.id}_input`,
-          type: 'input',
-          position: { x: inputX, y: inputY },
-          connected: false,
-          x: inputX,
-          y: inputY,
-          nodeId: node.id
-        };
+        return { nodeId: node.id, type: 'input' };
       }
       
-      // 检查输出连接点（节点底部中心）
-      const outputX = node.x + node.width / 2;
-      const outputY = node.y + node.height;
+      // 检查输出连接点（右侧）
+      const outputX = node.x + node.width;
+      const outputY = node.y + node.height / 2;
       const outputDistance = Math.sqrt((x - outputX) ** 2 + (y - outputY) ** 2);
       if (outputDistance <= 8) {
-        return {
-          id: `${node.id}_output`,
-          type: 'output',
-          position: { x: outputX, y: outputY },
-          connected: false,
-          x: outputX,
-          y: outputY,
-          nodeId: node.id
-        };
+        return { nodeId: node.id, type: 'output' };
       }
     }
     return null;
   }, [nodes]);
 
-  // 检测异常图标点击
-  const findErrorIconAtPosition = useCallback((x: number, y: number): FlowNode | null => {
-    for (const node of nodes) {
-      if (node.behaviorTreeData?.status === 'failure') {
-        // 异常图标位置：节点右下角（与绘制位置保持一致）
-        const iconX = node.x + node.width - 20;
-        const iconY = node.y + node.height - 8;
-        const distance = Math.sqrt((x - iconX) ** 2 + (y - iconY) ** 2);
-        if (distance <= 12) { // 点击范围稍大一些，便于操作
-          return node;
+  // 查找指定位置的连接线
+  const findConnectionAtPosition = useCallback((x: number, y: number): string | null => {
+    for (const connection of connections) {
+      const sourceNode = nodes.find(n => n.id === connection.sourceId);
+      const targetNode = nodes.find(n => n.id === connection.targetId);
+      
+      if (sourceNode && targetNode) {
+        const startX = sourceNode.x + sourceNode.width;
+        const startY = sourceNode.y + sourceNode.height / 2;
+        const endX = targetNode.x;
+        const endY = targetNode.y + targetNode.height / 2;
+        
+        // 简化的线段距离检测
+        const distance = Math.abs((endY - startY) * x - (endX - startX) * y + endX * startY - endY * startX) / 
+                        Math.sqrt((endY - startY) ** 2 + (endX - startX) ** 2);
+        
+        if (distance <= 5 && x >= Math.min(startX, endX) && x <= Math.max(startX, endX)) {
+          return connection.id;
         }
       }
     }
     return null;
-  }, [nodes]);
+  }, [connections, nodes]);
+
+  // 绘制网格
+  const drawGrid = useCallback((ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    const gridSize = 20 * canvasState.scale;
+    const offsetX = canvasState.offsetX % gridSize;
+    const offsetY = canvasState.offsetY % gridSize;
+    
+    ctx.strokeStyle = '#f0f0f0';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    
+    // 绘制垂直线
+    for (let x = offsetX; x < width; x += gridSize) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+    }
+    
+    // 绘制水平线
+    for (let y = offsetY; y < height; y += gridSize) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+    }
+    
+    ctx.stroke();
+  }, [canvasState.scale, canvasState.offsetX, canvasState.offsetY]);
+
+  // 绘制节点（移植排程管理的完整绘制逻辑）
+  const drawNode = useCallback((ctx: CanvasRenderingContext2D, node: FlowNode) => {
+    const { x, y, width, height, type, label } = node;
+    const isSelected = selectedNode === node.id;
+    const isInvalid = false; // 可以根据需要添加验证逻辑
+    const color = getNodeColor(type);
+    
+    ctx.save();
+    ctx.translate(canvasState.offsetX, canvasState.offsetY);
+    ctx.scale(canvasState.scale, canvasState.scale);
+    
+    if (type === 'start' || type === 'end') {
+      // 绘制阴影
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+      
+      // 开始和结束节点绘制为圆角矩形 - 白色背景
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = isInvalid ? '#ff4d4f' : (isSelected ? '#1890ff' : '#cccccc');
+      ctx.lineWidth = isInvalid ? 2 : (isSelected ? 1 : 0.5);
+      
+      const radius = 25; // 调整倒角半径适应新尺寸
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, radius);
+      ctx.fill();
+      
+      // 清除阴影设置
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      
+      // 始终绘制描边
+      ctx.stroke();
+      
+      // 绘制连接口小圆圈 - 蓝色
+      if (!readonly) {
+        ctx.fillStyle = '#1890ff';
+        ctx.strokeStyle = '#1890ff';
+        ctx.lineWidth = 2;
+        
+        if (type === 'start') {
+          // 开始节点右侧输出口
+          const outputX = x + width;
+          const outputY = y + height / 2;
+          
+          // 检查是否悬停在此连接点上
+          const isHovered = hoveredConnectionPoint && 
+                           hoveredConnectionPoint.nodeId === node.id && 
+                           hoveredConnectionPoint.type === 'output';
+          
+          const radius = isHovered ? 6 : 4; // 悬停时放大
+          ctx.beginPath();
+          ctx.arc(outputX, outputY, radius, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+        } else if (type === 'end') {
+          // 结束节点左侧输入口
+          const inputX = x;
+          const inputY = y + height / 2;
+          
+          // 检查是否悬停在此连接点上
+          const isHovered = hoveredConnectionPoint && 
+                           hoveredConnectionPoint.nodeId === node.id && 
+                           hoveredConnectionPoint.type === 'input';
+          
+          const radius = isHovered ? 6 : 4; // 悬停时放大
+          ctx.beginPath();
+          ctx.arc(inputX, inputY, radius, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+
+    } else if (type === 'stage') {
+      // 阶段节点绘制
+      // 绘制阴影
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+      
+      // 绘制白色背景圆角矩形
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = isInvalid ? '#ff4d4f' : (isSelected ? '#722ed1' : '#cccccc');
+      ctx.lineWidth = isInvalid ? 2 : (isSelected ? 1 : 0.5);
+      const radius = 8;
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, radius);
+      ctx.fill();
+      
+      // 清除阴影设置
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      
+      // 绘制边框
+      ctx.stroke();
+      
+      // 绘制连接口小圆圈 - 紫色
+      if (!readonly) {
+        ctx.fillStyle = '#722ed1';
+        ctx.strokeStyle = '#722ed1';
+        ctx.lineWidth = 2;
+        
+        // 左侧输入口
+        const inputX = x;
+        const inputY = y + height / 2;
+        const isInputHovered = hoveredConnectionPoint && 
+                             hoveredConnectionPoint.nodeId === node.id && 
+                             hoveredConnectionPoint.type === 'input';
+        const inputRadius = isInputHovered ? 6 : 4;
+        ctx.beginPath();
+        ctx.arc(inputX, inputY, inputRadius, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+        
+        // 右侧输出口
+        const outputX = x + width;
+        const outputY = y + height / 2;
+        const isOutputHovered = hoveredConnectionPoint && 
+                              hoveredConnectionPoint.nodeId === node.id && 
+                              hoveredConnectionPoint.type === 'output';
+        const outputRadius = isOutputHovered ? 6 : 4;
+        ctx.beginPath();
+        ctx.arc(outputX, outputY, outputRadius, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+      }
+      
+    } else if (type === 'businessProcess') {
+      // 业务流程节点绘制
+      // 绘制轻微阴影
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.02)';
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 2;
+      
+      // 绘制白色背景圆角矩形
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = isSelected ? '#52c41a' : '#d9d9d9';
+      ctx.lineWidth = 1;
+      const radius = 6;
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, radius);
+      ctx.fill();
+      
+      // 清除阴影设置
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      
+      // 绘制边框
+      ctx.stroke();
+      
+      // 绘制连接口小圆圈 - 绿色统一风格
+      if (!readonly) {
+        ctx.fillStyle = '#52c41a';
+        ctx.strokeStyle = '#52c41a';
+        ctx.lineWidth = 2;
+        
+        // 左侧输入口
+        const inputX = x;
+        const inputY = y + height / 2;
+        const isInputHovered = hoveredConnectionPoint && 
+                             hoveredConnectionPoint.nodeId === node.id && 
+                             hoveredConnectionPoint.type === 'input';
+        const inputRadius = isInputHovered ? 6 : 4;
+        ctx.beginPath();
+        ctx.arc(inputX, inputY, inputRadius, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+        
+        // 右侧输出口
+        const outputX = x + width;
+        const outputY = y + height / 2;
+        const isOutputHovered = hoveredConnectionPoint && 
+                              hoveredConnectionPoint.nodeId === node.id && 
+                              hoveredConnectionPoint.type === 'output';
+        const outputRadius = isOutputHovered ? 6 : 4;
+        ctx.beginPath();
+        ctx.arc(outputX, outputY, outputRadius, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+      }
+      
+    } else if (type === 'sequence' || type === 'parallel' || type === 'condition' || type === 'inverter' || type === 'repeat') {
+      // 行为树控制节点绘制
+      // 绘制阴影
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+      ctx.shadowBlur = 8;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 2;
+      
+      // 根据节点类型设置不同的背景色和边框色
+      let bgColor = '#ffffff';
+      let borderColor = color;
+      
+      if (type === 'sequence') {
+        bgColor = isSelected ? '#e6f7ff' : '#ffffff';
+        borderColor = isInvalid ? '#ff4d4f' : (isSelected ? '#1890ff' : '#1890ff');
+      } else if (type === 'parallel') {
+        bgColor = isSelected ? '#f6ffed' : '#ffffff';
+        borderColor = isInvalid ? '#ff4d4f' : (isSelected ? '#52c41a' : '#52c41a');
+      } else if (type === 'condition') {
+        bgColor = isSelected ? '#fff7e6' : '#ffffff';
+        borderColor = isInvalid ? '#ff4d4f' : (isSelected ? '#fa8c16' : '#fa8c16');
+      } else if (type === 'inverter') {
+        bgColor = isSelected ? '#f9f0ff' : '#ffffff';
+        borderColor = isInvalid ? '#ff4d4f' : (isSelected ? '#722ed1' : '#722ed1');
+      } else if (type === 'repeat') {
+        bgColor = isSelected ? '#fff1f0' : '#ffffff';
+        borderColor = isInvalid ? '#ff4d4f' : (isSelected ? '#f5222d' : '#f5222d');
+      }
+      
+      ctx.fillStyle = bgColor;
+      ctx.strokeStyle = borderColor;
+      ctx.lineWidth = isInvalid ? 2 : (isSelected ? 2 : 1);
+      
+      // 所有节点都绘制为圆角矩形
+      const radius = 8;
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, radius);
+      ctx.fill();
+      
+      // 清除阴影设置
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+      
+      ctx.stroke();
+      
+      // 绘制连接口小圆圈
+      if (!readonly) {
+        ctx.fillStyle = borderColor;
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 2;
+        
+        // 所有节点的输入口都在左侧中点
+        const inputX = x;
+        const inputY = y + height / 2;
+        
+        const isInputHovered = hoveredConnectionPoint && 
+                             hoveredConnectionPoint.nodeId === node.id && 
+                             hoveredConnectionPoint.type === 'input';
+        const inputRadius = isInputHovered ? 6 : 4;
+        ctx.beginPath();
+        ctx.arc(inputX, inputY, inputRadius, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+        
+        // 右侧输出口 - 根据节点类型决定是否有多个输出
+        if (type === 'parallel') {
+          // 并行节点只有一个蓝色输出口
+          const outputX = x + width;
+          const outputY = y + height / 2;
+          
+          const isOutputHovered = hoveredConnectionPoint && 
+                                hoveredConnectionPoint.nodeId === node.id && 
+                                hoveredConnectionPoint.type === 'output';
+          
+          const outputRadius = isOutputHovered ? 6 : 4;
+          
+          // 设置蓝色输出口
+          ctx.fillStyle = '#1890ff';
+          ctx.strokeStyle = '#1890ff';
+          
+          // 绘制输出口
+          ctx.beginPath();
+          ctx.arc(outputX, outputY, outputRadius, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+        } else if (type === 'condition') {
+          // 条件节点根据条件组数量动态显示输出端点
+          const conditionGroups = node.behaviorTreeData?.conditionGroups || [];
+          const outputCount = Math.max(conditionGroups.length, 1); // 至少有一个输出端点
+          
+          // 计算输出端点的垂直间距
+          const outputSpacing = height / (outputCount + 1);
+          
+          // 为每个条件组绘制一个输出端点
+          for (let i = 0; i < outputCount; i++) {
+            const outputX = x + width;
+            const outputY = y + outputSpacing * (i + 1);
+            
+            const isOutputHovered = hoveredConnectionPoint && 
+                                    hoveredConnectionPoint.nodeId === node.id && 
+                                    hoveredConnectionPoint.type === 'output';
+            
+            const outputRadius = isOutputHovered ? 6 : 4;
+            
+            // 根据索引设置不同颜色
+            const colors = ['#52c41a', '#1890ff', '#fa8c16', '#f5222d', '#722ed1', '#13c2c2'];
+            const color = colors[i % colors.length];
+            
+            ctx.fillStyle = color;
+            ctx.strokeStyle = color;
+            ctx.beginPath();
+            ctx.arc(outputX, outputY, outputRadius, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.stroke();
+          }
+        } else {
+          // 其他节点（sequence、inverter、repeat）单个输出口
+          const outputX = x + width;
+          const outputY = y + height / 2;
+          const isOutputHovered = hoveredConnectionPoint && 
+                                hoveredConnectionPoint.nodeId === node.id && 
+                                hoveredConnectionPoint.type === 'output';
+          const outputRadius = isOutputHovered ? 6 : 4;
+          
+          // 设置输出口颜色
+          ctx.fillStyle = borderColor;
+          ctx.strokeStyle = borderColor;
+          
+          ctx.beginPath();
+          ctx.arc(outputX, outputY, outputRadius, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+      
+      // 绘制节点状态指示器（如果有behaviorTreeData.status）
+      if (node.behaviorTreeData?.status) {
+        const status = node.behaviorTreeData.status;
+        let statusColor = '#d9d9d9'; // 默认灰色
+        
+        switch (status) {
+          case 'success':
+            statusColor = '#52c41a'; // 绿色
+            break;
+          case 'failure':
+            statusColor = '#f5222d'; // 红色
+            break;
+          case 'running':
+            statusColor = '#1890ff'; // 蓝色
+            break;
+          case 'idle':
+            statusColor = '#d9d9d9'; // 灰色
+            break;
+        }
+        
+        // 在节点右上角绘制状态指示器
+        ctx.fillStyle = statusColor;
+        ctx.beginPath();
+        ctx.arc(x + width - 8, y + 8, 4, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+      
+    } else {
+      // 其他节点绘制为圆角矩形
+      ctx.fillStyle = isSelected ? color : '#ffffff';
+      ctx.strokeStyle = isInvalid ? '#ff4d4f' : (isSelected ? color : '#cccccc');
+      ctx.lineWidth = isInvalid ? 2 : (isSelected ? 1 : 0.5);
+      const radius = 8;
+      ctx.beginPath();
+      ctx.roundRect(x, y, width, height, radius);
+      ctx.fill();
+      ctx.stroke();
+      
+      // 绘制连接口小圆圈
+      if (!readonly) {
+        ctx.fillStyle = color;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        
+        // 左侧输入口
+        const inputX = x;
+        const inputY = y + height / 2;
+        const isInputHovered = hoveredConnectionPoint && 
+                             hoveredConnectionPoint.nodeId === node.id && 
+                             hoveredConnectionPoint.type === 'input';
+        const inputRadius = isInputHovered ? 6 : 4;
+        ctx.beginPath();
+        ctx.arc(inputX, inputY, inputRadius, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+        
+        // 右侧输出口
+        const outputX = x + width;
+        const outputY = y + height / 2;
+        const isOutputHovered = hoveredConnectionPoint && 
+                              hoveredConnectionPoint.nodeId === node.id && 
+                              hoveredConnectionPoint.type === 'output';
+        const outputRadius = isOutputHovered ? 6 : 4;
+        ctx.beginPath();
+        ctx.arc(outputX, outputY, outputRadius, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    
+    // 绘制图标和文字
+    if (type === 'start' || type === 'end') {
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // 绘制图标 - 蓝色
+      ctx.fillStyle = '#1890ff';
+      ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      
+      if (type === 'start') {
+        // 绘制开始图标 - 简洁线条播放按钮
+        const iconCenterX = x + width / 2 - 18;
+        const iconCenterY = y + height / 2;
+        
+        // 绘制图标背景圆角矩形
+        ctx.fillStyle = '#e6f7ff';
+        ctx.beginPath();
+        ctx.roundRect(iconCenterX - 16, iconCenterY - 16, 32, 32, 8);
+        ctx.fill();
+        
+        // 绘制圆形边框
+        ctx.strokeStyle = '#1890ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(iconCenterX, iconCenterY, 10, 0, 2 * Math.PI);
+        ctx.stroke();
+        
+        // 绘制播放三角形 - 线条样式
+        ctx.fillStyle = '#1890ff';
+        ctx.beginPath();
+        ctx.moveTo(iconCenterX - 3, iconCenterY - 5);
+        ctx.lineTo(iconCenterX - 3, iconCenterY + 5);
+        ctx.lineTo(iconCenterX + 5, iconCenterY);
+        ctx.closePath();
+        ctx.fill();
+      } else if (type === 'end') {
+        // 绘制结束图标 - 简洁线条停止按钮
+        const iconCenterX = x + width / 2 - 18;
+        const iconCenterY = y + height / 2;
+        
+        // 绘制图标背景圆角矩形
+        ctx.fillStyle = '#f6ffed';
+        ctx.beginPath();
+        ctx.roundRect(iconCenterX - 16, iconCenterY - 16, 32, 32, 8);
+        ctx.fill();
+        
+        // 绘制圆形边框
+        ctx.strokeStyle = '#95de64';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(iconCenterX, iconCenterY, 10, 0, 2 * Math.PI);
+        ctx.stroke();
+        
+        // 绘制停止方块 - 线条样式
+        ctx.fillStyle = '#95de64';
+        ctx.fillRect(iconCenterX - 4, iconCenterY - 4, 8, 8);
+      }
+      
+      // 绘制文字 - 与调试运行按钮一致的颜色
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      ctx.fillText(label, x + width / 2 + 18, y + height / 2);
+
+    } else if (type === 'stage') {
+      // 阶段节点文字绘制
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // 处理文字溢出
+      const maxWidth = width - 20;
+      let displayText = label;
+      const textWidth = ctx.measureText(displayText).width;
+      if (textWidth > maxWidth) {
+        // 截断文字并添加省略号
+        while (ctx.measureText(displayText + '...').width > maxWidth && displayText.length > 0) {
+          displayText = displayText.slice(0, -1);
+        }
+        displayText += '...';
+      }
+      
+      ctx.fillText(displayText, x + width / 2, y + height / 2);
+      
+    } else if (type === 'businessProcess') {
+      // 业务流程节点文字绘制
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // 处理文字溢出
+      const maxWidth = width - 20;
+      let displayText = label;
+      const textWidth = ctx.measureText(displayText).width;
+      if (textWidth > maxWidth) {
+        // 截断文字并添加省略号
+        while (ctx.measureText(displayText + '...').width > maxWidth && displayText.length > 0) {
+          displayText = displayText.slice(0, -1);
+        }
+        displayText += '...';
+      }
+      
+      ctx.fillText(displayText, x + width / 2, y + height / 2);
+      
+    } else {
+      // 其他节点类型的文字绘制
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+      ctx.font = '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      
+      // 处理文字溢出
+      const maxWidth = width - 20;
+      let displayText = label;
+      const textWidth = ctx.measureText(displayText).width;
+      if (textWidth > maxWidth) {
+        // 截断文字并添加省略号
+        while (ctx.measureText(displayText + '...').width > maxWidth && displayText.length > 0) {
+          displayText = displayText.slice(0, -1);
+        }
+        displayText += '...';
+      }
+      
+      ctx.fillText(displayText, x + width / 2, y + height / 2);
+    }
+    
+    ctx.restore();
+  }, [canvasState, selectedNode, hoveredConnectionPoint, readonly, getStatusColor, getNodeColor]);
+
+  // 绘制连接线
+  const drawConnections = useCallback((ctx: CanvasRenderingContext2D) => {
+    ctx.save();
+    ctx.translate(canvasState.offsetX, canvasState.offsetY);
+    ctx.scale(canvasState.scale, canvasState.scale);
+    
+    connections.forEach(connection => {
+      const sourceNode = nodes.find(n => n.id === connection.sourceId);
+      const targetNode = nodes.find(n => n.id === connection.targetId);
+      
+      if (sourceNode && targetNode) {
+        const startX = sourceNode.x + sourceNode.width;
+        const startY = sourceNode.y + sourceNode.height / 2;
+        const endX = targetNode.x;
+        const endY = targetNode.y + targetNode.height / 2;
+        
+        const isSelected = selectedConnection === connection.id;
+        const isHovered = hoveredConnection === connection.id;
+        
+        ctx.strokeStyle = isSelected ? '#1890ff' : (isHovered ? '#40a9ff' : '#d9d9d9');
+        ctx.lineWidth = isSelected ? 3 : (isHovered ? 2 : 2);
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        
+        // 绘制贝塞尔曲线
+        const controlPointOffset = Math.abs(endX - startX) * 0.5;
+        const cp1x = startX + controlPointOffset;
+        const cp1y = startY;
+        const cp2x = endX - controlPointOffset;
+        const cp2y = endY;
+        
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, endX, endY);
+        ctx.stroke();
+        
+        // 绘制箭头
+        const arrowLength = 10;
+        const arrowAngle = Math.PI / 6;
+        const angle = Math.atan2(endY - cp2y, endX - cp2x);
+        
+        ctx.beginPath();
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(
+          endX - arrowLength * Math.cos(angle - arrowAngle),
+          endY - arrowLength * Math.sin(angle - arrowAngle)
+        );
+        ctx.moveTo(endX, endY);
+        ctx.lineTo(
+          endX - arrowLength * Math.cos(angle + arrowAngle),
+          endY - arrowLength * Math.sin(angle + arrowAngle)
+        );
+        ctx.stroke();
+      }
+    });
+    
+    // 绘制正在拖拽的连接线
+    if (isDraggingConnection && dragConnectionStart && dragConnectionEnd) {
+      ctx.strokeStyle = '#1890ff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(dragConnectionStart.x, dragConnectionStart.y);
+      ctx.lineTo(dragConnectionEnd.x, dragConnectionEnd.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    
+    ctx.restore();
+  }, [canvasState, connections, nodes, selectedConnection, hoveredConnection, isDraggingConnection, dragConnectionStart, dragConnectionEnd]);
 
   // 保存历史状态
   const saveToHistory = useCallback(() => {
     const newState: HistoryState = {
-      nodes: JSON.parse(JSON.stringify(nodes)),
-      connections: JSON.parse(JSON.stringify(connections)),
+      nodes: [...nodes],
+      connections: [...connections],
       canvasState: {
         offsetX: canvasState.offsetX,
         offsetY: canvasState.offsetY,
@@ -278,6 +923,7 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     const newHistory = history.slice(0, historyIndex + 1);
     newHistory.push(newState);
     
+    // 限制历史记录数量
     if (newHistory.length > 50) {
       newHistory.shift();
     } else {
@@ -287,107 +933,153 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     setHistory(newHistory);
   }, [nodes, connections, canvasState, history, historyIndex]);
 
-  // 撤销操作
-  const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      const prevState = history[historyIndex - 1];
-      setNodes(prevState.nodes);
-      setConnections(prevState.connections);
+  // 鼠标事件处理
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
+    
+    // 检查连接点
+    const clickedConnectionPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
+    if (clickedConnectionPoint && !readonly) {
+      const sourceNode = nodes.find(n => n.id === clickedConnectionPoint.nodeId);
+      if (sourceNode) {
+        const pointX = clickedConnectionPoint.type === 'input' ? sourceNode.x : sourceNode.x + sourceNode.width;
+        const pointY = sourceNode.y + sourceNode.height / 2;
+        
+        setIsDraggingConnection(true);
+        setDragConnectionStart({
+          nodeId: clickedConnectionPoint.nodeId,
+          type: clickedConnectionPoint.type,
+          x: pointX,
+          y: pointY
+        });
+        setDragConnectionEnd({ x: canvasPos.x, y: canvasPos.y });
+        setSelectedNode(null);
+        setSelectedConnection(null);
+      }
+      return;
+    }
+    
+    // 检查节点
+    const clickedNode = findNodeAtPosition(canvasPos.x, canvasPos.y);
+    if (clickedNode && !readonly) {
+      setSelectedNode(clickedNode.id);
+      setSelectedConnection(null);
+      setDraggedNode(clickedNode);
+      setIsDraggingNode(true);
+      setDragOffset({
+        x: canvasPos.x - clickedNode.x,
+        y: canvasPos.y - clickedNode.y
+      });
+      return;
+    }
+    
+    // 检查连接线
+    const clickedConnection = findConnectionAtPosition(canvasPos.x, canvasPos.y);
+    if (clickedConnection) {
+      setSelectedConnection(clickedConnection);
+      setSelectedNode(null);
+      return;
+    }
+    
+    // 空白区域 - 开始拖拽画布
+    if (e.button === 0) {
       setCanvasState(prev => ({
         ...prev,
-        ...prevState.canvasState
+        isDragging: true,
+        lastMouseX: e.clientX,
+        lastMouseY: e.clientY
       }));
-      setHistoryIndex(historyIndex - 1);
+      setSelectedNode(null);
+      setSelectedConnection(null);
     }
-  }, [history, historyIndex]);
+  }, [getCanvasCoordinates, findConnectionPointAtPosition, findNodeAtPosition, findConnectionAtPosition, nodes, readonly]);
 
-  // 重做操作
-  const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const nextState = history[historyIndex + 1];
-      setNodes(nextState.nodes);
-      setConnections(nextState.connections);
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
+    
+    if (isDraggingConnection) {
+      setDragConnectionEnd({ x: canvasPos.x, y: canvasPos.y });
+      
+      // 检测目标连接点
+      const targetPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
+      setHoveredConnectionPoint(targetPoint);
+    } else if (isDraggingNode && draggedNode && !readonly) {
+      const newX = canvasPos.x - dragOffset.x;
+      const newY = canvasPos.y - dragOffset.y;
+      
+      const updatedNodes = nodes.map(node =>
+        node.id === draggedNode.id ? { ...node, x: newX, y: newY } : node
+      );
+      setNodes(updatedNodes);
+      onNodesChange?.(updatedNodes);
+    } else if (canvasState.isDragging) {
+      const deltaX = e.clientX - canvasState.lastMouseX;
+      const deltaY = e.clientY - canvasState.lastMouseY;
+      
       setCanvasState(prev => ({
         ...prev,
-        ...nextState.canvasState
+        offsetX: prev.offsetX + deltaX,
+        offsetY: prev.offsetY + deltaY,
+        lastMouseX: e.clientX,
+        lastMouseY: e.clientY
       }));
-      setHistoryIndex(historyIndex + 1);
+    } else {
+      // 更新悬停状态
+      const hoveredConnectionPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
+      setHoveredConnectionPoint(hoveredConnectionPoint);
+      
+      const hoveredConnectionId = findConnectionAtPosition(canvasPos.x, canvasPos.y);
+      setHoveredConnection(hoveredConnectionId);
     }
-  }, [history, historyIndex]);
+  }, [isDraggingConnection, isDraggingNode, draggedNode, dragOffset, canvasState.isDragging, canvasState.lastMouseX, canvasState.lastMouseY, getCanvasCoordinates, findConnectionPointAtPosition, findConnectionAtPosition, nodes, onNodesChange, readonly]);
 
-  // 计算内容边界
-  const getContentBounds = useCallback(() => {
-    if (nodes.length === 0) {
-      return { minX: 0, minY: 0, maxX: width, maxY: height };
+  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (isDraggingConnection && dragConnectionStart && dragConnectionEnd) {
+      const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
+      const targetPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
+      
+      if (targetPoint && targetPoint.nodeId !== dragConnectionStart.nodeId) {
+        // 创建新连接
+        const sourceNode = nodes.find(n => n.id === dragConnectionStart.nodeId);
+        const targetNode = nodes.find(n => n.id === targetPoint.nodeId);
+        
+        if (sourceNode && targetNode) {
+          const newConnection: Connection = {
+            id: `connection_${Date.now()}`,
+            sourceId: dragConnectionStart.nodeId,
+            targetId: targetPoint.nodeId,
+            sourcePoint: { x: dragConnectionStart.x, y: dragConnectionStart.y },
+            targetPoint: { x: targetPoint.nodeId === targetNode.id ? targetNode.x : targetNode.x + targetNode.width, y: targetNode.y + targetNode.height / 2 }
+          };
+          
+          const updatedConnections = [...connections, newConnection];
+          setConnections(updatedConnections);
+          onConnectionsChange?.(updatedConnections);
+          saveToHistory();
+        }
+      }
+      
+      setIsDraggingConnection(false);
+      setDragConnectionStart(null);
+      setDragConnectionEnd(null);
+    } else if (isDraggingNode && !readonly) {
+      setIsDraggingNode(false);
+      setDraggedNode(null);
+      saveToHistory();
+    } else if (canvasState.isDragging) {
+      setCanvasState(prev => ({ ...prev, isDragging: false }));
     }
-    
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    
-    nodes.forEach(node => {
-      minX = Math.min(minX, node.x);
-      minY = Math.min(minY, node.y);
-      maxX = Math.max(maxX, node.x + node.width);
-      maxY = Math.max(maxY, node.y + node.height);
-    });
-    
-    // 添加边距
-    const margin = 100;
-    return {
-      minX: minX - margin,
-      minY: minY - margin,
-      maxX: maxX + margin,
-      maxY: maxY + margin
-    };
-  }, [nodes, width, height]);
+  }, [isDraggingConnection, isDraggingNode, canvasState.isDragging, dragConnectionStart, dragConnectionEnd, getCanvasCoordinates, findConnectionPointAtPosition, nodes, connections, onConnectionsChange, saveToHistory, readonly]);
 
-  // 重置画布到初始状态并适应内容
-  const resetCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const bounds = getContentBounds();
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-    
-    // 计算内容尺寸
-    const contentWidth = bounds.maxX - bounds.minX;
-    const contentHeight = bounds.maxY - bounds.minY;
-    
-    // 计算适合的缩放比例，留出一些边距
-    const scaleX = (canvasWidth * 0.8) / contentWidth;
-    const scaleY = (canvasHeight * 0.8) / contentHeight;
-    const scale = Math.min(Math.max(0.1, Math.min(scaleX, scaleY)), 3);
-    
-    // 计算居中的偏移量
-    const scaledContentWidth = contentWidth * scale;
-    const scaledContentHeight = contentHeight * scale;
-    const offsetX = (canvasWidth - scaledContentWidth) / 2 - bounds.minX * scale;
-    const offsetY = (canvasHeight - scaledContentHeight) / 2 - bounds.minY * scale;
-    
-    setCanvasState({
-      offsetX,
-      offsetY,
-      scale,
-      isDragging: false,
-      isSpacePressed: false,
-      lastMouseX: 0,
-      lastMouseY: 0
-    });
-  }, [getContentBounds]);
-
-  // 缩放功能
-  const zoomIn = useCallback(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      scale: Math.min(3, prev.scale * 1.2)
-    }));
-  }, []);
-
-  const zoomOut = useCallback(() => {
-    setCanvasState(prev => ({
-      ...prev,
-      scale: Math.max(0.1, prev.scale / 1.2)
-    }));
+  const handleMouseLeave = useCallback(() => {
+    setCanvasState(prev => ({ ...prev, isDragging: false }));
+    setIsDraggingConnection(false);
+    setIsDraggingNode(false);
+    setDraggedNode(null);
+    setDragConnectionStart(null);
+    setDragConnectionEnd(null);
+    setHoveredConnectionPoint(null);
+    setHoveredConnection(null);
   }, []);
 
   // 键盘事件处理
@@ -396,13 +1088,18 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
       if (e.code === 'Space') {
         e.preventDefault();
         setCanvasState(prev => ({ ...prev, isSpacePressed: true }));
+      } else if (e.key === 'Delete' && selectedConnection && !readonly) {
+        const updatedConnections = connections.filter(conn => conn.id !== selectedConnection);
+        setConnections(updatedConnections);
+        onConnectionsChange?.(updatedConnections);
+        setSelectedConnection(null);
+        saveToHistory();
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
-        e.preventDefault();
-        setCanvasState(prev => ({ ...prev, isSpacePressed: false, isDragging: false }));
+        setCanvasState(prev => ({ ...prev, isSpacePressed: false }));
       }
     };
 
@@ -413,465 +1110,79 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [selectedConnection, connections, onConnectionsChange, saveToHistory, readonly]);
 
-  // 鼠标按下事件
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (readonly) return;
-    
-    const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
-    
-    // 检查异常图标点击
-    const errorNode = findErrorIconAtPosition(canvasPos.x, canvasPos.y);
-    if (errorNode) {
-      setErrorDetailNode(errorNode);
-      setErrorDetailVisible(true);
-      return;
-    }
-    
-    // 检查连接点
-    const connectionPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
-    if (connectionPoint && connectionPoint.type === 'output') {
-      setIsDraggingConnection(true);
-      setDragConnectionStart(connectionPoint);
-      setDragConnectionEnd({ x: canvasPos.x, y: canvasPos.y });
-      return;
-    }
-    
-    // 检查节点 - 禁用节点拖动功能
-    const clickedNode = findNodeAtPosition(canvasPos.x, canvasPos.y);
-    if (clickedNode) {
-      setSelectedNode(clickedNode.id);
-      return;
-    }
-    
-    // 空白区域 - 开始拖拽画布
-    if (canvasState.isSpacePressed) {
-      setCanvasState(prev => ({
-        ...prev,
-        isDragging: true,
-        lastMouseX: e.clientX,
-        lastMouseY: e.clientY
-      }));
-    } else {
-      setSelectedNode(null);
-    }
-  }, [readonly, getCanvasCoordinates, findErrorIconAtPosition, findConnectionPointAtPosition, findNodeAtPosition, canvasState.isSpacePressed]);
-
-  // 限制画布拖动范围
-  const constrainOffset = useCallback((offsetX: number, offsetY: number, scale: number) => {
-    const bounds = getContentBounds();
-    const canvas = canvasRef.current;
-    if (!canvas) return { offsetX, offsetY };
-    
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
-    
-    // 计算内容在当前缩放下的尺寸
-    const contentWidth = (bounds.maxX - bounds.minX) * scale;
-    const contentHeight = (bounds.maxY - bounds.minY) * scale;
-    
-    // 限制拖动范围，确保内容不会完全移出视野
-    const maxOffsetX = Math.max(0, contentWidth - canvasWidth * 0.2);
-    const minOffsetX = Math.min(0, canvasWidth - contentWidth + canvasWidth * 0.2);
-    const maxOffsetY = Math.max(0, contentHeight - canvasHeight * 0.2);
-    const minOffsetY = Math.min(0, canvasHeight - contentHeight + canvasHeight * 0.2);
-    
-    return {
-      offsetX: Math.max(minOffsetX, Math.min(maxOffsetX, offsetX)),
-      offsetY: Math.max(minOffsetY, Math.min(maxOffsetY, offsetY))
-    };
-  }, [getContentBounds]);
-
-  // 鼠标移动事件
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
-    
-    if (isDraggingConnection) {
-      setDragConnectionEnd({ x: canvasPos.x, y: canvasPos.y });
-      
-      const targetPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
-      if (targetPoint && targetPoint.type === 'input' && dragConnectionStart && targetPoint.nodeId !== dragConnectionStart.nodeId) {
-        setHoveredConnectionPoint(targetPoint);
-      } else {
-        setHoveredConnectionPoint(null);
-      }
-    } else if (canvasState.isDragging && canvasState.isSpacePressed) {
-      const deltaX = e.clientX - canvasState.lastMouseX;
-      const deltaY = e.clientY - canvasState.lastMouseY;
-      
-      const newOffsetX = canvasState.offsetX + deltaX;
-      const newOffsetY = canvasState.offsetY + deltaY;
-      
-      // 应用边界限制
-      const constrainedOffset = constrainOffset(newOffsetX, newOffsetY, canvasState.scale);
-      
-      setCanvasState(prev => ({
-        ...prev,
-        offsetX: constrainedOffset.offsetX,
-        offsetY: constrainedOffset.offsetY,
-        lastMouseX: e.clientX,
-        lastMouseY: e.clientY
-      }));
-    } else {
-      const hoveredPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
-      setHoveredConnectionPoint(hoveredPoint);
-    }
-  }, [isDraggingConnection, canvasState.isDragging, canvasState.isSpacePressed, canvasState.lastMouseX, canvasState.lastMouseY, canvasState.offsetX, canvasState.offsetY, canvasState.scale, getCanvasCoordinates, findConnectionPointAtPosition, dragConnectionStart, constrainOffset]);
-
-  // 鼠标抬起事件
-  const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isDraggingConnection && dragConnectionStart && dragConnectionEnd) {
-      const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
-      const targetPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
-      
-      if (targetPoint && 
-          dragConnectionStart.type === 'output' && 
-          targetPoint.type === 'input' &&
-          dragConnectionStart.nodeId !== targetPoint.nodeId) {
-        
-        const existingConnection = connections.find(conn => 
-          conn.sourceId === dragConnectionStart.nodeId && 
-          conn.targetId === targetPoint.nodeId
-        );
-        
-        if (!existingConnection) {
-          const newConnection: Connection = {
-            id: `connection_${Date.now()}`,
-            sourceId: dragConnectionStart.nodeId || '',
-            targetId: targetPoint.nodeId || '',
-            sourcePoint: { 
-              x: dragConnectionStart.x || dragConnectionStart.position?.x || 0, 
-              y: dragConnectionStart.y || dragConnectionStart.position?.y || 0 
-            },
-            targetPoint: { 
-              x: targetPoint.x || targetPoint.position?.x || 0, 
-              y: targetPoint.y || targetPoint.position?.y || 0 
-            }
-          };
-          
-          setConnections(prev => [...prev, newConnection]);
-          message.success('连接创建成功');
-        } else {
-          message.warning('连接已存在');
-        }
-      }
-      
-      setIsDraggingConnection(false);
-      setDragConnectionStart(null);
-      setDragConnectionEnd(null);
-    } else if (canvasState.isDragging) {
-      setCanvasState(prev => ({ ...prev, isDragging: false }));
-      saveToHistory();
-    }
-    
-    setHoveredConnectionPoint(null);
-  }, [isDraggingConnection, dragConnectionStart, dragConnectionEnd, connections, canvasState.isDragging, getCanvasCoordinates, findConnectionPointAtPosition, saveToHistory]);
-
-  // 滚轮缩放事件
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    
-    const worldX = (mouseX - canvasState.offsetX) / canvasState.scale;
-    const worldY = (mouseY - canvasState.offsetY) / canvasState.scale;
-    
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.max(0.1, Math.min(3, canvasState.scale * delta));
-    
-    const newOffsetX = mouseX - worldX * newScale;
-    const newOffsetY = mouseY - worldY * newScale;
-    
-    // 应用边界限制
-    const constrainedOffset = constrainOffset(newOffsetX, newOffsetY, newScale);
-    
+  // 缩放功能
+  const handleZoomIn = useCallback(() => {
     setCanvasState(prev => ({
       ...prev,
-      scale: newScale,
-      offsetX: constrainedOffset.offsetX,
-      offsetY: constrainedOffset.offsetY
+      scale: Math.min(prev.scale * 1.2, 3)
     }));
-    
-    saveToHistory();
-  }, [canvasState, saveToHistory, constrainOffset]);
-
-  // 绘制网格
-  const drawGrid = useCallback((ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number) => {
-    const gridSize = 20;
-    
-    ctx.strokeStyle = '#f0f0f0';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-
-    // 计算当前视口在世界坐标系中的范围
-    const viewportLeft = -canvasState.offsetX / canvasState.scale;
-    const viewportTop = -canvasState.offsetY / canvasState.scale;
-    const viewportRight = viewportLeft + canvasWidth;
-    const viewportBottom = viewportTop + canvasHeight;
-
-    // 扩大网格绘制范围，确保在拖动时也能完全覆盖画布
-    // 使用更大的padding确保在任何缩放和拖动情况下都能完全覆盖
-    const padding = Math.max(canvasWidth, canvasHeight) * 2; // 使用画布尺寸的2倍作为padding
-    const startX = Math.floor((viewportLeft - padding) / gridSize) * gridSize;
-    const endX = Math.ceil((viewportRight + padding) / gridSize) * gridSize;
-    const startY = Math.floor((viewportTop - padding) / gridSize) * gridSize;
-    const endY = Math.ceil((viewportBottom + padding) / gridSize) * gridSize;
-
-    // 绘制垂直网格线
-    for (let x = startX; x <= endX; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, startY);
-      ctx.lineTo(x, endY);
-      ctx.stroke();
-    }
-
-    // 绘制水平网格线
-    for (let y = startY; y <= endY; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(startX, y);
-      ctx.lineTo(endX, y);
-      ctx.stroke();
-    }
-  }, [canvasState.offsetX, canvasState.offsetY, canvasState.scale]);
-
-  // 绘制贝塞尔曲线连接线
-  const drawBezierConnection = useCallback((ctx: CanvasRenderingContext2D, connection: Connection, isHovered: boolean = false) => {
-    const { sourcePoint, targetPoint } = connection;
-    
-    ctx.save();
-    ctx.strokeStyle = isHovered ? '#1890ff' : '#666666';
-    ctx.lineWidth = isHovered ? 3 : 2;
-    ctx.setLineDash([]);
-    
-    const controlOffset = Math.abs(targetPoint.y - sourcePoint.y) * 0.5;
-    const cp1x = sourcePoint.x;
-    const cp1y = sourcePoint.y + controlOffset;
-    const cp2x = targetPoint.x;
-    const cp2y = targetPoint.y - controlOffset;
-    
-    ctx.beginPath();
-    ctx.moveTo(sourcePoint.x, sourcePoint.y);
-    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, targetPoint.x, targetPoint.y);
-    ctx.stroke();
-    
-    // 绘制箭头
-    const arrowSize = 8;
-    const angle = Math.atan2(cp2y - targetPoint.y, cp2x - targetPoint.x);
-    
-    ctx.fillStyle = ctx.strokeStyle;
-    ctx.beginPath();
-    ctx.moveTo(targetPoint.x, targetPoint.y);
-    ctx.lineTo(
-      targetPoint.x + arrowSize * Math.cos(angle + Math.PI * 0.8),
-      targetPoint.y + arrowSize * Math.sin(angle + Math.PI * 0.8)
-    );
-    ctx.lineTo(
-      targetPoint.x + arrowSize * Math.cos(angle - Math.PI * 0.8),
-      targetPoint.y + arrowSize * Math.sin(angle - Math.PI * 0.8)
-    );
-    ctx.closePath();
-    ctx.fill();
-    
-    ctx.restore();
   }, []);
 
-  // 绘制节点
-  const drawNode = useCallback((ctx: CanvasRenderingContext2D, node: FlowNode) => {
-    const { x, y, width, height, type, label } = node;
-    const status = node.behaviorTreeData?.status;
-    // const isSelected = selectedNode === node.id;
-    const config = getNodeConfig(type);
-    const isError = status === 'failure';
-    
-    ctx.save();
-    
-    // 绘制阴影
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
-    
-    // 绘制节点背景 - 开始节点为深灰色，异常节点为浅红色背景，其他节点为白色
-    if (type === 'start') {
-      ctx.fillStyle = '#2c3e50';
-    } else if (isError) {
-      ctx.fillStyle = '#fff2f0'; // 异常节点浅红色背景
-    } else {
-      ctx.fillStyle = '#ffffff';
-    }
-    
-    const radius = 8;
-    ctx.beginPath();
-    ctx.roundRect(x, y, width, height, radius);
-    ctx.fill();
-    
-    // 异常节点添加红色边框
-    if (isError) {
-      ctx.strokeStyle = '#ff4d4f';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-    
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    
-    // 绘制状态指示器
-    if (status) {
-      ctx.fillStyle = getStatusColor(status);
-      ctx.beginPath();
-      ctx.arc(x + width - 8, y + 8, 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    
-    // 绘制图标
-    ctx.fillStyle = type === 'start' ? '#ffffff' : config.color;
-    ctx.font = '20px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(config.icon, x + 20, y + height / 2 + 6);
-    
-    // 绘制标签 - 开始节点文字为白色，其他节点为黑色
-    ctx.fillStyle = type === 'start' ? '#ffffff' : '#333333';
-    ctx.font = '16px Arial';
-    ctx.textAlign = 'left';
-    // const maxWidth = width - 45;
-    const text = label.length > 10 ? label.substring(0, 10) + '...' : label;
-    ctx.fillText(text, x + 35, y + height / 2 + 5);
-    
-    // 异常节点绘制异常详情查看图标
-    if (isError) {
-      // 先绘制异常图标的圆形背景
-      ctx.fillStyle = '#fff2f0';
-      ctx.strokeStyle = '#ff4d4f';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(x + width - 20, y + height - 12, 10, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      
-      // 再绘制异常图标
-      ctx.fillStyle = '#ff4d4f';
-      ctx.font = 'bold 16px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('!', x + width - 20, y + height - 8);
-    }
-    
-    // 绘制连接点 - 在节点上下位置（开始节点不绘制端点）
-    if (type !== 'start') {
-      // 输入端点（节点顶部）
-      const inputX = x + width / 2;
-      const inputY = y;
-      const isInputHovered = hoveredConnectionPoint?.nodeId === node.id && hoveredConnectionPoint?.type === 'input';
-      
-      ctx.fillStyle = isInputHovered ? '#1890ff' : '#ffffff';
-      ctx.beginPath();
-      ctx.arc(inputX, inputY, isInputHovered ? 8 : 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = isInputHovered ? '#1890ff' : '#666666';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      
-      // 输出端点（节点底部）
-      const outputX = x + width / 2;
-      const outputY = y + height;
-      const isOutputHovered = hoveredConnectionPoint?.nodeId === node.id && hoveredConnectionPoint?.type === 'output';
-      
-      ctx.fillStyle = isOutputHovered ? '#1890ff' : '#ffffff';
-      ctx.beginPath();
-      ctx.arc(outputX, outputY, isOutputHovered ? 8 : 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = isOutputHovered ? '#1890ff' : '#666666';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-    
-    ctx.restore();
-  }, [selectedNode, hoveredConnectionPoint]);
+  const handleZoomOut = useCallback(() => {
+    setCanvasState(prev => ({
+      ...prev,
+      scale: Math.max(prev.scale / 1.2, 0.3)
+    }));
+  }, []);
 
-  // 主绘制函数
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    // 清空画布
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // 应用变换
-    ctx.save();
-    ctx.translate(canvasState.offsetX, canvasState.offsetY);
-    ctx.scale(canvasState.scale, canvasState.scale);
-    
-    // 绘制网格
-    drawGrid(ctx, canvas.width, canvas.height);
-    
-    // 绘制连接线
-    connections.forEach(connection => {
-      // 查找源节点和目标节点
-      const sourceNode = nodes.find(n => n.id === connection.sourceId);
-      const targetNode = nodes.find(n => n.id === connection.targetId);
-      
-      if (sourceNode && targetNode) {
-        // 计算源节点输出端点位置（底部中心）
-        const sourcePoint = {
-          x: sourceNode.x + sourceNode.width / 2,
-          y: sourceNode.y + sourceNode.height
-        };
-        
-        // 计算目标节点输入端点位置（顶部中心）
-        const targetPoint = {
-          x: targetNode.x + targetNode.width / 2,
-          y: targetNode.y
-        };
-        
-        // 更新连接线的端点位置
-        const updatedConnection = {
-          ...connection,
-          sourcePoint,
-          targetPoint
-        };
-        
-        const isHovered = hoveredConnection === connection.id;
-        drawBezierConnection(ctx, updatedConnection, isHovered);
-      }
+  const handleResetCanvas = useCallback(() => {
+    setCanvasState({
+      offsetX: 0,
+      offsetY: 0,
+      scale: 1,
+      isDragging: false,
+      isSpacePressed: false,
+      lastMouseX: 0,
+      lastMouseY: 0
     });
-    
-    // 绘制正在拖拽的连接线
-    if (isDraggingConnection && dragConnectionStart && dragConnectionEnd) {
-      ctx.strokeStyle = '#1890ff';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
+  }, []);
+
+  // 撤销操作
+  const handleUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      const state = history[newIndex];
+      setNodes(state.nodes);
+      setConnections(state.connections);
+      setCanvasState(prev => ({
+        ...prev,
+        ...state.canvasState
+      }));
+      setHistoryIndex(newIndex);
       
-      const startX = dragConnectionStart.x || dragConnectionStart.position?.x || 0;
-      const startY = dragConnectionStart.y || dragConnectionStart.position?.y || 0;
-      const controlOffset = Math.abs(dragConnectionEnd.y - startY) * 0.5;
-      const cp1x = startX;
-      const cp1y = startY + controlOffset;
-      const cp2x = dragConnectionEnd.x;
-      const cp2y = dragConnectionEnd.y - controlOffset;
-      
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, dragConnectionEnd.x, dragConnectionEnd.y);
-      ctx.stroke();
+      onNodesChange?.(state.nodes);
+      onConnectionsChange?.(state.connections);
     }
-    
-    // 绘制节点
-    nodes.forEach(node => {
-      drawNode(ctx, node);
-    });
-    
-    ctx.restore();
-  }, [canvasState, nodes, connections, isDraggingConnection, dragConnectionStart, dragConnectionEnd, hoveredConnection, drawGrid, drawBezierConnection, drawNode]);
+  }, [historyIndex, history, onNodesChange, onConnectionsChange]);
+
+  // 重做操作
+  const handleRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      const state = history[newIndex];
+      setNodes(state.nodes);
+      setConnections(state.connections);
+      setCanvasState(prev => ({
+        ...prev,
+        ...state.canvasState
+      }));
+      setHistoryIndex(newIndex);
+      
+      onNodesChange?.(state.nodes);
+      onConnectionsChange?.(state.connections);
+    }
+  }, [historyIndex, history, onNodesChange, onConnectionsChange]);
+
+  // 暴露方法给父组件
+  useImperativeHandle(ref, () => ({
+    handleZoomIn,
+    handleZoomOut,
+    handleResetCanvas,
+    handleUndo,
+    handleRedo
+  }), [handleZoomIn, handleZoomOut, handleResetCanvas, handleUndo, handleRedo]);
 
   // 监听容器大小变化并调整canvas尺寸
   useEffect(() => {
@@ -880,147 +1191,91 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
     
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const { width: containerWidth, height: containerHeight } = entry.contentRect;
-        
-        // 设置canvas的实际尺寸
-        canvas.width = containerWidth;
-        canvas.height = containerHeight;
-        
-        // 重新绘制
-        draw();
+        const { width, height } = entry.contentRect;
+        canvas.width = width;
+        canvas.height = height;
       }
     });
     
-    const container = canvas.parentElement;
-    if (container) {
-      resizeObserver.observe(container);
-    }
+    resizeObserver.observe(canvas);
     
     return () => {
       resizeObserver.disconnect();
     };
-  }, [draw]);
+  }, []);
 
-  // 绘制循环
+  // Canvas绘制逻辑
   useEffect(() => {
-    draw();
-  }, [draw]);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-  // 同步外部数据变化
-  useEffect(() => {
-    setNodes(initialNodes);
-  }, [initialNodes]);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-  useEffect(() => {
-    setConnections(initialConnections);
-  }, [initialConnections]);
+    // 设置canvas尺寸 - 支持高DPI显示
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = rect.height + 'px';
+    
+    ctx.scale(dpr, dpr);
+    
+    // 优化文字渲染
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
-  // 通知外部数据变化
-  useEffect(() => {
-    onNodesChange?.(nodes);
-  }, [nodes, onNodesChange]);
+    // 清空画布
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  useEffect(() => {
-    onConnectionsChange?.(connections);
-  }, [connections, onConnectionsChange]);
+    // 绘制网格
+    drawGrid(ctx, rect.width, rect.height);
+    
+    // 绘制连接线
+    drawConnections(ctx);
+    
+    // 绘制节点
+    nodes.forEach(node => {
+      drawNode(ctx, node);
+    });
+
+  }, [canvasState, nodes, connections, drawGrid, drawConnections, drawNode]);
+
+  // 双击节点显示错误详情
+  const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
+    const clickedNode = findNodeAtPosition(canvasPos.x, canvasPos.y);
+    
+    if (clickedNode && clickedNode.behaviorTreeData?.status === 'failure' && clickedNode.data?.error) {
+      setErrorDetailNode(clickedNode);
+      setErrorDetailVisible(true);
+    }
+  }, [getCanvasCoordinates, findNodeAtPosition]);
 
   return (
-    <div 
-      className="behavior-tree-canvas" 
-      style={{ 
-        position: 'relative', 
-        width: '100%', 
-        height: '100%',
-        minHeight: '400px',
-        background: '#fafafa',
-        border: '1px solid #d9d9d9',
-        borderRadius: '6px'
-      }}
-    >
-      {/* 工具栏 */}
-      <div 
-        style={{
-          position: 'absolute',
-          top: 10,
-          right: 10,
-          zIndex: 10,
-          display: 'flex',
-          gap: 8,
-          background: 'rgba(255, 255, 255, 0.9)',
-          padding: '8px',
-          borderRadius: '6px',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-        }}
-      >
-        <Button 
-          size="small" 
-          icon={<UndoOutlined />} 
-          onClick={undo}
-          disabled={historyIndex <= 0}
-          title="撤销"
-        />
-        <Button 
-          size="small" 
-          icon={<RedoOutlined />} 
-          onClick={redo}
-          disabled={historyIndex >= history.length - 1}
-          title="重做"
-        />
-        <Button 
-          size="small" 
-          icon={<ZoomInOutlined />} 
-          onClick={zoomIn}
-          title="放大"
-        />
-        <Button 
-          size="small" 
-          icon={<ZoomOutOutlined />} 
-          onClick={zoomOut}
-          title="缩小"
-        />
-        <Button 
-          size="small" 
-          icon={<HomeOutlined />} 
-          onClick={resetCanvas}
-          title="适应内容"
-        />
-      </div>
-      
-      {/* 画布 */}
+    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
       <canvas
         ref={canvasRef}
-        width={width}
-        height={height}
-        style={{
-          width: '100%',
+        style={{ 
+          width: '100%', 
           height: '100%',
-          display: 'block',
-          cursor: canvasState.isSpacePressed ? 'grab' : 'default'
+          cursor: isDraggingConnection ? 'crosshair' : 
+                 (hoveredConnectionPoint ? 'crosshair' : 
+                 (isDraggingNode ? 'grabbing' : 
+                 (canvasState.isSpacePressed ? 'grab' : 'default'))),
+          backgroundColor: '#f5f7fa'
         }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onWheel={handleWheel}
-        tabIndex={0}
+        onMouseLeave={handleMouseLeave}
+        onDoubleClick={handleDoubleClick}
       />
       
-      {/* 状态提示 */}
-      <div 
-        style={{
-          position: 'absolute',
-          bottom: 10,
-          left: 10,
-          background: 'rgba(0, 0, 0, 0.7)',
-          color: 'white',
-          padding: '4px 8px',
-          borderRadius: '4px',
-          fontSize: '12px'
-        }}
-      >
-        缩放: {Math.round(canvasState.scale * 100)}% | 按住空格键拖拽画布
-      </div>
-      
-      {/* 异常详情弹窗 */}
+      {/* 错误详情模态框 */}
       <Modal
         title="节点异常详情"
         open={errorDetailVisible}
@@ -1034,14 +1289,19 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
       >
         {errorDetailNode && (
           <div>
-            <p><strong>节点名称:</strong> {errorDetailNode.label}</p>
-             <p><strong>节点类型:</strong> {errorDetailNode.type}</p>
-            <p><strong>节点状态:</strong> <span style={{ color: '#ff4d4f' }}>异常</span></p>
-            <p><strong>异常信息:</strong></p>
             <div style={{ 
-              background: '#fff2f0', 
-              border: '1px solid #ffccc7', 
-              borderRadius: '4px', 
+              marginBottom: '12px',
+              padding: '8px 12px',
+              backgroundColor: '#fff2f0',
+              border: '1px solid #ffccc7',
+              borderRadius: '6px'
+            }}>
+              <strong>节点名称:</strong> {errorDetailNode.label}
+            </div>
+            <div style={{ 
+              backgroundColor: '#f5f5f5',
+              border: '1px solid #d9d9d9',
+              borderRadius: '6px',
               padding: '12px',
               marginTop: '8px'
             }}>
@@ -1054,7 +1314,9 @@ const BehaviorTreeCanvas: React.FC<BehaviorTreeCanvasProps> = ({
       </Modal>
     </div>
   );
-};
+});
+
+BehaviorTreeCanvas.displayName = 'BehaviorTreeCanvas';
 
 export default BehaviorTreeCanvas;
-export type { FlowNode, Connection, ConnectionPoint, NodeType };
+export type { FlowNode, Connection, ConnectionPoint, NodeType, BehaviorTreeCanvasRef };
