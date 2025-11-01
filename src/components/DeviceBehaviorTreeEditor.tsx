@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Card, Tabs, Button, Space, Tree, List, Input, Select, InputNumber, Switch, Tag, Divider, Table, Modal, Form, message, Checkbox, Upload, Row, Col } from 'antd';
 import { 
   ZoomInOutlined, 
@@ -516,11 +516,12 @@ const mockCoordinateSystemData: CoordinateSystemItem[] = [
   }
 ];
 
-const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => {
-  // 使用共享的位姿和坐标系数据store
-  const {
-    poseData,
-    coordinateData,
+const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ deviceId, deviceName }) => {
+  const { 
+    poseData, 
+    coordinateData, 
+    setPoseData, 
+    setCoordinateData,
     addPose,
     updatePose,
     deletePose,
@@ -529,47 +530,116 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => 
     deleteCoordinate,
     initializeData
   } = usePoseCoordinateStore();
-
-  const [currentBehaviorTree, setCurrentBehaviorTree] = useState<BehaviorTreeItem>(mockBehaviorTrees[0]);
-  const [nodes, setNodes] = useState<FlowNode[]>(mockBehaviorTrees[0].nodes);
-  const [connections, setConnections] = useState<Connection[]>(mockBehaviorTrees[0].connections);
-  const [zoom, setZoom] = useState(1);
-  const canvasRef = useRef<BehaviorTreeCanvasRef>(null);
+  
+  // 添加加载状态和错误处理
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [dataInitialized, setDataInitialized] = useState(false);
+  
+  // 行为树状态
+  const [currentBehaviorTree, setCurrentBehaviorTree] = useState<BehaviorTreeItem>({
+    id: '',
+    name: '',
+    description: '',
+    status: 'inactive',
+    lastModified: '',
+    updatedBy: '',
+    autoStart: false,
+    nodes: [],
+    connections: []
+  });
+  const [nodes, setNodes] = useState<FlowNode[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
+  
+  // 画布状态
+  const [canvasZoom, setCanvasZoom] = useState(1);
   const [showRightPanel, setShowRightPanel] = useState(true);
   const [dragTool, setDragTool] = useState(false);
+  
+  // 管理模态框状态
   const [isManagementModalVisible, setIsManagementModalVisible] = useState(false);
+  const [isBehaviorTreeEditing, setIsBehaviorTreeEditing] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   
-  // 行为树编辑状态管理
-  const [editingBehaviorTree, setEditingBehaviorTree] = useState<BehaviorTreeItem | null>(null);
-  const [behaviorTreeModalVisible, setBehaviorTreeModalVisible] = useState(false);
-  const [behaviorTreeForm] = Form.useForm();
-  
-  // 编辑模式状态管理
-  const [isEditMode, setIsEditMode] = useState(true); // true: 编辑模式, false: 预览模式
-
-  // 位姿管理状态
-  const [selectedPoseRows, setSelectedPoseRows] = useState<string[]>([]);
+  // 位姿和坐标系管理状态
   const [poseModalVisible, setPoseModalVisible] = useState(false);
-  const [editingPose, setEditingPose] = useState<PoseManagementItem | null>(null);
-  const [poseForm] = Form.useForm();
-
-  // 坐标系管理状态
-  const [selectedCoordinateRows, setSelectedCoordinateRows] = useState<string[]>([]);
   const [coordinateModalVisible, setCoordinateModalVisible] = useState(false);
+  const [editingPose, setEditingPose] = useState<PoseManagementItem | null>(null);
   const [editingCoordinate, setEditingCoordinate] = useState<CoordinateSystemItem | null>(null);
+  const [selectedPoseRows, setSelectedPoseRows] = useState<string[]>([]);
+  const [selectedCoordinateRows, setSelectedCoordinateRows] = useState<string[]>([]);
+  
+  // 行为树搜索状态
+  const [behaviorTreeSearchVisible, setBehaviorTreeSearchVisible] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState<string>('');
+  
+  // 调试运行状态
+  const [isDebugging, setIsDebugging] = useState(false);
+  
+  const canvasRef = useRef<BehaviorTreeCanvasRef>(null);
+  const [poseForm] = Form.useForm();
   const [coordinateForm] = Form.useForm();
 
-  // 行为树搜索状态
-  const [searchKeyword, setSearchKeyword] = useState<string>('');
+  // 模拟根据设备ID加载行为树数据的函数
+  const loadBehaviorTreeData = useCallback(async (deviceId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // 模拟API调用延迟
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // 根据设备ID查找对应的行为树数据
+      // 这里使用模拟数据，实际应该调用API
+      const deviceBehaviorTree = mockBehaviorTrees.find(tree => 
+        tree.id === deviceId || tree.name.includes(deviceId)
+      );
+      
+      if (deviceBehaviorTree) {
+        setCurrentBehaviorTree(deviceBehaviorTree);
+        setNodes(deviceBehaviorTree.nodes || []);
+        setConnections(deviceBehaviorTree.connections || []);
+        setDataInitialized(true);
+      } else {
+        // 如果找不到对应的行为树，创建一个空的行为树
+        const emptyBehaviorTree: BehaviorTreeItem = {
+          id: deviceId,
+          name: `设备 ${deviceId} 行为树`,
+          description: `设备 ${deviceId} 的行为树配置`,
+          status: 'inactive',
+          lastModified: new Date().toLocaleString(),
+          updatedBy: '系统',
+          autoStart: false,
+          nodes: [],
+          connections: []
+        };
+        setCurrentBehaviorTree(emptyBehaviorTree);
+        setNodes([]);
+        setConnections([]);
+        setDataInitialized(true);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载行为树数据失败');
+      console.error('加载行为树数据失败:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  // 调试运行状态管理
-  const [isDebugging, setIsDebugging] = useState(false);
-  const [nodeExecutionStatus, setNodeExecutionStatus] = useState<Record<string, 'running' | 'success' | 'failure' | 'idle'>>({});
+  // 统一的初始化逻辑 - 只在设备ID变化时触发
+  useEffect(() => {
+    if (deviceId) {
+      setDataInitialized(false);
+      loadBehaviorTreeData(deviceId);
+    }
+  }, [deviceId, loadBehaviorTreeData]);
 
-  // 初始化数据
+  // 初始化位姿和坐标系数据
   useEffect(() => {
     initializeData();
   }, [initializeData]);
+
+  const [nodeExecutionStatus, setNodeExecutionStatus] = useState<Record<string, 'running' | 'success' | 'failure' | 'idle'>>({});
 
   // 画布操作函数
   const handleZoomIn = () => {
@@ -730,55 +800,6 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => 
     message.success('行为树调试运行完成');
   };
 
-  // 行为树管理操作函数
-  const handleEditBehaviorTree = (record: BehaviorTreeItem) => {
-    setEditingBehaviorTree(record);
-    behaviorTreeForm.setFieldsValue({
-      name: record.name,
-      description: record.description,
-      autoStart: record.autoStart
-    });
-    setBehaviorTreeModalVisible(true);
-  };
-
-  const handleDeleteBehaviorTree = (id: string) => {
-    Modal.confirm({
-      title: '确认删除',
-      content: '确定要删除这个行为树吗？删除后无法恢复。',
-      onOk: () => {
-        // 这里应该更新实际的数据源，目前只是模拟
-        message.success('删除成功');
-      }
-    });
-  };
-
-  const handleBehaviorTreeSubmit = async () => {
-    try {
-      const values = await behaviorTreeForm.validateFields();
-      if (editingBehaviorTree) {
-        // 编辑模式
-        message.success('编辑成功');
-      } else {
-        // 新增模式
-        const newBehaviorTree = {
-          ...values,
-          id: `tree_${Date.now()}`,
-          status: 'active',
-          lastModified: new Date().toLocaleString(),
-          updatedBy: '当前用户',
-          nodes: [],
-          connections: []
-        };
-        message.success('新增成功');
-      }
-      setBehaviorTreeModalVisible(false);
-      setEditingBehaviorTree(null);
-      behaviorTreeForm.resetFields();
-    } catch (error) {
-      console.error('表单验证失败:', error);
-    }
-  };
-
   // 位姿管理操作函数
   const handleAddPose = () => {
     setEditingPose(null);
@@ -826,22 +847,6 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => 
     } catch (error) {
       console.error('表单验证失败:', error);
     }
-  };
-
-  const handleExportPose = () => {
-    const selectedData = selectedPoseRows.length > 0 
-      ? poseData.filter(item => selectedPoseRows.includes(item.id))
-      : poseData;
-    
-    const dataStr = JSON.stringify(selectedData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'pose_data.json';
-    link.click();
-    URL.revokeObjectURL(url);
-    message.success('导出成功');
   };
 
   // 坐标系管理操作函数
@@ -898,44 +903,6 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => 
     return tree.name.toLowerCase().includes(searchKeyword.toLowerCase()) ||
            tree.description.toLowerCase().includes(searchKeyword.toLowerCase());
   });
-
-  const handleExportCoordinate = () => {
-    const selectedData = selectedCoordinateRows.length > 0 
-      ? coordinateData.filter(item => selectedCoordinateRows.includes(item.id))
-      : coordinateData;
-    
-    const dataStr = JSON.stringify(selectedData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'coordinate_data.json';
-    link.click();
-    URL.revokeObjectURL(url);
-    message.success('导出成功');
-  };
-
-  // 坐标系管理表格列定义
-  const coordinateColumns = [
-    {
-      title: '坐标系名称',
-      dataIndex: 'name',
-      key: 'name',
-      align: 'center' as const,
-    },
-  ];
-
-
-
-  // 位姿管理表格列定义
-  const poseColumns = [
-    {
-      title: '位姿名称',
-      dataIndex: 'name',
-      key: 'name',
-      align: 'center' as const,
-    },
-  ];
 
   // 获取坐标系名称的辅助函数
   const getCoordinateSystemName = (frameId: string): string => {
@@ -1014,6 +981,49 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => 
     },
   ];
 
+  // 显示加载状态
+  if (loading) {
+    return (
+      <div style={{ 
+        height: '840px',
+        background: '#ffffff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '16px', marginBottom: '8px' }}>正在加载设备行为树...</div>
+          <div style={{ fontSize: '14px', color: '#666' }}>设备: {deviceName} (ID: {deviceId})</div>
+        </div>
+      </div>
+    );
+  }
+
+  // 显示错误状态
+  if (error) {
+    return (
+      <div style={{ 
+        height: '840px',
+        background: '#ffffff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '16px', marginBottom: '8px', color: '#ff4d4f' }}>加载失败</div>
+          <div style={{ fontSize: '14px', color: '#666' }}>{error}</div>
+          <Button 
+            type="primary" 
+            style={{ marginTop: '16px' }}
+            onClick={() => loadBehaviorTreeData(deviceId)}
+          >
+            重新加载
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ 
       height: '840px',
@@ -1069,8 +1079,6 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => 
             >
               行为树管理
             </Button>
-
-
 
             {/* 操作按钮 */}
             {isEditMode ? (
@@ -1304,8 +1312,6 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => 
         
 
       </div>
-
-
 
       {/* 右侧固定面板 */}
       {showRightPanel && (
@@ -1588,7 +1594,7 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => 
           </div>
           <div style={{ flexShrink: 0 }}>
             <Space>
-              <Button type="primary" icon={<PlusOutlined />} onClick={() => setBehaviorTreeModalVisible(true)}>
+              <Button type="primary" icon={<PlusOutlined />}>
                 新增行为树
               </Button>
               <Button icon={<ImportOutlined />}>
@@ -1605,73 +1611,6 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => 
           rowKey="id"
           pagination={false}
           scroll={{ x: 800 }}
-          expandable={{
-             expandedRowRender: (record: BehaviorTreeItem) => {
-               if (!record.subTrees || record.subTrees.length === 0) return null;
-               const subTreeData = mockBehaviorTrees.filter(tree => record.subTrees?.includes(tree.id));
-               return (
-                 <Table
-                   dataSource={subTreeData}
-                   rowKey="id"
-                   pagination={false}
-                   size="small"
-                   style={{ marginLeft: 20 }}
-                   columns={[
-                     {
-                       title: '子树名称',
-                       dataIndex: 'name',
-                       key: 'name',
-                       width: 200,
-                     },
-                     {
-                       title: '描述',
-                       dataIndex: 'description',
-                       key: 'description',
-                     },
-                     {
-                       title: '自启动',
-                       dataIndex: 'autoStart',
-                       key: 'autoStart',
-                       width: 80,
-                       render: (autoStart: boolean) => (
-                         <Tag color={autoStart ? 'green' : 'red'}>
-                           {autoStart ? '是' : '否'}
-                         </Tag>
-                       ),
-                     },
-                     {
-                       title: '更新时间',
-                       dataIndex: 'lastModified',
-                       key: 'lastModified',
-                       width: 150,
-                     },
-                     {
-                       title: '更新人',
-                       dataIndex: 'updatedBy',
-                       key: 'updatedBy',
-                       width: 100,
-                     },
-                     {
-                       title: '操作',
-                       key: 'action',
-                       width: 150,
-                       render: (_: any, record: BehaviorTreeItem) => (
-                         <Space size="small">
-                           <Button type="link" size="small" icon={<EditOutlined />}>
-                             编辑
-                           </Button>
-                           <Button type="link" size="small" danger icon={<DeleteOutlined />}>
-                             删除
-                           </Button>
-                         </Space>
-                       ),
-                     },
-                   ]}
-                 />
-               );
-             },
-             rowExpandable: (record: BehaviorTreeItem) => !!(record.subTrees && record.subTrees.length > 0),
-           }}
           columns={[
             {
               title: '行为树名称',
@@ -1725,64 +1664,8 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = () => 
           ]}
         />
       </Modal>
-
-        {/* 行为树新增/编辑弹窗 */}
-        <Modal
-          title={editingBehaviorTree ? '编辑行为树' : '新增行为树'}
-          open={behaviorTreeModalVisible}
-          onOk={handleBehaviorTreeSubmit}
-          onCancel={() => {
-            setBehaviorTreeModalVisible(false);
-            setEditingBehaviorTree(null);
-            behaviorTreeForm.resetFields();
-          }}
-          width={600}
-        >
-          <Form
-            form={behaviorTreeForm}
-            layout="vertical"
-            initialValues={{
-              autoStart: false
-            }}
-          >
-            <Form.Item
-              label="行为树名称"
-              name="name"
-              rules={[
-                { required: true, message: '请输入行为树名称' },
-                { max: 50, message: '名称不能超过50个字符' }
-              ]}
-            >
-              <Input placeholder="请输入行为树名称" />
-            </Form.Item>
-            
-            <Form.Item
-              label="描述"
-              name="description"
-              rules={[
-                { required: true, message: '请输入行为树描述' },
-                { max: 200, message: '描述不能超过200个字符' }
-              ]}
-            >
-              <Input.TextArea 
-                placeholder="请输入行为树描述" 
-                rows={4}
-                showCount
-                maxLength={200}
-              />
-            </Form.Item>
-            
-            <Form.Item
-              label="自启动"
-              name="autoStart"
-              valuePropName="checked"
-            >
-              <Switch checkedChildren="是" unCheckedChildren="否" />
-            </Form.Item>
-          </Form>
-        </Modal>
-      </div>
-    );
-  };
+    </div>
+  );
+};
 
 export default DeviceBehaviorTreeEditor;

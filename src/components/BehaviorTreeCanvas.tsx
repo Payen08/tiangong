@@ -127,12 +127,8 @@ const BehaviorTreeCanvas = forwardRef<BehaviorTreeCanvasRef, BehaviorTreeCanvasP
   height = 600
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [nodes, setNodes] = useState<FlowNode[]>(initialNodes.length > 0 ? initialNodes : [
-    { id: '1', type: 'start', label: '根节点', x: 200, y: 50, width: 120, height: 60, behaviorTreeData: { status: 'running' } },
-    { id: '2', type: 'condition', label: '检查条件', x: 200, y: 150, width: 120, height: 60, behaviorTreeData: { status: 'success' } },
-    { id: '3', type: 'businessProcess', label: '执行动作A', x: 100, y: 250, width: 120, height: 60, behaviorTreeData: { status: 'failure' }, data: { error: '网络连接超时\n错误代码: TIMEOUT_ERROR\n详细信息: 连接服务器失败，请检查网络设置' } },
-    { id: '4', type: 'businessProcess', label: '执行动作B', x: 300, y: 250, width: 120, height: 60, behaviorTreeData: { status: 'failure' }, data: { error: '参数验证失败\n错误代码: VALIDATION_ERROR\n详细信息: 输入参数不符合要求，期望数字类型但收到字符串' } },
-  ]);
+  // 直接使用传入的节点，不创建默认节点
+  const [nodes, setNodes] = useState<FlowNode[]>(initialNodes);
   const [connections, setConnections] = useState<Connection[]>(initialConnections);
   const [canvasState, setCanvasState] = useState<CanvasState>({
     offsetX: 0,
@@ -168,16 +164,30 @@ const BehaviorTreeCanvas = forwardRef<BehaviorTreeCanvasRef, BehaviorTreeCanvasP
   const [history, setHistory] = useState<HistoryState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  // 同步props变化
+  // 使用ref来存储上一次的props值，避免循环依赖
+  const prevInitialNodesRef = useRef<FlowNode[]>([]);
+  const prevInitialConnectionsRef = useRef<Connection[]>([]);
+
+  // 同步props变化 - 避免循环依赖
   useEffect(() => {
-    if (initialNodes && initialNodes.length > 0) {
-      setNodes(initialNodes);
+    if (initialNodes) {
+      // 检查是否真的需要更新
+      const nodesChanged = JSON.stringify(prevInitialNodesRef.current) !== JSON.stringify(initialNodes);
+      if (nodesChanged) {
+        setNodes(initialNodes);
+        prevInitialNodesRef.current = initialNodes;
+      }
     }
   }, [initialNodes]);
 
   useEffect(() => {
-    if (initialConnections) {
-      setConnections(initialConnections);
+    if (initialConnections && initialConnections.length >= 0) {
+      // 检查是否真的需要更新
+      const connectionsChanged = JSON.stringify(prevInitialConnectionsRef.current) !== JSON.stringify(initialConnections);
+      if (connectionsChanged) {
+        setConnections(initialConnections);
+        prevInitialConnectionsRef.current = initialConnections;
+      }
     }
   }, [initialConnections]);
 
@@ -1190,10 +1200,56 @@ const BehaviorTreeCanvas = forwardRef<BehaviorTreeCanvasRef, BehaviorTreeCanvasP
     if (!canvas) return;
     
     const resizeObserver = new ResizeObserver((entries) => {
+      console.log('📐 ResizeObserver触发，entries数量:', entries.length);
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
-        canvas.width = width;
-        canvas.height = height;
+        console.log('📏 ResizeObserver检测到尺寸变化:', width, 'x', height);
+        
+        // 跳过尺寸为0的情况
+        if (width <= 0 || height <= 0) {
+          console.log('⚠️ ResizeObserver: 尺寸为0，跳过绘制');
+          continue;
+        }
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          console.log('❌ ResizeObserver: Canvas上下文获取失败');
+          return;
+        }
+
+        // 设置canvas尺寸 - 支持高DPI显示
+        const dpr = window.devicePixelRatio || 1;
+        
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        
+        ctx.scale(dpr, dpr);
+        
+        // 优化文字渲染
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // 清空画布
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 重新绘制网格
+        console.log('🔲 ResizeObserver: 重新绘制网格');
+        drawGrid(ctx, width, height);
+        
+        // 重新绘制连接线
+        console.log('🔗 ResizeObserver: 重新绘制连接线');
+        drawConnections(ctx);
+        
+        // 重新绘制节点
+        console.log('🔵 ResizeObserver: 重新绘制节点，节点数量:', nodes.length);
+        nodes.forEach(node => {
+          drawNode(ctx, node);
+        });
+        
+        console.log('✅ ResizeObserver: 重绘完成');
       }
     });
     
@@ -1202,18 +1258,100 @@ const BehaviorTreeCanvas = forwardRef<BehaviorTreeCanvasRef, BehaviorTreeCanvasP
     return () => {
       resizeObserver.disconnect();
     };
+  }, [nodes, connections, drawGrid, drawConnections, drawNode]);
+
+  // 组件挂载时的初始绘制
+  useEffect(() => {
+    console.log('🎨 Canvas初始绘制useEffect触发');
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      console.log('❌ Canvas元素不存在');
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      console.log('❌ Canvas上下文获取失败');
+      return;
+    }
+
+    // 延迟绘制函数，等待Canvas获取正确尺寸
+    const tryDraw = (attempt = 0) => {
+      const rect = canvas.getBoundingClientRect();
+      console.log(`📏 Canvas尺寸检查 (尝试${attempt + 1}):`, rect.width, 'x', rect.height);
+      
+      if (rect.width > 0 && rect.height > 0) {
+        const dpr = window.devicePixelRatio || 1;
+        
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        
+        canvas.style.width = rect.width + 'px';
+        canvas.style.height = rect.height + 'px';
+        
+        ctx.scale(dpr, dpr);
+        
+        // 优化文字渲染
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // 清空画布
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 绘制网格
+        console.log('🔲 开始绘制网格');
+        drawGrid(ctx, rect.width, rect.height);
+        
+        // 绘制连接线
+        console.log('🔗 开始绘制连接线');
+        drawConnections(ctx);
+        
+        // 绘制节点
+        console.log('🔵 开始绘制节点，节点数量:', nodes.length);
+        nodes.forEach(node => {
+          drawNode(ctx, node);
+        });
+        
+        console.log('✅ Canvas初始绘制完成');
+      } else if (attempt < 10) {
+        // 最多重试10次，每次间隔递增
+        const delay = Math.min(50 * (attempt + 1), 500);
+        console.log(`⏳ Canvas尺寸为0，${delay}ms后重试 (${attempt + 1}/10)`);
+        setTimeout(() => tryDraw(attempt + 1), delay);
+      } else {
+        console.log('❌ Canvas尺寸获取失败，已达到最大重试次数');
+      }
+    };
+
+    // 立即尝试绘制
+    tryDraw();
   }, []);
 
   // Canvas绘制逻辑
   useEffect(() => {
+    console.log('🎯 主绘制useEffect触发，依赖项变化');
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      console.log('❌ 主绘制: Canvas元素不存在');
+      return;
+    }
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      console.log('❌ 主绘制: Canvas上下文获取失败');
+      return;
+    }
 
     // 设置canvas尺寸 - 支持高DPI显示
     const rect = canvas.getBoundingClientRect();
+    console.log('📏 主绘制: Canvas尺寸:', rect.width, 'x', rect.height);
+    
+    // 跳过尺寸为0的情况
+    if (rect.width <= 0 || rect.height <= 0) {
+      console.log('⚠️ 主绘制: Canvas尺寸为0，跳过绘制');
+      return;
+    }
+    
     const dpr = window.devicePixelRatio || 1;
     
     canvas.width = rect.width * dpr;
@@ -1232,15 +1370,20 @@ const BehaviorTreeCanvas = forwardRef<BehaviorTreeCanvasRef, BehaviorTreeCanvasP
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // 绘制网格
+    console.log('🔲 主绘制: 绘制网格');
     drawGrid(ctx, rect.width, rect.height);
     
     // 绘制连接线
+    console.log('🔗 主绘制: 绘制连接线');
     drawConnections(ctx);
     
     // 绘制节点
+    console.log('🔵 主绘制: 绘制节点，节点数量:', nodes.length);
     nodes.forEach(node => {
       drawNode(ctx, node);
     });
+    
+    console.log('✅ 主绘制: 绘制完成');
 
   }, [canvasState, nodes, connections, drawGrid, drawConnections, drawNode]);
 

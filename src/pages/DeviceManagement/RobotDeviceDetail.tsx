@@ -1882,7 +1882,7 @@ const RobotDeviceDetail: React.FC = () => {
               key: 'behaviorTree',
               label: '行为树',
               children: (
-                <div style={{ background: 'transparent' }}>
+                <div style={{ background: 'transparent' }} key={`behavior-tree-${device.id}`}>
                   <Card 
                     style={{ 
                       height: '840px',
@@ -1897,6 +1897,7 @@ const RobotDeviceDetail: React.FC = () => {
                     }}
                   >
                     <DeviceBehaviorTreeEditor 
+                      key={`device-behavior-tree-${device.id}`}
                       deviceId={device.id}
                       deviceName={device.deviceName}
                     />
