@@ -78,13 +78,17 @@ interface BehaviorTreeNodePropertyPanelProps {
   behaviorTreeNode: FlowNode | null;
   onClose: () => void;
   onSave: (updatedNode: FlowNode) => void;
+  readonly?: boolean;
+  positioning?: 'fixed' | 'relative'; // 新增定位方式属性
 }
 
 const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps> = ({
   visible,
   behaviorTreeNode,
   onClose,
-  onSave
+  onSave,
+  readonly = false,
+  positioning = 'relative' // 默认使用相对定位
 }) => {
   const [form] = Form.useForm();
   const [activeTab, setActiveTab] = useState('basic');
@@ -294,8 +298,8 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
     switch (behaviorTreeNode.type) {
       case 'condition':
         return (
-          <Card title="条件配置" size="small" style={{ marginBottom: 16 }}>
-            <div style={{ marginBottom: 16 }}>
+          <Card title="条件配置" size="small" style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <span style={{ fontWeight: 500 }}>条件组配置</span>
                 <Button 
@@ -303,6 +307,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                   size="small" 
                   icon={<PlusOutlined />}
                   onClick={addConditionGroup}
+                  disabled={readonly}
                 >
                   添加条件组
                 </Button>
@@ -322,7 +327,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                         danger
                         icon={<DeleteOutlined />}
                         onClick={() => removeConditionGroup(group.id)}
-                        disabled={conditionGroups.length === 1}
+                        disabled={conditionGroups.length === 1 || readonly}
                       />
                     </div>
                   }
@@ -334,6 +339,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                       value={group.logicOperator}
                       onChange={(e) => updateConditionGroup(group.id, { logicOperator: e.target.value })}
                       size="small"
+                      disabled={readonly}
                     >
                       <Radio.Button value="and">且(AND)</Radio.Button>
                       <Radio.Button value="or">或(OR)</Radio.Button>
@@ -356,6 +362,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                               icon={<PlusOutlined />}
                               onClick={() => addCondition(group.id)}
                               style={{ marginRight: 4 }}
+                              disabled={readonly}
                             />
                             <Button 
                               type="text" 
@@ -363,7 +370,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                               danger
                               icon={<DeleteOutlined />}
                               onClick={() => removeCondition(group.id, condition.id)}
-                              disabled={group.conditions.length === 1}
+                              disabled={group.conditions.length === 1 || readonly}
                             />
                           </div>
                         </div>
@@ -379,6 +386,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                              onChange={(value: string) => updateCondition(group.id, condition.id, { dataSource: value })}
                              style={{ width: '100%' }}
                              placeholder="选择数据源"
+                             disabled={readonly}
                            >
                             {dataSourceOptions.map(option => (
                               <Option key={option.value} value={option.value}>{option.label}</Option>
@@ -394,6 +402,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                              value={condition.dataItem}
                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCondition(group.id, condition.id, { dataItem: e.target.value })}
                              placeholder="输入数据项"
+                             disabled={readonly}
                            />
                         </div>
                         
@@ -405,6 +414,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                              value={condition.property}
                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCondition(group.id, condition.id, { property: e.target.value })}
                              placeholder="输入属性"
+                             disabled={readonly}
                            />
                         </div>
                         
@@ -417,6 +427,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                              onChange={(value: string) => updateCondition(group.id, condition.id, { compareType: value })}
                              style={{ width: '100%' }}
                              placeholder="选择对比方式"
+                             disabled={readonly}
                            >
                             {compareTypeOptions.map(option => (
                               <Option key={option.value} value={option.value}>{option.label}</Option>
@@ -432,6 +443,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                              value={condition.value}
                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateCondition(group.id, condition.id, { value: e.target.value })}
                              placeholder="输入比较值"
+                             disabled={readonly}
                            />
                         </div>
                       </div>
@@ -445,7 +457,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
         
       case 'repeat':
         return (
-          <Card title="重复配置" size="small" style={{ marginBottom: 16 }}>
+          <Card title="重复配置" size="small" style={{ marginBottom: 12 }}>
             <Form.Item
               label="重复次数"
               name="repeatCount"
@@ -456,6 +468,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                 max={1000} 
                 placeholder="重复执行次数"
                 style={{ width: '100%' }}
+                disabled={readonly}
               />
             </Form.Item>
           </Card>
@@ -463,13 +476,13 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
         
       case 'parallel':
         return (
-          <Card title="并行配置" size="small" style={{ marginBottom: 16 }}>
+          <Card title="并行配置" size="small" style={{ marginBottom: 12 }}>
             <Form.Item
               label="成功策略"
               name="parallelPolicy"
               tooltip="all: 所有子节点成功; any: 任一子节点成功; count: 指定数量成功"
             >
-              <Select placeholder="选择成功策略">
+              <Select placeholder="选择成功策略" disabled={readonly}>
                 <Option value="all">全部成功</Option>
                 <Option value="any">任一成功</Option>
                 <Option value="count">指定数量成功</Option>
@@ -487,6 +500,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                   max={10} 
                   placeholder="所需成功的子节点数量"
                   style={{ width: '100%' }}
+                  disabled={readonly}
                 />
               </Form.Item>
             )}
@@ -496,7 +510,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
               name="failurePolicy"
               tooltip="immediate: 立即失败; continue: 继续执行"
             >
-              <Select placeholder="选择失败策略">
+              <Select placeholder="选择失败策略" disabled={readonly}>
                 <Option value="immediate">立即失败</Option>
                 <Option value="continue">继续执行</Option>
               </Select>
@@ -506,7 +520,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
         
       case 'sequence':
         return (
-          <Card title="顺序配置" size="small" style={{ marginBottom: 16 }}>
+          <Card title="顺序配置" size="small" style={{ marginBottom: 12 }}>
             <div style={{ textAlign: 'center', padding: 20, color: '#999' }}>
               <OrderedListOutlined style={{ fontSize: 24, marginBottom: 8 }} />
               <div>顺序节点按顺序执行子节点</div>
@@ -517,7 +531,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
         
       case 'inverter':
         return (
-          <Card title="逆变配置" size="small" style={{ marginBottom: 16 }}>
+          <Card title="逆变配置" size="small" style={{ marginBottom: 12 }}>
             <div style={{ textAlign: 'center', padding: 20, color: '#999' }}>
               <SwapOutlined style={{ fontSize: 24, marginBottom: 8 }} />
               <div>逆变节点反转子节点的执行结果</div>
@@ -537,28 +551,43 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
 
   const nodeInfo = getNodeTypeInfo(behaviorTreeNode.type);
 
-  return (
-    <div 
-      style={{
-        position: 'fixed',
+  // 根据positioning属性动态设置样式
+  const containerStyle = positioning === 'fixed' 
+    ? {
+        position: 'fixed' as const,
         top: '16px',
         right: '16px',
-        background: 'white',
+        zIndex: 1000,
+        width: '320px',
+        height: 'calc(100vh - 32px)',
+        backgroundColor: '#fff',
         border: '1px solid #d9d9d9',
         borderRadius: '8px',
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-        padding: '0',
-        zIndex: 1000,
-        width: '380px',
-        height: 'calc(100vh - 32px)',
+        boxShadow: '0 6px 16px rgba(0, 0, 0, 0.12)',
         overflow: 'hidden',
         display: 'flex',
-        flexDirection: 'column'
-      }}
-    >
+        flexDirection: 'column' as const,
+        padding: '0'
+      }
+    : {
+        position: 'relative' as const,
+        width: '100%',
+        height: '100%',
+        backgroundColor: '#fff',
+        border: '1px solid #d9d9d9',
+        borderRadius: '8px',
+        boxShadow: '0 6px 16px rgba(0, 0, 0, 0.12)',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column' as const,
+        padding: '0'
+      };
+
+  return (
+    <div style={containerStyle}>
       {/* 标题栏 */}
       <div style={{
-        padding: '16px 24px',
+        padding: '12px 16px',
         borderBottom: '1px solid #f0f0f0',
         display: 'flex',
         alignItems: 'center',
@@ -568,13 +597,14 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ color: nodeInfo.color, fontSize: 16 }}>{nodeInfo.icon}</span>
           <span style={{ fontSize: '16px', fontWeight: 500 }}>{nodeInfo.title}</span>
-          <Tag color={nodeInfo.color} size="small">{behaviorTreeNode.type.toUpperCase()}</Tag>
         </div>
         <Space>
-          <Button onClick={onClose}>取消</Button>
-          <Button type="primary" onClick={handleSave}>
-            保存
-          </Button>
+          <Button onClick={onClose}>关闭</Button>
+          {!readonly && (
+            <Button type="primary" onClick={handleSave}>
+              保存
+            </Button>
+          )}
         </Space>
       </div>
       
@@ -582,12 +612,12 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
       <div style={{
         flex: 1,
         overflow: 'auto',
-        padding: '24px'
+        padding: '16px'
       }}>
         <Tabs activeKey={activeTab} onChange={setActiveTab}>
           <TabPane tab="基本信息" key="basic">
             <Form form={form} layout="vertical">
-              <Card title="节点信息" size="small" style={{ marginBottom: 16 }}>
+              <Card title="节点信息" size="small" style={{ marginBottom: 12 }}>
                 <Form.Item label="节点ID" name="id">
                   <Input disabled />
                 </Form.Item>
@@ -600,7 +630,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                     { max: 20, message: '节点名称最多20个字符' }
                   ]}
                 >
-                  <Input placeholder="请输入节点名称" maxLength={20} />
+                  <Input placeholder="请输入节点名称" maxLength={20} disabled={readonly} />
                 </Form.Item>
                 
                 <Form.Item label="节点描述" name="description">
@@ -608,6 +638,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                     rows={2} 
                     placeholder="请输入节点描述（可选）"
                     maxLength={200}
+                    disabled={readonly}
                   />
                 </Form.Item>
                 
@@ -621,6 +652,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                     max={10} 
                     placeholder="节点执行优先级"
                     style={{ width: '100%' }}
+                    disabled={readonly}
                   />
                 </Form.Item>
               </Card>
@@ -631,7 +663,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
           
           <TabPane tab="执行配置" key="execution">
             <Form form={form} layout="vertical">
-              <Card title="超时设置" size="small" style={{ marginBottom: 16 }}>
+              <Card title="超时设置" size="small" style={{ marginBottom: 12 }}>
                 <Form.Item
                   label="执行超时（毫秒）"
                   name="timeout"
@@ -642,6 +674,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                     max={300000} 
                     placeholder="超时时间（毫秒）"
                     style={{ width: '100%' }}
+                    disabled={readonly}
                   />
                 </Form.Item>
                 
@@ -655,11 +688,12 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                     max={600000} 
                     placeholder="最大执行时间（毫秒）"
                     style={{ width: '100%' }}
+                    disabled={readonly}
                   />
                 </Form.Item>
               </Card>
               
-              <Card title="重试设置" size="small" style={{ marginBottom: 16 }}>
+              <Card title="重试设置" size="small" style={{ marginBottom: 12 }}>
                 <Form.Item
                   label="最大重试次数"
                   name="maxRetries"
@@ -670,6 +704,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                     max={10} 
                     placeholder="最大重试次数"
                     style={{ width: '100%' }}
+                    disabled={readonly}
                   />
                 </Form.Item>
                 
@@ -683,6 +718,7 @@ const BehaviorTreeNodePropertyPanel: React.FC<BehaviorTreeNodePropertyPanelProps
                     max={10000} 
                     placeholder="重试延迟时间（毫秒）"
                     style={{ width: '100%' }}
+                    disabled={readonly}
                   />
                 </Form.Item>
               </Card>

@@ -173,6 +173,8 @@ interface FlowNode {
   subProcess?: SubProcessData;
   // 关联的子画布ID（仅阶段节点使用）
   subCanvasId?: string;
+  // 复制粘贴时的相关连接线
+  relatedConnections?: Connection[];
   // 行为树节点特有属性
   behaviorTreeData?: {
     status?: 'success' | 'failure' | 'running' | 'idle'; // 执行状态
@@ -209,8 +211,8 @@ interface Connection {
   targetId: string;
   sourcePoint: { x: number; y: number };
   targetPoint: { x: number; y: number };
-  sourceType?: 'node' | 'stage' | 'subcanvas' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
-  targetType?: 'node' | 'stage' | 'subcanvas' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat';
+  sourceType?: 'node' | 'stage' | 'subcanvas' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat' | 'start' | 'end';
+  targetType?: 'node' | 'stage' | 'subcanvas' | 'businessProcess' | 'sequence' | 'parallel' | 'condition' | 'inverter' | 'repeat' | 'start' | 'end';
   outputType?: 'success' | 'failure' | string; // 条件节点的输出类型，支持 group_1, group_2 等
 }
 
@@ -412,6 +414,10 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
   // 行为树节点属性面板状态
   const [behaviorTreeNodePropertyPanelVisible, setBehaviorTreeNodePropertyPanelVisible] = useState(false);
   const [selectedBehaviorTreeNode, setSelectedBehaviorTreeNode] = useState<FlowNode | null>(null);
+  
+  // 复制粘贴功能状态
+  const [copiedNode, setCopiedNode] = useState<FlowNode | null>(null);
+  const [hoveredNodeForCopy, setHoveredNodeForCopy] = useState<string | null>(null);
   
   // 阶段节点悬停状态
   const [hoveredDemandDevice, setHoveredDemandDevice] = useState<{nodeId: string, deviceText: string, x: number, y: number} | null>(null);
@@ -1849,6 +1855,90 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
     }
   }, [visible, editData, form]);
 
+  // 复制粘贴功能函数
+  const handleCopyNode = useCallback((nodeId: string) => {
+    const nodeToCopy = nodes.find(node => node.id === nodeId);
+    if (nodeToCopy && nodeToCopy.type !== 'start' && nodeToCopy.type !== 'end') {
+      // 查找与该节点相关的连接线
+      const relatedConnections = connections.filter(conn => 
+        conn.sourceId === nodeId || conn.targetId === nodeId
+      );
+      
+      // 保存节点和相关连接线信息
+      setCopiedNode({
+        ...nodeToCopy,
+        relatedConnections
+      });
+      message.success(`已复制节点: ${nodeToCopy.label}`);
+    }
+  }, [nodes, connections]);
+
+  const handlePasteNode = useCallback((targetNodeId: string) => {
+    if (!copiedNode) {
+      message.warning('没有可粘贴的节点');
+      return;
+    }
+
+    const targetNode = nodes.find(n => n.id === targetNodeId);
+    if (!targetNode) {
+      message.error('目标节点不存在');
+      return;
+    }
+
+    // 生成新的节点ID
+    const newNodeId = `node_${Date.now()}`;
+    
+    // 计算粘贴位置（在目标节点下方）
+    const pasteX = targetNode.x;
+    const pasteY = targetNode.y + targetNode.height + 100;
+
+    // 创建新节点
+    const pastedNode: FlowNode = {
+      ...copiedNode,
+      id: newNodeId,
+      x: pasteX,
+      y: pasteY,
+      // 重新生成输入输出连接点的ID
+      behaviorTreeData: copiedNode.behaviorTreeData ? {
+        ...copiedNode.behaviorTreeData,
+        inputs: copiedNode.behaviorTreeData.inputs?.map(input => ({
+          ...input,
+          id: `input_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          connected: false
+        })),
+        outputs: copiedNode.behaviorTreeData.outputs?.map(output => ({
+          ...output,
+          id: `output_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          connected: false
+        }))
+      } : undefined
+    };
+
+    // 创建从目标节点到新节点的连接
+    const newConnectionId = `connection_${Date.now()}`;
+    const newConnection: Connection = {
+      id: newConnectionId,
+      sourceId: targetNodeId,
+      targetId: newNodeId,
+      sourcePoint: {
+        x: targetNode.x + targetNode.width / 2,
+        y: targetNode.y + targetNode.height
+      },
+      targetPoint: {
+        x: pastedNode.x + pastedNode.width / 2,
+        y: pastedNode.y
+      },
+      sourceType: targetNode.type,
+      targetType: pastedNode.type
+    };
+
+    // 更新节点和连接
+    setNodes(prev => [...prev, pastedNode]);
+    setConnections(prev => [...prev, newConnection]);
+    
+    message.success(`已粘贴节点: ${pastedNode.label}`);
+  }, [copiedNode, nodes]);
+
   // 处理编辑模式初始化
   useEffect(() => {
     if (editData) {
@@ -2595,6 +2685,57 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       return nodes.find(node => isPointInNode(x, y, node));
     }
   }, [nodes, isPointInNode, editingSubProcess]);
+
+  // 检测扩展的节点区域（包括复制粘贴图标区域）
+  const findNodeAtPositionWithIcons = useCallback((x: number, y: number) => {
+    if (editingSubProcess) {
+      // 子流程编辑模式：检测子流程中的节点
+      const parentNode = nodes.find(n => n.id === editingSubProcess);
+      if (parentNode && parentNode.subProcess) {
+        return parentNode.subProcess.nodes.find(node => {
+          if (node.type === 'start' || node.type === 'end') {
+            return isPointInNode(x, y, node);
+          }
+          
+          // 对于其他节点，检测扩展区域（包括图标区域）
+          const iconSize = 14;
+          const iconSpacing = 6;
+          const iconY = node.y - iconSize - 8; // 图标在节点上方
+          const totalIconsWidth = iconSize * 2 + iconSpacing;
+          const iconX = node.x + node.width - totalIconsWidth - 4;
+          
+          // 扩展的检测区域：节点本身 + 图标区域
+          const inNodeArea = isPointInNode(x, y, node);
+          const inIconArea = x >= iconX && x <= iconX + totalIconsWidth && 
+                           y >= iconY && y <= iconY + iconSize;
+          
+          return inNodeArea || inIconArea;
+        });
+      }
+      return null;
+    } else {
+      // 主流程编辑模式：检测主流程节点
+      return nodes.find(node => {
+        if (node.type === 'start' || node.type === 'end') {
+          return isPointInNode(x, y, node);
+        }
+        
+        // 对于其他节点，检测扩展区域（包括图标区域）
+        const iconSize = 14;
+        const iconSpacing = 6;
+        const iconY = node.y - iconSize - 8; // 图标在节点上方
+        const totalIconsWidth = iconSize * 2 + iconSpacing;
+        const iconX = node.x + node.width - totalIconsWidth - 4;
+        
+        // 扩展的检测区域：节点本身 + 图标区域
+        const inNodeArea = isPointInNode(x, y, node);
+        const inIconArea = x >= iconX && x <= iconX + totalIconsWidth && 
+                         y >= iconY && y <= iconY + iconSize;
+        
+        return inNodeArea || inIconArea;
+      });
+    }
+  }, [nodes, isPointInNode, editingSubProcess]);
   
   // 查找鼠标位置的子画布
   const findSubCanvasAtPosition = useCallback((x: number, y: number) => {
@@ -2897,6 +3038,45 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
   // 设置按钮点击检测功能已移除
   
   // 画布鼠标事件处理
+  // 检测复制图标点击
+  const checkCopyIconClick = useCallback((x: number, y: number, node: FlowNode): boolean => {
+    if (node.type === 'start' || node.type === 'end') return false;
+    
+    const iconSize = 14;
+    const iconSpacing = 6;
+    const iconY = node.y - iconSize - 8; // 图标在节点上方
+    
+    // 计算两个图标的总宽度
+    const totalIconsWidth = iconSize * 2 + iconSpacing;
+    
+    // 复制图标位置 - 在节点右上角，两个图标居中对齐
+    const copyIconX = node.x + node.width - totalIconsWidth - 4;
+    
+    return x >= copyIconX && x <= copyIconX + iconSize && 
+           y >= iconY && y <= iconY + iconSize;
+  }, []);
+
+  // 检测粘贴图标点击
+  const checkPasteIconClick = useCallback((x: number, y: number, node: FlowNode): boolean => {
+    if (node.type === 'start' || node.type === 'end' || !copiedNode) return false;
+    
+    const iconSize = 14;
+    const iconSpacing = 6;
+    const iconY = node.y - iconSize - 8; // 图标在节点上方
+    
+    // 计算两个图标的总宽度
+    const totalIconsWidth = iconSize * 2 + iconSpacing;
+    
+    // 复制图标位置
+    const copyIconX = node.x + node.width - totalIconsWidth - 4;
+    
+    // 粘贴图标位置 - 在复制图标右侧
+    const pasteIconX = copyIconX + iconSize + iconSpacing;
+    
+    return x >= pasteIconX && x <= pasteIconX + iconSize && 
+           y >= iconY && y <= iconY + iconSize;
+  }, [copiedNode]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
     
@@ -2904,7 +3084,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
     
     const clickedAddButton = findAddButtonAtPosition(canvasPos.x, canvasPos.y);
     const clickedConnectionPoint = findConnectionPointAtPosition(canvasPos.x, canvasPos.y);
-    const clickedNode = findNodeAtPosition(canvasPos.x, canvasPos.y);
+    const clickedNode = findNodeAtPositionWithIcons(canvasPos.x, canvasPos.y);
     const clickedSubCanvas = findSubCanvasAtPosition(canvasPos.x, canvasPos.y);
     const clickedConnection = findConnectionAtPosition(canvasPos.x, canvasPos.y);
     
@@ -2933,6 +3113,20 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       setSelectedNode(null);
       setSelectedConnection(null);
     } else if (clickedNode) {
+      // 检查是否点击了复制或粘贴图标
+      const clickedCopyIcon = checkCopyIconClick(canvasPos.x, canvasPos.y, clickedNode);
+      const clickedPasteIcon = checkPasteIconClick(canvasPos.x, canvasPos.y, clickedNode);
+      
+      if (clickedCopyIcon) {
+         // 点击了复制图标
+         handleCopyNode(clickedNode.id);
+         return;
+       } else if (clickedPasteIcon) {
+         // 点击了粘贴图标
+         handlePasteNode(clickedNode.id);
+         return;
+       }
+      
       // 如果点击的是阶段节点，显示阶段属性面板并关闭业务流程属性面板
       if (clickedNode.type === 'stage') {
         setSelectedStageNode(clickedNode);
@@ -2953,24 +3147,16 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
         setSelectedBehaviorTreeNode(null);
       }
       
-      // 如果点击的是条件节点，显示行为树节点属性面板
-      if (clickedNode.type === 'condition') {
-        setSelectedBehaviorTreeNode(clickedNode);
-        setBehaviorTreeNodePropertyPanelVisible(true);
-        setBusinessProcessPropertyPanelVisible(false);
-        setStagePropertyPanelVisible(false);
-        setSelectedBusinessProcessNode(null);
-        setSelectedStageNode(null);
-      }
-      
       // 如果点击的是行为树节点，显示行为树节点属性面板并关闭其他属性面板
       if (['sequence', 'parallel', 'condition', 'inverter', 'repeat'].includes(clickedNode.type)) {
+        console.log('点击行为树节点:', clickedNode.type, clickedNode.id);
         setSelectedBehaviorTreeNode(clickedNode);
         setBehaviorTreeNodePropertyPanelVisible(true);
         setStagePropertyPanelVisible(false);
         setSelectedStageNode(null);
         setBusinessProcessPropertyPanelVisible(false);
         setSelectedBusinessProcessNode(null);
+        console.log('设置行为树节点属性面板可见:', true);
       }
       
       // 选中节点并开始拖拽（包括阶段节点和业务流程节点）
@@ -3015,7 +3201,7 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       setBehaviorTreeNodePropertyPanelVisible(false);
       setSelectedBehaviorTreeNode(null);
     }
-  }, [canvasState.isSpacePressed, getCanvasCoordinates, findAddButtonAtPosition, findNodeAtPosition, findSubCanvasAtPosition, findConnectionAtPosition, checkOpenSubCanvasButtonClick]);
+  }, [canvasState.isSpacePressed, getCanvasCoordinates, findAddButtonAtPosition, findNodeAtPositionWithIcons, findSubCanvasAtPosition, findConnectionAtPosition, checkOpenSubCanvasButtonClick]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvasPos = getCanvasCoordinates(e.clientX, e.clientY);
@@ -3159,9 +3345,14 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       const triggerHover = findTriggerConditionAtPosition(canvasPos.x, canvasPos.y);
       setHoveredTriggerCondition(triggerHover);
       
+      // 检测节点悬停（用于显示复制粘贴图标，包括图标区域）
+      const hoveredNode = findNodeAtPositionWithIcons(canvasPos.x, canvasPos.y);
+      const hoveredCopyNodeId = hoveredNode && hoveredNode.type !== 'start' && hoveredNode.type !== 'end' ? hoveredNode.id : null;
+      setHoveredNodeForCopy(hoveredCopyNodeId);
+      
       // setMousePosition({ x: canvasPos.x, y: canvasPos.y });
     }
-  }, [isDraggingConnection, isDraggingNode, draggedNode, dragOffset, isDraggingSubCanvas, draggedSubCanvas, subCanvasDragOffset, canvasState.isDragging, canvasState.isSpacePressed, canvasState.lastMouseX, canvasState.lastMouseY, getCanvasCoordinates, findConnectionPointAtPosition, findConnectionAtPosition, findNodeAtPosition, findSubCanvasLineAtPosition, findDemandDeviceAtPosition, findTriggerConditionAtPosition]);
+  }, [isDraggingConnection, isDraggingNode, draggedNode, dragOffset, isDraggingSubCanvas, draggedSubCanvas, subCanvasDragOffset, canvasState.isDragging, canvasState.isSpacePressed, canvasState.lastMouseX, canvasState.lastMouseY, getCanvasCoordinates, findConnectionPointAtPosition, findConnectionAtPosition, findNodeAtPosition, findNodeAtPositionWithIcons, findSubCanvasLineAtPosition, findDemandDeviceAtPosition, findTriggerConditionAtPosition, nodes]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (isDraggingConnection && dragConnectionStart && dragConnectionEnd) {
@@ -4885,9 +5076,107 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       // 绘制文字
       ctx.fillText(label, x + width / 2, y + height / 2);
     }
+
+    // 绘制复制粘贴图标（当鼠标悬停时，排除开始和结束节点）
+    if (hoveredNodeForCopy === node.id && node.type !== 'start' && node.type !== 'end') {
+      const iconSize = 14;
+      const iconSpacing = 6;
+      const iconY = y - iconSize - 8; // 图标在节点上方
+      
+      // 计算两个图标的总宽度
+      const totalIconsWidth = iconSize * 2 + iconSpacing;
+      
+      // 复制图标位置 - 在节点右上角，两个图标居中对齐
+      const copyIconX = x + width - totalIconsWidth - 4;
+      
+      // 粘贴图标位置 - 在复制图标右侧
+      const pasteIconX = copyIconX + iconSize + iconSpacing;
+      
+      // 绘制复制图标背景（方形背景，现代风格）
+      ctx.fillStyle = 'rgba(255, 107, 129, 0.15)';
+      ctx.strokeStyle = '#ff6b81';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(copyIconX, iconY, iconSize, iconSize, 3);
+      ctx.fill();
+      ctx.stroke();
+      
+      // 绘制复制图标（双层方块图标）
+      ctx.strokeStyle = '#ff6b81';
+      ctx.fillStyle = 'rgba(255, 107, 129, 0.3)';
+      ctx.lineWidth = 1.2;
+      
+      // 后层方块
+      const blockSize = iconSize * 0.4;
+      const blockX = copyIconX + (iconSize - blockSize) / 2 + 1;
+      const blockY = iconY + (iconSize - blockSize) / 2 + 1;
+      
+      ctx.beginPath();
+      ctx.roundRect(blockX, blockY, blockSize, blockSize, 1);
+      ctx.fill();
+      ctx.stroke();
+      
+      // 前层方块（偏移）
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.beginPath();
+      ctx.roundRect(blockX - 2, blockY - 2, blockSize, blockSize, 1);
+      ctx.fill();
+      ctx.stroke();
+      
+      // 添加小点表示内容
+      ctx.fillStyle = '#ff6b81';
+      ctx.beginPath();
+      ctx.arc(blockX - 1, blockY, 0.8, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(blockX + 1, blockY + 1, 0.8, 0, 2 * Math.PI);
+      ctx.fill();
+      
+      // 绘制粘贴图标背景（方形背景，现代风格）
+      const pasteEnabled = !!copiedNode;
+      const pasteColor = pasteEnabled ? '#74b9ff' : '#ddd';
+      const pasteBgColor = pasteEnabled ? 'rgba(116, 185, 255, 0.15)' : 'rgba(221, 221, 221, 0.15)';
+      
+      ctx.fillStyle = pasteBgColor;
+      ctx.strokeStyle = pasteColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(pasteIconX, iconY, iconSize, iconSize, 3);
+      ctx.fill();
+      ctx.stroke();
+      
+      // 绘制粘贴图标（现代箭头下载图标）
+      ctx.strokeStyle = pasteColor;
+      ctx.fillStyle = pasteColor;
+      ctx.lineWidth = 1.5;
+      
+      // 垂直线（箭头主体）
+      const centerX = pasteIconX + iconSize / 2;
+      const centerY = iconY + iconSize / 2;
+      const arrowSize = 6;
+      
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY - arrowSize/2);
+      ctx.lineTo(centerX, centerY + arrowSize/2 - 2);
+      ctx.stroke();
+      
+      // 箭头头部（三角形）
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY + arrowSize/2);
+      ctx.lineTo(centerX - 2, centerY + arrowSize/2 - 3);
+      ctx.lineTo(centerX + 2, centerY + arrowSize/2 - 3);
+      ctx.closePath();
+      ctx.fill();
+      
+      // 底部横线（表示目标位置）
+      ctx.beginPath();
+      ctx.moveTo(centerX - 3, centerY + arrowSize/2 + 1);
+      ctx.lineTo(centerX + 3, centerY + arrowSize/2 + 1);
+      ctx.stroke();
+    }
     
     ctx.restore();
-  }, [canvasState, selectedNode, nodeTools, invalidNodes]);
+  }, [canvasState, selectedNode, nodeTools, invalidNodes, hoveredNodeForCopy, copiedNode]);
   
   // 绘制连接线
   const drawConnections = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -6219,79 +6508,97 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
             padding: '20px',
             zIndex: 1000,
-            minWidth: '300px'
+            minWidth: '480px',
+            maxWidth: '520px'
           }}
         >
           <div style={{ marginBottom: '16px', fontSize: '16px', fontWeight: 500 }}>
             选择节点类型
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {/* 基础节点 */}
-            <div style={{ marginBottom: '8px', fontSize: '14px', fontWeight: 500, color: '#666' }}>
-              基础节点
-            </div>
-            <Button 
-              type="default" 
-              icon={<ClockCircleOutlined />}
-              onClick={() => handleAddNodeFromPanel('stage')}
-              style={{ textAlign: 'left', height: '40px' }}
-            >
-              阶段节点
-            </Button>
-            <Button 
-              type="default" 
-              icon={<SettingOutlined />}
-              onClick={() => handleAddNodeFromPanel('businessProcess')}
-              style={{ textAlign: 'left', height: '40px' }}
-            >
-              业务流程节点
-            </Button>
-            
-            {/* 行为树控制节点 */}
-            <div style={{ marginTop: '16px', marginBottom: '8px', fontSize: '14px', fontWeight: 500, color: '#666' }}>
-              行为树控制节点
-            </div>
-            <Button 
-              type="default" 
-              icon={<OrderedListOutlined />}
-              onClick={() => handleAddNodeFromPanel('sequence')}
-              style={{ textAlign: 'left', height: '40px' }}
-            >
-              顺序节点
-            </Button>
-            <Button 
-              type="default" 
-              icon={<AppstoreOutlined />}
-              onClick={() => handleAddNodeFromPanel('parallel')}
-              style={{ textAlign: 'left', height: '40px' }}
-            >
-              并行节点
-            </Button>
-            <Button 
-              type="default" 
-              icon={<QuestionCircleOutlined />}
-              onClick={() => handleAddNodeFromPanel('condition')}
-              style={{ textAlign: 'left', height: '40px' }}
-            >
-              条件节点
-            </Button>
-            <Button 
-              type="default" 
-              icon={<SwapOutlined />}
-              onClick={() => handleAddNodeFromPanel('inverter')}
-              style={{ textAlign: 'left', height: '40px' }}
-            >
-              逆变节点
-            </Button>
-            <Button 
-              type="default" 
-              icon={<ReloadOutlined />}
-              onClick={() => handleAddNodeFromPanel('repeat')}
-              style={{ textAlign: 'left', height: '40px' }}
-            >
-              重复节点
-            </Button>
+          
+          {/* 基础节点 */}
+          <div style={{ marginBottom: '12px', fontSize: '14px', fontWeight: 500, color: '#666' }}>
+            基础节点
           </div>
+          <Row gutter={[12, 12]} style={{ marginBottom: '16px' }}>
+            <Col span={12}>
+              <Button 
+                type="default" 
+                icon={<ClockCircleOutlined />}
+                onClick={() => handleAddNodeFromPanel('stage')}
+                style={{ textAlign: 'left', height: '40px', width: '100%' }}
+              >
+                阶段节点
+              </Button>
+            </Col>
+            <Col span={12}>
+              <Button 
+                type="default" 
+                icon={<SettingOutlined />}
+                onClick={() => handleAddNodeFromPanel('businessProcess')}
+                style={{ textAlign: 'left', height: '40px', width: '100%' }}
+              >
+                业务流程节点
+              </Button>
+            </Col>
+          </Row>
+          
+          {/* 行为树控制节点 */}
+          <div style={{ marginBottom: '12px', fontSize: '14px', fontWeight: 500, color: '#666' }}>
+            行为树控制节点
+          </div>
+          <Row gutter={[12, 12]}>
+            <Col span={12}>
+              <Button 
+                type="default" 
+                icon={<OrderedListOutlined />}
+                onClick={() => handleAddNodeFromPanel('sequence')}
+                style={{ textAlign: 'left', height: '40px', width: '100%' }}
+              >
+                顺序节点
+              </Button>
+            </Col>
+            <Col span={12}>
+              <Button 
+                type="default" 
+                icon={<AppstoreOutlined />}
+                onClick={() => handleAddNodeFromPanel('parallel')}
+                style={{ textAlign: 'left', height: '40px', width: '100%' }}
+              >
+                并行节点
+              </Button>
+            </Col>
+            <Col span={12}>
+              <Button 
+                type="default" 
+                icon={<QuestionCircleOutlined />}
+                onClick={() => handleAddNodeFromPanel('condition')}
+                style={{ textAlign: 'left', height: '40px', width: '100%' }}
+              >
+                条件节点
+              </Button>
+            </Col>
+            <Col span={12}>
+              <Button 
+                type="default" 
+                icon={<SwapOutlined />}
+                onClick={() => handleAddNodeFromPanel('inverter')}
+                style={{ textAlign: 'left', height: '40px', width: '100%' }}
+              >
+                逆变节点
+              </Button>
+            </Col>
+            <Col span={12}>
+              <Button 
+                type="default" 
+                icon={<ReloadOutlined />}
+                onClick={() => handleAddNodeFromPanel('repeat')}
+                style={{ textAlign: 'left', height: '40px', width: '100%' }}
+              >
+                重复节点
+              </Button>
+            </Col>
+          </Row>
           <div style={{ marginTop: '16px', textAlign: 'right' }}>
             <Button onClick={handleCloseNodePanel}>
               取消
@@ -6318,28 +6625,29 @@ const calculateNodeHeight = (node: Partial<FlowNode>, ctx?: CanvasRenderingConte
       
       {/* 子画布组件和独立子画布窗口已移除 - 阶段节点功能已移除 */}
       
-      {/* 阶段属性面板 - 只在画布编辑步骤显示 */}
+      {/* 阶段属性面板 */}
       <StagePropertyPanel
-        visible={stagePropertyPanelVisible && currentStep === 1}
+        visible={stagePropertyPanelVisible}
         stageNode={selectedStageNode}
         onSave={handleSaveStageNode}
         onClose={handleCloseStagePropertyPanel}
       />
       
-      {/* 业务流程属性面板 - 只在画布编辑步骤显示 */}
+      {/* 业务流程属性面板 */}
       <BusinessProcessPropertyPanel
-        visible={businessProcessPropertyPanelVisible && currentStep === 1}
+        visible={businessProcessPropertyPanelVisible}
         businessProcessNode={selectedBusinessProcessNode}
         onSave={handleSaveBusinessProcessNode}
         onClose={handleCloseBusinessProcessPropertyPanel}
       />
       
-      {/* 行为树节点属性面板 - 只在画布编辑步骤显示 */}
+      {/* 行为树节点属性面板 */}
       <BehaviorTreeNodePropertyPanel
-        visible={behaviorTreeNodePropertyPanelVisible && currentStep === 1}
+        visible={behaviorTreeNodePropertyPanelVisible}
         behaviorTreeNode={selectedBehaviorTreeNode}
         onSave={handleSaveBehaviorTreeNode}
         onClose={handleCloseBehaviorTreeNodePropertyPanel}
+        positioning="fixed"
       />
     </Drawer>
   );

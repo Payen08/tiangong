@@ -333,6 +333,7 @@ const TaskDetail: React.FC<TaskDetailProps> = ({ visible, onClose, taskData }) =
           <Card title="行为执行状况" size="small">
             <div style={{ height: '600px', background: '#f8f9fa', borderRadius: '8px' }}>
               <BehaviorTreeCanvas 
+                readonly={true}
                 nodes={[
                   {
                     id: 'root',
