@@ -2059,7 +2059,7 @@ const RobotDeviceDetail: React.FC = () => {
                       Modal.info({
                         title: null,
                         icon: null,
-                        width: 1200,
+                        width: 900,
                         maskClosable: true,
                         closable: true,
                         okButtonProps: { style: { display: 'none' } },
