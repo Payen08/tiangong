@@ -23,5 +23,8 @@
     }
   },
   "include": ["src", "vite.config.ts", "src/types.d.ts"],
+  "exclude": [
+    "src/components/BehaviorTreeCanvas-original.tsx"
+  ],
   "references": []
 }
