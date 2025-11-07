@@ -10,7 +10,6 @@ import {
   InputNumber,
 
   Tabs,
-  Tag,
   Radio,
 
 } from 'antd';

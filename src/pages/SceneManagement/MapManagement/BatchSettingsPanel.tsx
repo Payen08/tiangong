@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import baseMapSvg from '@/assets/base-map.svg';
 import {
   Card,
   Form,
@@ -83,31 +84,31 @@ const BatchSettingsPanel: React.FC<BatchSettingsPanelProps> = ({
     {
       id: 'basemap-1',
       name: '标准建筑底图',
-      url: '/src/assets/base-map.svg',
+      url: baseMapSvg,
       description: '标准建筑平面图底图'
     },
     {
       id: 'basemap-2', 
       name: '简化建筑底图',
-      url: '/src/assets/base-map-simple.svg',
+      url: baseMapSvg,
       description: '简化版建筑平面图底图'
     },
     {
       id: 'basemap-3',
       name: '详细建筑底图', 
-      url: '/src/assets/base-map-detailed.svg',
+      url: baseMapSvg,
       description: '详细版建筑平面图底图'
     },
     {
       id: 'basemap-4',
       name: '黑白线条底图',
-      url: '/src/assets/base-map-bw.svg',
+      url: baseMapSvg,
       description: '黑白线条风格底图'
     },
     {
       id: 'basemap-5',
       name: '极简底图',
-      url: '/src/assets/base-map-minimal.svg',
+      url: baseMapSvg,
       description: '极简风格底图'
     }
   ];

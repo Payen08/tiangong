@@ -21,8 +21,6 @@ import {
   InputNumber,
   Select,
   Switch,
-  Checkbox,
-  Upload,
 } from 'antd';
 import {
   WifiOutlined,
@@ -38,10 +36,6 @@ import {
   DeleteOutlined,
   ImportOutlined,
   ExportOutlined,
-  EyeOutlined,
-  DownloadOutlined,
-  UploadOutlined,
-  UserOutlined,
 } from '@ant-design/icons';
 import DeviceMapEditor from '../../components/DeviceMapEditor';
 import DeviceBehaviorTreeEditor from '../../components/DeviceBehaviorTreeEditor';
@@ -132,6 +126,7 @@ const RobotDeviceDetail: React.FC = () => {
   const [searchOptions, setSearchOptions] = useState<{ value: string; label: string; robot: RobotDevice }[]>([]);
   const [taskSearchText, setTaskSearchText] = useState(''); // 任务搜索文本
   const [deviceTasks, setDeviceTasks] = useState<DeviceTask[]>([]); // 设备任务列表
+  const [studioTab, setStudioTab] = useState<'mystudio' | '烛微'>('mystudio'); // 顶部自定义切换按钮
 
   // 使用共享的位姿和坐标系数据store
   const {
@@ -149,14 +144,14 @@ const RobotDeviceDetail: React.FC = () => {
   // 位姿管理相关状态
   const [poseModalVisible, setPoseModalVisible] = useState(false);
   const [poseEditingItem, setPoseEditingItem] = useState<PoseManagementItem | null>(null);
-  const [poseSelectedRowKeys, setPoseSelectedRowKeys] = useState<React.Key[]>([]);
+  const [poseSelectedRowKeys] = useState<React.Key[]>([]);
   const [poseContinuousMode, setPoseContinuousMode] = useState(false); // 位姿连续操作开关
   const [poseForm] = Form.useForm();
 
   // 坐标系管理相关状态
   const [coordinateModalVisible, setCoordinateModalVisible] = useState(false);
   const [coordinateEditingItem, setCoordinateEditingItem] = useState<CoordinateSystemItem | null>(null);
-  const [coordinateSelectedRowKeys, setCoordinateSelectedRowKeys] = useState<React.Key[]>([]);
+  const [coordinateSelectedRowKeys] = useState<React.Key[]>([]);
   const [coordinateContinuousMode, setCoordinateContinuousMode] = useState(false); // 坐标系连续操作开关
   const [coordinateForm] = Form.useForm();
 
@@ -349,141 +344,6 @@ const RobotDeviceDetail: React.FC = () => {
         
         setDeviceTasks(mockDeviceTasks);
 
-        // 初始化位姿管理模拟数据
-        const mockPoseData: PoseManagementItem[] = [
-          {
-            id: 'pose_001',
-            name: '充电桩位姿',
-            description: '机器人充电桩的标准位姿',
-            positionX: 10.5,
-            positionY: 5.2,
-            positionZ: 0.0,
-            orientationX: 0.0,
-            orientationY: 0.0,
-            orientationZ: 0.707,
-            orientationW: 0.707,
-            frameId: 'map',
-            timestamp: '2024-01-20 14:30:25',
-            status: 'active',
-            createdBy: '系统管理员',
-            lastModified: '2024-01-20 14:30:25'
-          },
-          {
-            id: 'pose_002',
-            name: '工作站位姿',
-            description: '机器人工作站的标准位姿',
-            positionX: 15.8,
-            positionY: 8.6,
-            positionZ: 0.0,
-            orientationX: 0.0,
-            orientationY: 0.0,
-            orientationZ: 0.0,
-            orientationW: 1.0,
-            frameId: 'map',
-            timestamp: '2024-01-20 10:15:30',
-            status: 'active',
-            createdBy: '操作员',
-            lastModified: '2024-01-20 12:45:10'
-          },
-          {
-            id: 'pose_003',
-            name: '待机位姿',
-            description: '机器人待机时的标准位姿',
-            positionX: 0.0,
-            positionY: 0.0,
-            positionZ: 0.0,
-            orientationX: 0.0,
-            orientationY: 0.0,
-            orientationZ: 0.0,
-            orientationW: 1.0,
-            frameId: 'base_link',
-            timestamp: '2024-01-19 16:20:15',
-            status: 'inactive',
-            createdBy: '系统管理员',
-            lastModified: '2024-01-19 16:20:15'
-          }
-        ];
-
-        // 初始化坐标系管理模拟数据
-        const mockCoordinateData: CoordinateSystemItem[] = [
-          {
-            id: 'coord_001',
-            name: '地图坐标系',
-            description: '全局地图坐标系',
-            frameId: 'map',
-            parentFrame: 'world',
-            translationX: 0.0,
-            translationY: 0.0,
-            translationZ: 0.0,
-            rotationX: 0.0,
-            rotationY: 0.0,
-            rotationZ: 0.0,
-            rotationW: 1.0,
-            isStatic: true,
-            publishRate: 10,
-            status: 'active',
-            createdBy: '系统管理员',
-            lastModified: '2024-01-20 14:30:25'
-          },
-          {
-            id: 'coord_002',
-            name: '机器人基座坐标系',
-            description: '机器人基座的本地坐标系',
-            frameId: 'base_link',
-            parentFrame: 'map',
-            translationX: 10.5,
-            translationY: 5.2,
-            translationZ: 0.0,
-            rotationX: 0.0,
-            rotationY: 0.0,
-            rotationZ: 0.707,
-            rotationW: 0.707,
-            isStatic: false,
-            publishRate: 50,
-            status: 'active',
-            createdBy: '系统管理员',
-            lastModified: '2024-01-20 14:30:25'
-          },
-          {
-            id: 'coord_003',
-            name: '激光雷达坐标系',
-            description: '激光雷达传感器坐标系',
-            frameId: 'laser_link',
-            parentFrame: 'base_link',
-            translationX: 0.2,
-            translationY: 0.0,
-            translationZ: 0.3,
-            rotationX: 0.0,
-            rotationY: 0.0,
-            rotationZ: 0.0,
-            rotationW: 1.0,
-            isStatic: true,
-            publishRate: 30,
-            status: 'active',
-            createdBy: '技术员',
-            lastModified: '2024-01-19 10:15:30'
-          },
-          {
-            id: 'coord_004',
-            name: '摄像头坐标系',
-            description: '前置摄像头坐标系',
-            frameId: 'camera_link',
-            parentFrame: 'base_link',
-            translationX: 0.3,
-            translationY: 0.0,
-            translationZ: 0.5,
-            rotationX: 0.0,
-            rotationY: 0.0,
-            rotationZ: 0.0,
-            rotationW: 1.0,
-            isStatic: true,
-            publishRate: 20,
-            status: 'inactive',
-            createdBy: '技术员',
-            lastModified: '2024-01-18 15:45:20'
-          }
-        ];
-
         initializeData();
         setLoading(false);
       }, 500);
@@ -619,41 +479,7 @@ const RobotDeviceDetail: React.FC = () => {
     });
   };
 
-  const handlePoseModalOk = async () => {
-    try {
-      const values = await poseForm.validateFields();
-      const timestamp = new Date().toLocaleString('zh-CN');
-      
-      if (poseEditingItem) {
-        // 编辑模式
-        updatePose(poseEditingItem.id, { ...values, lastModified: timestamp });
-        message.success('位姿更新成功');
-      } else {
-        // 新增模式
-        const newItem: PoseManagementItem = {
-          id: `pose_${Date.now()}`,
-          ...values,
-          timestamp,
-          lastModified: timestamp,
-          createdBy: '当前用户'
-        };
-        addPose(newItem);
-        message.success('位姿添加成功');
-      }
-      
-      setPoseModalVisible(false);
-      setPoseEditingItem(null);
-      poseForm.resetFields();
-    } catch (error) {
-      console.error('表单验证失败:', error);
-    }
-  };
-
-  const handlePoseModalCancel = () => {
-    setPoseModalVisible(false);
-    setPoseEditingItem(null);
-    poseForm.resetFields();
-  };
+  
 
   const handlePoseExport = () => {
     const selectedData = poseData.filter(item => poseSelectedRowKeys.includes(item.id));
@@ -695,40 +521,7 @@ const RobotDeviceDetail: React.FC = () => {
     });
   };
 
-  const handleCoordinateModalOk = async () => {
-    try {
-      const values = await coordinateForm.validateFields();
-      const timestamp = new Date().toLocaleString('zh-CN');
-      
-      if (coordinateEditingItem) {
-        // 编辑模式
-        updateCoordinate(coordinateEditingItem.id, { ...values, lastModified: timestamp });
-        message.success('坐标系更新成功');
-      } else {
-        // 新增模式
-        const newItem: CoordinateSystemItem = {
-          id: `coord_${Date.now()}`,
-          ...values,
-          lastModified: timestamp,
-          createdBy: '当前用户'
-        };
-        addCoordinate(newItem);
-        message.success('坐标系添加成功');
-      }
-      
-      setCoordinateModalVisible(false);
-      setCoordinateEditingItem(null);
-      coordinateForm.resetFields();
-    } catch (error) {
-      console.error('表单验证失败:', error);
-    }
-  };
-
-  const handleCoordinateModalCancel = () => {
-    setCoordinateModalVisible(false);
-    setCoordinateEditingItem(null);
-    coordinateForm.resetFields();
-  };
+  
 
   const handleCoordinateExport = () => {
     const selectedData = coordinateData.filter(item => coordinateSelectedRowKeys.includes(item.id));
@@ -1699,8 +1492,6 @@ const RobotDeviceDetail: React.FC = () => {
           <Col style={{ flexShrink: 0 }}>
             <AutoComplete
               style={{ width: 200, minWidth: 150 }}
-              size="small"
-              placeholder="搜索添加机器人..."
               value={searchValue}
               options={searchOptions}
               onSearch={handleSearchChange}
@@ -1708,11 +1499,13 @@ const RobotDeviceDetail: React.FC = () => {
               allowClear
             >
               <Input 
+                size="middle"
+                placeholder="搜索添加机器人..."
                 prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
                 style={{ 
-                  fontSize: '12px',
-                  borderRadius: '6px',
-                  border: '1px solid #e8e8e8'
+                  fontSize: '12px', 
+                  borderRadius: '6px', 
+                  border: '1px solid #e8e8e8' 
                 }}
               />
             </AutoComplete>
@@ -1773,10 +1566,38 @@ const RobotDeviceDetail: React.FC = () => {
 
       {/* 详细信息标签页 */}
       <Card>
-        <Tabs 
-          activeKey={activeTab} 
-          onChange={setActiveTab}
-          items={[
+        {/* 顶部自定义切换按钮 */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
+          <Space size={12}>
+            <Button
+              type={studioTab === 'mystudio' ? 'primary' : 'default'}
+              onClick={() => setStudioTab('mystudio')}
+              style={{
+                borderRadius: '8px',
+                padding: '6px 16px',
+                minWidth: '96px'
+              }}
+            >
+              mystudio
+            </Button>
+            <Button
+              type={studioTab === '烛微' ? 'primary' : 'default'}
+              onClick={() => setStudioTab('烛微')}
+              style={{
+                borderRadius: '8px',
+                padding: '6px 16px',
+                minWidth: '96px'
+              }}
+            >
+              烛微
+            </Button>
+          </Space>
+        </div>
+        {studioTab === 'mystudio' ? (
+          <Tabs 
+            activeKey={activeTab} 
+            onChange={setActiveTab}
+            items={[
             {
               key: 'overview',
               label: '设备概览',
@@ -1837,11 +1658,13 @@ const RobotDeviceDetail: React.FC = () => {
                       display: 'flex',
                       flexDirection: 'column'
                     }}
-                    bodyStyle={{ 
-                      flex: 1,
-                      padding: 0,
-                      display: 'flex',
-                      flexDirection: 'column'
+                    styles={{
+                      body: {
+                        flex: 1,
+                        padding: 0,
+                        display: 'flex',
+                        flexDirection: 'column'
+                      }
                     }}
                   >
                     <DeviceMapEditor 
@@ -1889,11 +1712,13 @@ const RobotDeviceDetail: React.FC = () => {
                       display: 'flex',
                       flexDirection: 'column'
                     }}
-                    bodyStyle={{ 
-                      flex: 1,
-                      padding: 0,
-                      display: 'flex',
-                      flexDirection: 'column'
+                    styles={{
+                      body: {
+                        flex: 1,
+                        padding: 0,
+                        display: 'flex',
+                        flexDirection: 'column'
+                      }
                     }}
                   >
                     <DeviceBehaviorTreeEditor 
@@ -1903,109 +1728,6 @@ const RobotDeviceDetail: React.FC = () => {
                     />
                   </Card>
                 </div>
-              ),
-            },
-            {
-              key: 'deviceTasks',
-              label: '设备任务',
-              children: (
-                <div style={{ background: 'transparent' }}>
-                  <Card style={{ marginBottom: '16px' }}>
-                    <Table
-                      dataSource={deviceTasks}
-                      columns={deviceTaskColumns}
-                      pagination={{
-                        pageSize: 10,
-                        showSizeChanger: true,
-                        showQuickJumper: true,
-                        showTotal: (total: number, range: [number, number]) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
-                      }}
-                      scroll={{ x: 1200 }}
-                      size="middle"
-                    />
-                  </Card>
-                </div>
-              ),
-            },
-            {
-              key: 'tasks',
-              label: '调度任务',
-              children: (
-                <div>
-                  {/* 搜索筛选区 */}
-                  <Card size="small" style={{ marginBottom: '16px' }}>
-                    <Row gutter={16} align="middle">
-                      <Col flex="auto">
-                        <Input.Search
-                          placeholder="搜索任务名称或类型..."
-                          value={taskSearchText}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTaskSearchText(e.target.value)}
-                          onSearch={(value: string) => setTaskSearchText(value)}
-                          allowClear
-                          style={{ width: '100%' }}
-                        />
-                      </Col>
-                      <Col>
-                        <Space>
-                          <Button 
-                            type="primary" 
-                            icon={<SearchOutlined />}
-                            onClick={() => {
-                              message.info('刷新调度任务');
-                            }}
-                          >
-                            刷新
-                          </Button>
-                        </Space>
-                      </Col>
-                    </Row>
-                  </Card>
-                  
-                  {/* 调度任务表格 */}
-                   <Table
-                     columns={taskColumns}
-                     dataSource={filteredTaskRecords}
-                     rowKey="id"
-                     size="middle"
-                     scroll={{ x: 'max-content' }}
-                     pagination={{
-                       showSizeChanger: true,
-                       showQuickJumper: true,
-                       showTotal: (total: number, range: [number, number]) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
-                       pageSizeOptions: ['10', '20', '50', '100'],
-                       defaultPageSize: 10,
-                       responsive: true,
-                     }}
-                     className="task-records-table"
-                   />
-                </div>
-              ),
-            },
-            {
-              key: 'history',
-              label: '状态历史',
-              children: (
-                <Timeline>
-                  {statusHistory.map((item) => (
-                    <Timeline.Item
-                      key={item.id}
-                      color={item.status === '异常' ? 'red' : 'blue'}
-                    >
-                      <div>
-                        <Space>
-                          <strong>{getStatusTag(item.status)}</strong>
-                          <span style={{ color: '#666' }}>{item.timestamp}</span>
-                        </Space>
-                      </div>
-                      <div style={{ marginTop: '4px', color: '#666' }}>
-                        持续时长: {item.duration}
-                      </div>
-                      <div style={{ marginTop: '4px' }}>
-                        {item.description}
-                      </div>
-                    </Timeline.Item>
-                  ))}
-                </Timeline>
               ),
             },
             {
@@ -2321,8 +2043,284 @@ const RobotDeviceDetail: React.FC = () => {
                 </div>
               ),
             },
+            {
+              key: 'device_io_management',
+              label: '设备I/O管理',
+              children: (
+                <div style={{ background: 'transparent' }}>
+                  {(() => {
+                    const onNext = (currentId: string) => {
+                      const idx = ioDeviceData.findIndex(d => d.id === currentId);
+                      const next = ioDeviceData[(idx + 1) % ioDeviceData.length];
+                      Modal.destroyAll();
+                      showIoModal(next);
+                    };
+                    const showIoModal = (ioDevice: { id: string; name: string; hardwareType: string; description: string }) => {
+                      Modal.info({
+                        title: null,
+                        icon: null,
+                        width: 1200,
+                        maskClosable: true,
+                        closable: true,
+                        okButtonProps: { style: { display: 'none' } },
+                        content: (
+                          <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                              <Space>
+                                <span style={{ fontWeight: 600 }}>设备名称：</span>
+                                <span style={{ fontSize: 18, fontWeight: 600 }}>{(device && device.deviceName) || ioDevice.name}</span>
+                              </Space>
+                              <Space style={{ marginRight: 16 }}>
+                                <Button onClick={() => message.success('I/O状态已刷新')}>手动刷新</Button>
+                                <Button type="primary" onClick={() => onNext(ioDevice.id)}>下一个</Button>
+                              </Space>
+                            </div>
+                            <Row gutter={[32, 16]} style={{ display: 'flex', alignItems: 'stretch', marginTop: 8 }}>
+                              <Col xs={24} md={12} style={{ display: 'flex' }}>
+                                <Card style={{ width: '100%' }} title="数字输入">
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                                    {Array.from({ length: 10 }).map((_, i) => {
+                                      const active = i === 1; // DI2 亮起
+                                      return (
+                                        <div key={`di-${i}`} style={{ width: '20%', minWidth: 120, padding: 12 }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <span style={{ fontWeight: 600 }}>{`DI ${i + 1}`}</span>
+                                            <span
+                                              style={{
+                                                width: 12,
+                                                height: 12,
+                                                borderRadius: 6,
+                                                background: active ? '#52c41a' : '#d9d9d9',
+                                                boxShadow: active ? '0 0 0 4px rgba(82,196,26,.2)' : 'none',
+                                              }}
+                                            />
+                                          </div>
+                                          <Tooltip title={'描述限定8个字符'}>
+                                            <div
+                                              style={{ marginTop: 8, color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                              onMouseEnter={(e) => {
+                                                e.currentTarget.style.whiteSpace = 'normal';
+                                                e.currentTarget.style.overflow = 'visible';
+                                                e.currentTarget.style.textOverflow = 'clip';
+                                              }}
+                                              onMouseLeave={(e) => {
+                                                e.currentTarget.style.whiteSpace = 'nowrap';
+                                                e.currentTarget.style.overflow = 'hidden';
+                                                e.currentTarget.style.textOverflow = 'ellipsis';
+                                              }}
+                                            >
+                                              描述限定8个字符
+                                            </div>
+                                          </Tooltip>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </Card>
+                              </Col>
+                              <Col xs={24} md={12} style={{ display: 'flex' }}>
+                                <Card style={{ width: '100%' }} title="数字输出">
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                                    {Array.from({ length: 10 }).map((_, i) => {
+                                      const defaultChecked = i === 1; // DO2 打开
+                                      return (
+                                        <div key={`do-${i}`} style={{ width: '20%', minWidth: 120, padding: 12 }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                            <Switch defaultChecked={defaultChecked} />
+                                            <span style={{ fontWeight: 600 }}>{`DO ${i + 1}`}</span>
+                                          </div>
+                                          <Tooltip title={'描述限定8个字符'}>
+                                            <div
+                                              style={{ marginTop: 8, color: '#888', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                              onMouseEnter={(e) => {
+                                                e.currentTarget.style.whiteSpace = 'normal';
+                                                e.currentTarget.style.overflow = 'visible';
+                                                e.currentTarget.style.textOverflow = 'clip';
+                                              }}
+                                              onMouseLeave={(e) => {
+                                                e.currentTarget.style.whiteSpace = 'nowrap';
+                                                e.currentTarget.style.overflow = 'hidden';
+                                                e.currentTarget.style.textOverflow = 'ellipsis';
+                                              }}
+                                            >
+                                              描述限定8个字符
+                                            </div>
+                                          </Tooltip>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </Card>
+                              </Col>
+                            </Row>
+                          </>
+                        ),
+                      });
+                    };
+                    const ioDeviceData = [
+                      { id: 'io-1', name: 'ED_DIN', hardwareType: 'VDD_24', description: '节卡机械臂控制柜数字输入' },
+                      { id: 'io-2', name: 'ED_DIN', hardwareType: 'VDD_24', description: '节卡机械臂控制柜数字输入' },
+                      { id: 'io-3', name: 'ED_DIN', hardwareType: 'VDD_24', description: '节卡机械臂控制柜数字输入' },
+                      { id: 'io-4', name: 'ED_DIN', hardwareType: 'VDD_24', description: '节卡机械臂控制柜数字输入' },
+                      { id: 'io-5', name: 'ED_DIN', hardwareType: 'VDD_24', description: '节卡机械臂控制柜数字输入' },
+                      { id: 'io-6', name: 'ED_DIN', hardwareType: 'VDD_24', description: '节卡机械臂控制柜数字输入' },
+                      { id: 'io-7', name: 'ED_DIN', hardwareType: 'VDD_24', description: '节卡机械臂控制柜数字输入' },
+                      { id: 'io-8', name: 'ED_DIN', hardwareType: 'VDD_24', description: '节卡机械臂控制柜数字输入' },
+                    ];
+                    return (
+                      <Row gutter={[16, 16]} style={{ display: 'flex', alignItems: 'stretch' }}>
+                        {ioDeviceData.map((item) => (
+                          <Col key={item.id} xs={24} sm={12} md={12} lg={6} style={{ display: 'flex' }}>
+                            <Card
+                              hoverable
+                              className="transition-transform hover:-translate-y-0.5"
+                              onClick={() => showIoModal(item)}
+                              style={{ width: '100%', borderRadius: 8, boxShadow: '0 1px 4px rgba(0,21,41,.08)', border: '1px solid #f0f0f0', cursor: 'pointer' }}
+                              bodyStyle={{ padding: 16 }}
+                            >
+                              <div
+                                style={{
+                                  height: 120,
+                                  background: '#f5f5f5',
+                                  borderRadius: 8,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#4a4a4a',
+                                  fontSize: 48,
+                                  fontWeight: 600,
+                                  letterSpacing: 2,
+                                }}
+                              >
+                                I/O
+                              </div>
+                              <div style={{ marginTop: 12 }}>
+                                <div style={{ fontWeight: 600 }}>{item.name}</div>
+                                <div style={{ marginTop: 8, color: '#666' }}>
+                                  硬件类型 <span style={{ marginLeft: 8 }}>{item.hardwareType}</span>
+                                </div>
+                                <div style={{ marginTop: 4, color: '#666' }}>
+                                  硬件描述 <span style={{ marginLeft: 8 }}>{item.description}</span>
+                                </div>
+                              </div>
+                            </Card>
+                          </Col>
+                        ))}
+                      </Row>
+                    );
+                  })()}
+                </div>
+              ),
+            },
+            {
+              key: 'deviceTasks',
+              label: '设备任务',
+              children: (
+                <div style={{ background: 'transparent' }}>
+                  <Card style={{ marginBottom: '16px' }}>
+                    <Table
+                      dataSource={deviceTasks}
+                      columns={deviceTaskColumns}
+                      pagination={{
+                        pageSize: 10,
+                        showSizeChanger: true,
+                        showQuickJumper: true,
+                        showTotal: (total: number, range: [number, number]) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+                      }}
+                      scroll={{ x: 1200 }}
+                      size="middle"
+                    />
+                  </Card>
+                </div>
+              ),
+            },
+            {
+              key: 'tasks',
+              label: '调度任务',
+              children: (
+                <div>
+                  {/* 搜索筛选区 */}
+                  <Card size="small" style={{ marginBottom: '16px' }}>
+                    <Row gutter={16} align="middle">
+                      <Col flex="auto">
+                        <Input.Search
+                          placeholder="搜索任务名称或类型..."
+                          value={taskSearchText}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTaskSearchText(e.target.value)}
+                          onSearch={(value: string) => setTaskSearchText(value)}
+                          allowClear
+                          style={{ width: '100%' }}
+                        />
+                      </Col>
+                      <Col>
+                        <Space>
+                          <Button 
+                            type="primary" 
+                            icon={<SearchOutlined />}
+                            onClick={() => {
+                              message.info('刷新调度任务');
+                            }}
+                          >
+                            刷新
+                          </Button>
+                        </Space>
+                      </Col>
+                    </Row>
+                  </Card>
+                  
+                  {/* 调度任务表格 */}
+                   <Table
+                     columns={taskColumns}
+                     dataSource={filteredTaskRecords}
+                     rowKey="id"
+                     size="middle"
+                     scroll={{ x: 'max-content' }}
+                     pagination={{
+                       showSizeChanger: true,
+                       showQuickJumper: true,
+                       showTotal: (total: number, range: [number, number]) => `第 ${range[0]}-${range[1]} 条/共 ${total} 条`,
+                       pageSizeOptions: ['10', '20', '50', '100'],
+                       defaultPageSize: 10,
+                       responsive: true,
+                     }}
+                     className="task-records-table"
+                   />
+                </div>
+              ),
+            },
+            {
+              key: 'history',
+              label: '状态历史',
+              children: (
+                <Timeline
+                  items={statusHistory.map((item) => ({
+                    key: item.id,
+                    color: item.status === '异常' ? 'red' : 'blue',
+                    children: (
+                      <>
+                        <div>
+                          <Space>
+                            <strong>{getStatusTag(item.status)}</strong>
+                            <span style={{ color: '#666' }}>{item.timestamp}</span>
+                          </Space>
+                        </div>
+                        <div style={{ marginTop: '4px', color: '#666' }}>
+                          持续时长: {item.duration}
+                        </div>
+                        <div style={{ marginTop: '4px' }}>
+                          {item.description}
+                        </div>
+                      </>
+                    )
+                  }))}
+                />
+              ),
+            },
           ]}
-        />
+          />
+        ) : (
+          <div style={{ background: 'transparent', height: 260 }} />
+        )}
       </Card>
     </div>
     </>

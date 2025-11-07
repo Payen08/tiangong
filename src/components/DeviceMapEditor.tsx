@@ -3,11 +3,9 @@ import {
   Card,
   Button,
   Space,
-  Tooltip,
   Radio,
   Input,
   message,
-  Popover,
   Switch,
   Tabs,
   Collapse,
@@ -19,7 +17,6 @@ import {
   Col,
   Cascader,
   Slider,
-  Table,
 } from 'antd';
 import type { RadioChangeEvent } from 'antd';
 import type { ChangeEvent } from 'react';
@@ -60,8 +57,6 @@ import {
   AimOutlined,
   SendOutlined,
   LoadingOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   RadarChartOutlined,
   CompassOutlined,
 } from '@ant-design/icons';
@@ -180,7 +175,7 @@ interface DeviceMapEditorProps {
 const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
   // @ts-ignore - deviceId is required by interface but not used in current implementation
   deviceId,
-  deviceName,
+  deviceName: _deviceName,
   currentPosition,
   mapName = '设备地图'
 }) => {
@@ -234,8 +229,8 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
   const [canvasHeight, setCanvasHeight] = useState(0);
   const [canvasWidth, setCanvasWidth] = useState(0);
   // 面板显示隐藏状态
-  const [showLeftPanel, setShowLeftPanel] = useState(true);
-  const [showRightPanel, setShowRightPanel] = useState(true);
+  const [showLeftPanel] = useState(true);
+  const [showRightPanel] = useState(true);
   const [hideDockNames, setHideDockNames] = useState(false);
   const [hideChargeNames, setHideChargeNames] = useState(false);
   const [hideTempNames, setHideTempNames] = useState(false);
@@ -273,7 +268,6 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
   // 框选相关状态
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null);
-  const [selectionEnd, setSelectionEnd] = useState<{ x: number; y: number } | null>(null);
   const [selectionBox, setSelectionBox] = useState<{
     x: number;
     y: number;
@@ -790,19 +784,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
   };
 
   // 面板显示隐藏切换函数
-  const toggleLeftPanel = () => {
-    setShowLeftPanel(!showLeftPanel);
-  };
-
-  const toggleRightPanel = () => {
-    setShowRightPanel(!showRightPanel);
-  };
-
-  const toggleBothPanels = () => {
-    const newState = !(showLeftPanel && showRightPanel);
-    setShowLeftPanel(newState);
-    setShowRightPanel(newState);
-  };
+  // （已移除未使用的 toggleBothPanels，避免 TS6133 警告）
 
   // 保存历史记录
   const saveToHistory = useCallback(() => {
@@ -1865,7 +1847,6 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
       
       setIsSelecting(true);
       setSelectionStart({ x: canvasX, y: canvasY });
-      setSelectionEnd({ x: canvasX, y: canvasY });
       setSelectionBox({
         x: canvasX,
         y: canvasY,
@@ -1884,8 +1865,6 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
       // 转换为画布坐标
       const canvasX = (e.clientX - rect.left - canvasOffset.x) / canvasScale;
       const canvasY = (e.clientY - rect.top - canvasOffset.y) / canvasScale;
-      
-      setSelectionEnd({ x: canvasX, y: canvasY });
       
       // 计算选择框的位置和大小
       const minX = Math.min(selectionStart.x, canvasX);
@@ -1906,7 +1885,6 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
   const handleSelectionCancel = () => {
     setIsSelecting(false);
     setSelectionStart(null);
-    setSelectionEnd(null);
     setSelectionBox(null);
   };
 
@@ -3583,12 +3561,6 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
               const offsetX = isVehicleFollowEnabled ? mapOffset.x : 0;
               const offsetY = isVehicleFollowEnabled ? mapOffset.y : 0;
               
-              const pathData = area.points.map((point, index) => {
-                const x = point.x + offsetX;
-                const y = point.y + offsetY;
-                return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-              }).join(' ') + ' Z';
-              
               return (
                 <polygon
                   key={area.id}
@@ -3950,7 +3922,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                 minHeight: '48px'
               }}
-              bodyStyle={{ padding: '12px' }}
+              styles={{ body: { padding: '12px' } }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <CompassOutlined style={{ color: '#52c41a' }} />
@@ -4030,7 +4002,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
                   borderRadius: '8px',
                   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
                 }}
-                bodyStyle={{ padding: '12px' }}
+                styles={{ body: { padding: '12px' } }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
@@ -4125,7 +4097,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                 minHeight: '48px'
               }}
-              bodyStyle={{ padding: '12px' }}
+              styles={{ body: { padding: '12px' } }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <RadarChartOutlined style={{ color: '#1890ff' }} />
@@ -4158,7 +4130,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                 minHeight: '48px'
               }}
-              bodyStyle={{ padding: '12px' }}
+              styles={{ body: { padding: '12px' } }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <AimOutlined style={{ color: '#52c41a' }} />
@@ -4198,9 +4170,9 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
                   backdropFilter: 'blur(8px)',
                   border: '1px solid rgba(0, 0, 0, 0.1)',
                   borderRadius: '8px',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
-                }}
-                bodyStyle={{ padding: '12px' }}
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
+              }}
+                styles={{ body: { padding: '12px' } }}
               >
                 {positioningMode === 'manual' ? (
                   <Button
@@ -4260,7 +4232,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
               minHeight: '48px'
             }}
-            bodyStyle={{ padding: '12px' }}
+            styles={{ body: { padding: '12px' } }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <CarOutlined style={{ color: '#1890ff' }} />
@@ -4302,7 +4274,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
                 borderRadius: '8px',
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)'
               }}
-              bodyStyle={{ padding: '12px' }}
+              styles={{ body: { padding: '12px' } }}
             >
               <div style={{ 
                 display: 'grid', 
@@ -4451,7 +4423,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
               boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
               minHeight: '48px'
             }}
-            bodyStyle={{ padding: '12px' }}
+            styles={{ body: { padding: '12px' } }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <RadarChartOutlined style={{ color: '#1890ff' }} />
@@ -4480,7 +4452,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
                   boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                   width: '152px'
                 }}
-                bodyStyle={{ padding: '12px' }}
+                styles={{ body: { padding: '12px' } }}
               >
                 <div style={{ 
                   display: 'grid', 
@@ -4604,7 +4576,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
                 minHeight: '48px',
                 width: isScanEnabled ? '152px' : '136px'
               }}
-              bodyStyle={{ padding: '12px' }}
+              styles={{ body: { padding: '12px' } }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <AimOutlined style={{ color: '#52c41a' }} />
@@ -4651,7 +4623,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
                     boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
                     width: '152px'
                   }}
-                  bodyStyle={{ padding: '12px' }}
+                  styles={{ body: { padding: '12px' } }}
                 >
                   <div style={{ 
                     display: 'grid', 
@@ -4794,7 +4766,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
                 minHeight: '48px',
                 width: isSampleEnabled ? '152px' : '136px'
               }}
-              bodyStyle={{ padding: '12px' }}
+              styles={{ body: { padding: '12px' } }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <EnvironmentOutlined style={{ color: '#ff7a00' }} />
@@ -4847,7 +4819,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
               title="地图列表" 
               size="small"
               style={{ height: '100%' }}
-              bodyStyle={{ padding: '8px', height: 'calc(100% - 40px)', overflow: 'auto' }}
+              styles={{ body: { padding: '8px', height: 'calc(100% - 40px)', overflow: 'auto' } }}
             >
               <List
                 dataSource={mapLists}
@@ -4905,7 +4877,7 @@ const DeviceMapEditor: React.FC<DeviceMapEditorProps> = ({
               title={selectedMapList ? `地图文件 - ${mapLists.find(list => list.id === selectedMapList)?.name}` : '地图文件'}
               size="small"
               style={{ height: '100%' }}
-              bodyStyle={{ padding: '8px', height: 'calc(100% - 40px)', overflow: 'auto' }}
+              styles={{ body: { padding: '8px', height: 'calc(100% - 40px)', overflow: 'auto' } }}
             >
               {selectedMapList ? (
                 <List

@@ -1,19 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { Button, message, Modal } from 'antd';
 import { 
-  ZoomInOutlined, 
-  ZoomOutOutlined, 
-  HomeOutlined,
-  UndoOutlined,
-  RedoOutlined,
   ClockCircleOutlined,
   SettingOutlined,
   OrderedListOutlined,
   AppstoreOutlined,
   QuestionCircleOutlined,
   SwapOutlined,
-  ReloadOutlined,
-  SortAscendingOutlined
+  ReloadOutlined
 } from '@ant-design/icons';
 import BehaviorTreeNodePropertyPanel from '../pages/ScheduleManagement/BehaviorTree/BehaviorTreeNodePropertyPanel';
 
@@ -138,7 +132,7 @@ const BehaviorTreeCanvas = forwardRef<BehaviorTreeCanvasRef, BehaviorTreeCanvasP
   onConnectionsChange,
   onNodeSelect,
   readonly = false,
-  width = 800,
+  width: _width = 800,
   height = 600
 }, ref) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -2001,7 +1995,6 @@ const BehaviorTreeCanvas = forwardRef<BehaviorTreeCanvasRef, BehaviorTreeCanvasP
       const sortedNodes = [...nodes];
       
       // 动态计算布局参数
-      const maxNodesInLevel = Math.max(...levels.map(level => level.length));
       const levelSpacing = 280; // 层级间距（横向）
       const baseNodeSpacing = 120; // 基础节点间距
       const minNodeSpacing = 80;   // 最小节点间距

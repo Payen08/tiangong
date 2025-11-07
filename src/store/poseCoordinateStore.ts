@@ -196,7 +196,7 @@ const initialCoordinateData: CoordinateSystemItem[] = [
 ];
 
 // 创建Zustand store
-export const usePoseCoordinateStore = create<PoseCoordinateStore>((set, get) => ({
+export const usePoseCoordinateStore = create<PoseCoordinateStore>((set) => ({
   // 位姿数据状态
   poseData: [],
   setPoseData: (data) => set({ poseData: data }),

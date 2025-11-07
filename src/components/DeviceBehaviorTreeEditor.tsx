@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Card, Tabs, Button, Space, Tree, List, Input, Select, InputNumber, Switch, Tag, Divider, Table, Modal, Form, message, Checkbox, Upload, Row, Col } from 'antd';
+import { Tabs, Button, Space, Input, Select, InputNumber, Switch, Tag, Divider, Table, Modal, Form, message } from 'antd';
 import { 
   ZoomInOutlined, 
   ZoomOutOutlined, 
@@ -8,10 +8,7 @@ import {
   RedoOutlined,
   SaveOutlined,
   PlayCircleOutlined,
-  PauseCircleOutlined,
   StopOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   DragOutlined,
   RotateLeftOutlined,
   PlusOutlined,
@@ -19,25 +16,12 @@ import {
   DeleteOutlined,
   ImportOutlined,
   ExportOutlined,
-  EyeOutlined,
-  DownloadOutlined,
-  UploadOutlined,
-  EnvironmentOutlined,
-  CompassOutlined,
-  AimOutlined,
-  GlobalOutlined,
-  RadarChartOutlined,
-  ThunderboltOutlined,
-  ClockCircleOutlined,
-  LineOutlined,
-  ShareAltOutlined,
   ControlOutlined,
-  SearchOutlined,
   SortAscendingOutlined,
   ArrowRightOutlined
 } from '@ant-design/icons';
 import BehaviorTreeCanvas, { FlowNode, Connection, BehaviorTreeCanvasRef } from './BehaviorTreeCanvas';
-import BehaviorTreeNodePropertyPanel from '../pages/ScheduleManagement/BehaviorTree/BehaviorTreeNodePropertyPanel';
+// BehaviorTreeNodePropertyPanel 未在此文件中使用，移除导入
 import { usePoseCoordinateStore } from '../store/poseCoordinateStore';
 
 interface DeviceBehaviorTreeEditorProps {
@@ -59,12 +43,7 @@ interface BehaviorTreeItem {
   connections: Connection[];
 }
 
-interface TransformData {
-  from: string;
-  to: string;
-  translation: number[];
-  rotation: number[];
-}
+// 移除未使用的 TransformData 接口
 
 // 位姿管理数据接口
 interface PoseManagementItem {
@@ -107,14 +86,7 @@ interface CoordinateSystemItem {
 }
 
 // 状态历史接口
-interface StatusHistoryItem {
-  id: string;
-  status: string;
-  timestamp: string;
-  duration: string;
-  description: string;
-  level: 'info' | 'warning' | 'error' | 'success';
-}
+// 移除未使用的 StatusHistoryItem 接口
 
 // 模拟行为树数据
 const mockBehaviorTrees: BehaviorTreeItem[] = [
@@ -369,158 +341,16 @@ const mockBehaviorTrees: BehaviorTreeItem[] = [
 ];
 
 // 模拟位姿数据
-const mockPoseData = {
-  position: { x: 125.5, y: 89.3, z: 0.0 },
-  orientation: { x: 0.0, y: 0.0, z: 0.707, w: 0.707 },
-  linearVelocity: { x: 0.2, y: 0.0, z: 0.0 },
-  angularVelocity: { x: 0.0, y: 0.0, z: 0.1 }
-};
+// 移除未使用的 mockPoseData
 
 // 模拟坐标系数据
-const mockCoordinateData = {
-  baseFrame: 'map',
-  robotFrame: 'base_link',
-  sensorFrames: ['laser', 'camera', 'imu'],
-  transformations: [
-    { from: 'map', to: 'base_link', translation: [125.5, 89.3, 0.0], rotation: [0.0, 0.0, 0.707, 0.707] },
-    { from: 'base_link', to: 'laser', translation: [0.2, 0.0, 0.1], rotation: [0.0, 0.0, 0.0, 1.0] }
-  ]
-};
+// 移除未使用的 mockCoordinateData
 
 // 位姿管理模拟数据 - 与菜单栏数据保持一致
-const mockPoseManagementData: PoseManagementItem[] = [
-  {
-    id: 'pose_001',
-    name: '充电桩位姿',
-    description: '机器人充电桩的标准位姿',
-    positionX: 10.5,
-    positionY: 5.2,
-    positionZ: 0.0,
-    orientationX: 0.0,
-    orientationY: 0.0,
-    orientationZ: 0.707,
-    orientationW: 0.707,
-    frameId: 'map',
-    timestamp: '2024-01-20 14:30:25',
-    status: 'active',
-    createdBy: '系统管理员',
-    lastModified: '2024-01-20 14:30:25'
-  },
-  {
-    id: 'pose_002',
-    name: '工作站位姿',
-    description: '机器人工作站的标准位姿',
-    positionX: 15.8,
-    positionY: 8.6,
-    positionZ: 0.0,
-    orientationX: 0.0,
-    orientationY: 0.0,
-    orientationZ: 0.0,
-    orientationW: 1.0,
-    frameId: 'map',
-    timestamp: '2024-01-20 10:15:30',
-    status: 'active',
-    createdBy: '操作员',
-    lastModified: '2024-01-20 12:45:10'
-  },
-  {
-    id: 'pose_003',
-    name: '待机位姿',
-    description: '机器人待机时的标准位姿',
-    positionX: 0.0,
-    positionY: 0.0,
-    positionZ: 0.0,
-    orientationX: 0.0,
-    orientationY: 0.0,
-    orientationZ: 0.0,
-    orientationW: 1.0,
-    frameId: 'base_link',
-    timestamp: '2024-01-19 16:20:15',
-    status: 'inactive',
-    createdBy: '系统管理员',
-    lastModified: '2024-01-19 16:20:15'
-  }
-];
+// 移除未使用的 mockPoseManagementData
 
 // 坐标系管理模拟数据 - 与菜单栏数据保持一致
-const mockCoordinateSystemData: CoordinateSystemItem[] = [
-  {
-    id: 'coord_001',
-    name: '地图坐标系',
-    description: '全局地图坐标系',
-    frameId: 'map',
-    parentFrame: 'world',
-    translationX: 0.0,
-    translationY: 0.0,
-    translationZ: 0.0,
-    rotationX: 0.0,
-    rotationY: 0.0,
-    rotationZ: 0.0,
-    rotationW: 1.0,
-    isStatic: true,
-    publishRate: 10,
-    status: 'active',
-    createdBy: '系统管理员',
-    lastModified: '2024-01-20 14:30:25'
-  },
-  {
-    id: 'coord_002',
-    name: '机器人基座坐标系',
-    description: '机器人基座的本地坐标系',
-    frameId: 'base_link',
-    parentFrame: 'map',
-    translationX: 10.5,
-    translationY: 5.2,
-    translationZ: 0.0,
-    rotationX: 0.0,
-    rotationY: 0.0,
-    rotationZ: 0.707,
-    rotationW: 0.707,
-    isStatic: false,
-    publishRate: 50,
-    status: 'active',
-    createdBy: '系统管理员',
-    lastModified: '2024-01-20 14:30:25'
-  },
-  {
-    id: 'coord_003',
-    name: '激光雷达坐标系',
-    description: '激光雷达传感器坐标系',
-    frameId: 'laser_link',
-    parentFrame: 'base_link',
-    translationX: 0.2,
-    translationY: 0.0,
-    translationZ: 0.3,
-    rotationX: 0.0,
-    rotationY: 0.0,
-    rotationZ: 0.0,
-    rotationW: 1.0,
-    isStatic: true,
-    publishRate: 30,
-    status: 'active',
-    createdBy: '技术员',
-    lastModified: '2024-01-19 10:15:30'
-  },
-  {
-    id: 'coord_004',
-    name: '摄像头坐标系',
-    description: '前置摄像头坐标系',
-    frameId: 'camera_link',
-    parentFrame: 'base_link',
-    translationX: 0.3,
-    translationY: 0.0,
-    translationZ: 0.5,
-    rotationX: 0.0,
-    rotationY: 0.0,
-    rotationZ: 0.0,
-    rotationW: 1.0,
-    isStatic: true,
-    publishRate: 20,
-    status: 'inactive',
-    createdBy: '技术员',
-    lastModified: '2024-01-18 15:45:20'
-  }
-];
+// 移除未使用的 mockCoordinateSystemData
 
 // 添加CSS样式定义
 const subtreeRowStyle = `
@@ -545,22 +375,18 @@ if (typeof document !== 'undefined') {
 const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ deviceId, deviceName }) => {
   const { 
     poseData, 
-    coordinateData, 
-    setPoseData, 
-    setCoordinateData,
+    coordinateData,
     addPose,
     updatePose,
-    deletePose,
     addCoordinate,
     updateCoordinate,
-    deleteCoordinate,
     initializeData
   } = usePoseCoordinateStore();
   
   // 添加加载状态和错误处理
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [dataInitialized, setDataInitialized] = useState(false);
+  const [, setDataInitialized] = useState(false);
   
   // 行为树状态
   const [currentBehaviorTree, setCurrentBehaviorTree] = useState<BehaviorTreeItem>({
@@ -578,25 +404,20 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
   const [connections, setConnections] = useState<Connection[]>([]);
   
   // 画布状态
-  const [canvasZoom, setCanvasZoom] = useState(1);
-  const [showRightPanel, setShowRightPanel] = useState(true);
+  const [showRightPanel] = useState(true);
   const [dragTool, setDragTool] = useState(false);
   
   // 管理模态框状态
   const [isManagementModalVisible, setIsManagementModalVisible] = useState(false);
-  const [isBehaviorTreeEditing, setIsBehaviorTreeEditing] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   
   // 位姿和坐标系管理状态
   const [poseModalVisible, setPoseModalVisible] = useState(false);
   const [coordinateModalVisible, setCoordinateModalVisible] = useState(false);
-  const [editingPose, setEditingPose] = useState<PoseManagementItem | null>(null);
-  const [editingCoordinate, setEditingCoordinate] = useState<CoordinateSystemItem | null>(null);
-  const [selectedPoseRows, setSelectedPoseRows] = useState<string[]>([]);
-  const [selectedCoordinateRows, setSelectedCoordinateRows] = useState<string[]>([]);
+  const [editingPose] = useState<PoseManagementItem | null>(null);
+  const [editingCoordinate] = useState<CoordinateSystemItem | null>(null);
   
   // 行为树搜索状态
-  const [behaviorTreeSearchVisible, setBehaviorTreeSearchVisible] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   
   // 新增行为树弹窗状态
@@ -607,8 +428,8 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
   // 调试运行状态
   const [isDebugging, setIsDebugging] = useState(false);
   
-  // 节点选中状态
-  const [selectedNode, setSelectedNode] = useState<FlowNode | null>(null);
+  // 节点选中状态（当前未读取值，仅保留 setter）
+  const [, setSelectedNode] = useState<FlowNode | null>(null);
   
   const canvasRef = useRef<BehaviorTreeCanvasRef>(null);
   const [poseForm] = Form.useForm();
@@ -660,7 +481,7 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
     initializeData();
   }, [initializeData]);
 
-  const [nodeExecutionStatus, setNodeExecutionStatus] = useState<Record<string, 'running' | 'success' | 'failure' | 'idle'>>({});
+  
 
   // 画布操作函数
   const handleZoomIn = () => {
@@ -695,9 +516,7 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
     setDragTool(!dragTool);
   };
 
-  const handleSave = () => {
-    console.log('保存行为树:', { nodes, connections });
-  };
+  
 
   // 新增行为树相关处理函数
   const handleAddBehaviorTree = () => {
@@ -771,7 +590,7 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
   };
 
   // 行为树切换处理函数 - 禁用切换功能，保持空白画布
-  const handleBehaviorTreeChange = (treeId: string) => {
+  const handleBehaviorTreeChange = () => {
     // 不再支持切换到预设的行为树，始终保持空白状态
     message.info('当前为空白画布模式，请通过编辑功能添加节点');
   };
@@ -798,7 +617,6 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
     if (isDebugging) {
       // 停止调试
       setIsDebugging(false);
-      setNodeExecutionStatus({});
       // 重置所有节点状态
       const resetNodes = nodes.map(node => ({
         ...node,
@@ -831,12 +649,6 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
       const node = nodes[i];
       if (!isDebugging) break; // 如果调试被停止，退出循环
 
-      // 设置节点为运行状态
-      setNodeExecutionStatus(prev => ({
-        ...prev,
-        [node.id]: 'running'
-      }));
-
       // 更新节点状态为运行中
       setNodes(prevNodes => 
         prevNodes.map(n => 
@@ -859,11 +671,6 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
       // 随机决定节点执行结果（80%成功，20%失败）
       const isSuccess = Math.random() > 0.2;
       const status = isSuccess ? 'success' : 'failure';
-
-      setNodeExecutionStatus(prev => ({
-        ...prev,
-        [node.id]: status
-      }));
 
       // 更新节点状态
       setNodes(prevNodes => 
@@ -896,28 +703,7 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
   };
 
   // 位姿管理操作函数
-  const handleAddPose = () => {
-    setEditingPose(null);
-    poseForm.resetFields();
-    setPoseModalVisible(true);
-  };
-
-  const handleEditPose = (record: PoseManagementItem) => {
-    setEditingPose(record);
-    poseForm.setFieldsValue(record);
-    setPoseModalVisible(true);
-  };
-
-  const handleDeletePose = (id: string) => {
-    Modal.confirm({
-      title: '确认删除',
-      content: '确定要删除这个位姿吗？',
-      onOk: () => {
-        deletePose(id);
-        message.success('删除成功');
-      }
-    });
-  };
+  
 
   const handlePoseSubmit = async () => {
     try {
@@ -945,28 +731,7 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
   };
 
   // 坐标系管理操作函数
-  const handleAddCoordinate = () => {
-    setEditingCoordinate(null);
-    coordinateForm.resetFields();
-    setCoordinateModalVisible(true);
-  };
-
-  const handleEditCoordinate = (record: CoordinateSystemItem) => {
-    setEditingCoordinate(record);
-    coordinateForm.setFieldsValue(record);
-    setCoordinateModalVisible(true);
-  };
-
-  const handleDeleteCoordinate = (id: string) => {
-    Modal.confirm({
-      title: '确认删除',
-      content: '确定要删除这个坐标系吗？',
-      onOk: () => {
-        deleteCoordinate(id);
-        message.success('删除成功');
-      }
-    });
-  };
+  
 
   const handleCoordinateSubmit = async () => {
     try {
@@ -1155,7 +920,7 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
             {/* 行为树选择器 */}
             <Select
               value={currentBehaviorTree.id}
-              onChange={handleBehaviorTreeChange}
+              onChange={() => handleBehaviorTreeChange()}
               style={{ width: 200 }}
               size="middle"
             >
@@ -1832,7 +1597,7 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
               dataIndex: 'description',
               key: 'description',
               align: 'left',
-              render: (text: string, record: BehaviorTreeItem) => (
+              render: (text: string) => (
                 <span style={{ 
                   color: '#333', // 调整为更深的黑色
                   fontSize: '14px' // 统一字体大小
@@ -1859,7 +1624,7 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
               key: 'lastModified',
               width: 150,
               align: 'left',
-              render: (text: string, record: BehaviorTreeItem) => (
+              render: (text: string) => (
                 <span style={{ 
                   color: '#333', // 调整为更深的黑色
                   fontSize: '14px' // 统一字体大小
@@ -1914,7 +1679,7 @@ const DeviceBehaviorTreeEditor: React.FC<DeviceBehaviorTreeEditorProps> = ({ dev
         onOk={handleBehaviorTreeModalOk}
         onCancel={handleBehaviorTreeModalCancel}
         width={600}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={behaviorTreeForm}

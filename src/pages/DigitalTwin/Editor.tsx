@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
+import baseMapSvg from '@/assets/base-map.svg';
 import {
   ReloadOutlined,
   EyeInvisibleOutlined,
@@ -1564,19 +1565,19 @@ const mockBaseMapData: BaseMapData[] = [
   {
     id: 'basemap-1',
     name: '标准建筑底图',
-    url: '/src/assets/base-map.svg',
+    url: baseMapSvg,
     description: '标准建筑平面图底图'
   },
   {
     id: 'basemap-2', 
     name: '简化建筑底图',
-    url: '/src/assets/base-map-simple.svg',
+    url: baseMapSvg,
     description: '简化版建筑平面图底图'
   },
   {
     id: 'basemap-3',
     name: '详细建筑底图', 
-    url: '/src/assets/base-map-detailed.svg',
+    url: baseMapSvg,
     description: '详细版建筑平面图底图'
   }
 ];
@@ -1588,7 +1589,7 @@ const mockMapData: MapData[] = [
     name: '建筑主体地图', 
     type: 'building', 
     description: '主要建筑结构地图',
-    baseMapUrl: '/src/assets/base-map.svg',
+    baseMapUrl: baseMapSvg,
     availableBaseMaps: ['basemap-1', 'basemap-2', 'basemap-3'],
     topology: {
       nodes: [
@@ -1617,7 +1618,7 @@ const mockMapData: MapData[] = [
     name: '设备分布地图', 
     type: 'equipment', 
     description: '设备位置分布地图',
-    baseMapUrl: '/src/assets/base-map.svg',
+    baseMapUrl: baseMapSvg,
     availableBaseMaps: ['basemap-1', 'basemap-3'],
     topology: {
       nodes: [
@@ -1638,7 +1639,7 @@ const mockMapData: MapData[] = [
     name: '管线布局地图', 
     type: 'pipeline', 
     description: '管线系统布局地图',
-    baseMapUrl: '/src/assets/base-map.svg',
+    baseMapUrl: baseMapSvg,
     availableBaseMaps: ['basemap-2', 'basemap-3'],
     topology: {
       nodes: [
@@ -1659,7 +1660,7 @@ const mockMapData: MapData[] = [
     name: '安全区域地图', 
     type: 'safety', 
     description: '安全区域划分地图',
-    baseMapUrl: '/src/assets/base-map.svg',
+    baseMapUrl: baseMapSvg,
     availableBaseMaps: ['basemap-1', 'basemap-2'],
     topology: {
       nodes: [
@@ -1683,7 +1684,7 @@ const mockMapData: MapData[] = [
     name: '消防设施地图', 
     type: 'fire', 
     description: '消防设施分布地图',
-    baseMapUrl: '/src/assets/base-map.svg',
+    baseMapUrl: baseMapSvg,
     availableBaseMaps: ['basemap-1', 'basemap-3'],
     topology: {
       nodes: [
@@ -10414,7 +10415,7 @@ const DigitalTwinEditor: React.FC = () => {
                   </div>
                 }
                 style={{ flex: 1 }}
-                bodyStyle={{ padding: '16px', height: 'calc(100% - 57px)' }}
+                styles={{ body: { padding: '16px', height: 'calc(100% - 57px)' } }}
               >
                 <div 
                   id="cnc-preview-container"
@@ -10470,7 +10471,7 @@ const DigitalTwinEditor: React.FC = () => {
                   </div>
                 }
                 style={{ height: '200px' }}
-                bodyStyle={{ padding: '16px', height: 'calc(100% - 57px)' }}
+                styles={{ body: { padding: '16px', height: 'calc(100% - 57px)' } }}
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: '100%' }}>
                   {/* 当前模型信息 */}

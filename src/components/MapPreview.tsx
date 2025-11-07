@@ -130,7 +130,7 @@ const MapPreview: React.FC<MapPreviewProps> = ({
     <Card 
       size="small" 
       style={{ width: width + 40, height: height + 80 }}
-      bodyStyle={{ padding: '12px' }}
+      styles={{ body: { padding: '12px' } }}
     >
       <div style={{ textAlign: 'center', marginBottom: '8px' }}>
         <div style={{ fontWeight: 'bold', fontSize: '14px' }}>{mapData.name}</div>
