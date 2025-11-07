@@ -24,6 +24,7 @@ const PermissionManagement = createLazyComponent(() => import('@/pages/SystemMan
 const SystemLogs = createLazyComponent(() => import('@/pages/SystemManagement/SystemLogs'));
 const SystemUpgrade = createLazyComponent(() => import('@/pages/SystemManagement/SystemUpgrade'));
 const CrossMapConnectionManagement = createLazyComponent(() => import('@/pages/SystemManagement/CrossMapConnection'));
+// 后台设置占位（暂不创建文件，直接使用占位元素）
 
 // 产品管理模块
 const ProductManagement = createLazyComponent(() => import('@/pages/ProductManagement/index'));
@@ -214,6 +215,10 @@ export const router = createBrowserRouter([
           {
             path: 'upgrade',
             element: <SystemUpgrade />,
+          },
+          {
+            path: 'settings',
+            element: <div style={{ padding: 24 }}>后台设置（占位页）</div>,
           },
         ],
       },

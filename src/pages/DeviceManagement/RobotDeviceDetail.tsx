@@ -36,6 +36,7 @@ import {
   DeleteOutlined,
   ImportOutlined,
   ExportOutlined,
+  SettingOutlined,
 } from '@ant-design/icons';
 import DeviceMapEditor from '../../components/DeviceMapEditor';
 import DeviceBehaviorTreeEditor from '../../components/DeviceBehaviorTreeEditor';
@@ -1565,7 +1566,16 @@ const RobotDeviceDetail: React.FC = () => {
       </Card>
 
       {/* 详细信息标签页 */}
-      <Card>
+      <Card style={{ position: 'relative' }}>
+        {/* 右上角设置入口 */}
+        <Tooltip title="后台设置">
+          <Button
+            type="text"
+            icon={<SettingOutlined />}
+            onClick={() => navigate('/admin/settings')}
+            style={{ position: 'absolute', top: 8, right: 8 }}
+          />
+        </Tooltip>
         {/* 顶部自定义切换按钮 */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '12px' }}>
           <Space size={12}>
