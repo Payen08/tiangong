@@ -2489,7 +2489,7 @@ const DigitalTwinEditor: React.FC = () => {
 
   // 返回数字孪生页面
   const handleBack = () => {
-    window.location.href = '/digital-twin';
+    navigate('/digital-twin');
   };
 
   // 画布操作工具功能函数
