@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader';
 import baseMapSvg from '@/assets/base-map.svg';
+import { useNavigate } from 'react-router-dom';// 🚀 1. 在这里添加了导入
 import {
   ReloadOutlined,
   EyeInvisibleOutlined,
@@ -1712,6 +1713,7 @@ const mockFloorScenes: FloorScene[] = [
 ];
 
 const DigitalTwinEditor: React.FC = () => {
+  const navigate = useNavigate(); // 👈 添加这一行
   // 面板显示状态
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [rightPanelVisible, setRightPanelVisible] = useState(true);
