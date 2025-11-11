@@ -36,6 +36,12 @@ jobs:
       - name: Build
         # 运行 build 脚本，它会使用 vite.config.js 中你设置的 base: '/tiangong/'
         run: npm run build
+        
+      # --- 🚀 添加这一步来处理 SPA 刷新 404 ---
+      - name: Create 404.html
+        run: cp dist/index.html dist/404.html
+      # ----------------------------------------
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload artifact
