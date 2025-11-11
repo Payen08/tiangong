@@ -62,166 +62,173 @@ const DigitalTwin = createLazyComponent(() => import('@/pages/DigitalTwin'));
 
 
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter(
+  [
+    {
+      path: '/login',
+      element: <Login />,
+    },
+    {
+      path: '/',
+      element: <Layout />,
+      children: [
+        {
+          index: true,
+          element: <Home />,
+        },
+        {
+          path: 'field-control',
+          element: <div>场控视图</div>, // Layout组件会处理这个路径
+        },
+        {
+          path: 'digital-twin',
+          element: <DigitalTwin />,
+        },
+        {
+          path: 'digital-twin/editor',
+          element: <div>数字孪生编辑器</div>, // Layout组件会处理这个路径
+        },
+        {
+          path: 'scene',
+          children: [
+            {
+              path: 'maps',
+              element: <MapManagement />,
+            },
+            {
+              path: 'cross-map-connections',
+              element: <CrossMapConnectionManagement />,
+            },
+            {
+              path: 'cross-map-path-groups',
+              element: <CrossMapPathGroupManagement />,
+            },
+          ],
+        },
+        {
+          path: 'resources',
+          children: [
+            {
+              path: 'products',
+              element: <ProductManagement />,
+            },
+            {
+              path: 'products/add',
+              element: <AddProduct />,
+            },
+            {
+              path: 'devices',
+              element: <DeviceManagement />,
+            },
+            {
+              path: 'devices/robot/:id',
+              element: <RobotDeviceDetail />,
+            },
+          ],
+        },
+        {
+          path: 'schedule',
+          children: [
+            {
+              path: 'business-process',
+              element: <BusinessProcess />,
+            },
+            {
+              path: 'business-orders',
+              element: <BusinessOrders />,
+            },
+            {
+              path: 'behavior-tree',
+              element: <BehaviorTree />,
+            },
+            {
+              path: 'action-sequence',
+              element: <ActionSequence />,
+            },
+          ],
+        },
+        {
+          path: 'dispatch',
+          children: [
+            {
+              path: 'tasks',
+              element: <TaskManagement />,
+            },
+            {
+              path: 'idle-docking',
+              element: <IdleDockingManagement />,
+            },
+            {
+              path: 'auto-charging',
+              element: <AutoChargingManagement />,
+            },
+          ],
+        },
+        {
+          path: 'system',
+          children: [
+            {
+              path: 'users',
+              element: <UserManagement />,
+            },
+            {
+              path: 'roles',
+              element: <RoleManagement />,
+            },
+            {
+              path: 'permissions',
+              element: <PermissionManagement />,
+            },
+          ],
+        },
+        {
+          path: 'data-statistics',
+          children: [
+            {
+              path: 'business-performance',
+              element: <BusinessPerformance />,
+            },
+            {
+              path: 'robot-status',
+              element: <RobotStatus />,
+            },
+            {
+              path: 'scheduling-system',
+              element: <SchedulingSystem />,
+            },
+            {
+              path: 'exception-fault',
+              element: <ExceptionFault />,
+            },
+            {
+              path: 'spatial-heatmap',
+              element: <SpatialHeatmap />,
+            },
+          ],
+        },
+        {
+          path: 'admin',
+          children: [
+            {
+              path: 'logs',
+              element: <SystemLogs />,
+            },
+            {
+              path: 'upgrade',
+              element: <SystemUpgrade />,
+            },
+            {
+              path: 'settings',
+              element: <div style={{ padding: 24 }}>后台设置（占位页）</div>,
+            },
+          ],
+        },
+      ],
+    },
+  ],
   {
-    path: '/login',
-    element: <Login />,
-  },
-  {
-    path: '/',
-    element: <Layout />,
-    children: [
-      {
-        index: true,
-        element: <Home />,
-      },
-      {
-        path: 'field-control',
-        element: <div>场控视图</div>, // Layout组件会处理这个路径
-      },
-      {
-        path: 'digital-twin',
-        element: <DigitalTwin />,
-      },
-      {
-        path: 'digital-twin/editor',
-        element: <div>数字孪生编辑器</div>, // Layout组件会处理这个路径
-      },
-      {
-        path: 'scene',
-        children: [
-          {
-            path: 'maps',
-            element: <MapManagement />,
-          },
-          {
-            path: 'cross-map-connections',
-            element: <CrossMapConnectionManagement />,
-          },
-          {
-            path: 'cross-map-path-groups',
-            element: <CrossMapPathGroupManagement />,
-          },
-        ],
-      },
-      {
-        path: 'resources',
-        children: [
-          {
-            path: 'products',
-            element: <ProductManagement />,
-          },
-          {
-            path: 'products/add',
-            element: <AddProduct />,
-          },
-          {
-            path: 'devices',
-            element: <DeviceManagement />,
-          },
-          {
-            path: 'devices/robot/:id',
-            element: <RobotDeviceDetail />,
-          },
-        ],
-      },
-      {
-        path: 'schedule',
-        children: [
-          {
-            path: 'business-process',
-            element: <BusinessProcess />,
-          },
-          {
-            path: 'business-orders',
-            element: <BusinessOrders />,
-          },
-          {
-            path: 'behavior-tree',
-            element: <BehaviorTree />,
-          },
-          {
-            path: 'action-sequence',
-            element: <ActionSequence />,
-          },
-        ],
-      },
-      {
-        path: 'dispatch',
-        children: [
-          {
-            path: 'tasks',
-            element: <TaskManagement />,
-          },
-          {
-            path: 'idle-docking',
-            element: <IdleDockingManagement />,
-          },
-          {
-            path: 'auto-charging',
-            element: <AutoChargingManagement />,
-          },
-        ],
-      },
-      {
-        path: 'system',
-        children: [
-          {
-            path: 'users',
-            element: <UserManagement />,
-          },
-          {
-            path: 'roles',
-            element: <RoleManagement />,
-          },
-          {
-            path: 'permissions',
-            element: <PermissionManagement />,
-          },
-        ],
-      },
-      {
-        path: 'data-statistics',
-        children: [
-          {
-            path: 'business-performance',
-            element: <BusinessPerformance />,
-          },
-          {
-            path: 'robot-status',
-            element: <RobotStatus />,
-          },
-          {
-            path: 'scheduling-system',
-            element: <SchedulingSystem />,
-          },
-          {
-            path: 'exception-fault',
-            element: <ExceptionFault />,
-          },
-          {
-            path: 'spatial-heatmap',
-            element: <SpatialHeatmap />,
-          },
-        ],
-      },
-      {
-        path: 'admin',
-        children: [
-          {
-            path: 'logs',
-            element: <SystemLogs />,
-          },
-          {
-            path: 'upgrade',
-            element: <SystemUpgrade />,
-          },
-          {
-            path: 'settings',
-            element: <div style={{ padding: 24 }}>后台设置（占位页）</div>,
-          },
-        ],
-      },
-    ],
-  },
-]);
+    // --- 🚀 在这里添加 basename ---
+    basename: "/tiangong",
+    // ----------------------------
+  }
+);
