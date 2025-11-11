@@ -269,6 +269,7 @@ const mockTasks: Task[] = [
 
 
 const DigitalTwin: React.FC = () => {
+  const navigate = useNavigate(); // 👈 加上这一行
   const [loading, setLoading] = useState(true); // 页面加载状态
   const [selectedFloor, setSelectedFloor] = useState<string | null>('all');
   const [isFullscreen, setIsFullscreen] = useState(false);
