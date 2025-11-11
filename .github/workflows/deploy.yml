@@ -1,0 +1,57 @@
+# 部署到 GitHub Pages 的简单工作流
+name: Deploy GitHub Pages
+
+on:
+  # 当推送到 'master' 分支时触发
+  push:
+    branches: ['master']
+  
+  # 允许你从 Actions 标签页手动运行此工作流
+  workflow_dispatch:
+
+# 设置 GITHUB_TOKEN 的默认权限，以允许部署到 GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 只允许一个并发部署，跳过在进行中的运行之间排队的运行。
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  # 构建任务
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        run: npm install
+      - name: Build
+        # 运行 build 脚本，它会使用 vite.config.js 中你设置的 base: '/tiangong/'
+        run: npm run build
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # 从 'dist' 目录上传
+          path: './dist'
+          
+  # 部署任务
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
